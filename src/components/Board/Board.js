@@ -77,14 +77,13 @@ const Board = ({ token, currentUser, onLogout }) => {
         ),
       };
       setTweets((prev) => [...prev, tweetWithPosition]);
-      // Зберігаємо дані твіта, якщо необхідно (наприклад, в focusedTweet)
       setFocusedTweet(tweetWithPosition);
     } catch (err) {
       console.error(err);
     }
   };
 
-  // Обробка подій для перетягування дошки
+  // Обробка подій для перетягування дошки (для миші)
   const handleMouseDown = (e) => {
     if (
       e.target.closest(".tweet-card") ||
@@ -139,6 +138,42 @@ const Board = ({ token, currentUser, onLogout }) => {
     setDragging(false);
   };
 
+  // Додаємо аналогічну обробку для touch-подій (для мобільних пристроїв)
+  const handleTouchStart = (e) => {
+    if (e.touches && e.touches.length === 1) {
+      const touch = e.touches[0];
+      handleMouseDown({
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        target: e.target,
+      });
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches && e.touches.length === 1) {
+      const touch = e.touches[0];
+      handleMouseMove({
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        target: e.target,
+      });
+      // Запобігаємо стандартному скролу
+      e.preventDefault();
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if (e.changedTouches && e.changedTouches.length === 1) {
+      const touch = e.changedTouches[0];
+      handleMouseUp({
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        target: e.target,
+      });
+    }
+  };
+
   const handlePopupClick = (e) => {
     e.stopPropagation();
   };
@@ -150,7 +185,6 @@ const Board = ({ token, currentUser, onLogout }) => {
   };
 
   const handlePopupClose = () => {
-    // Не очищаємо tweetDraft, щоб користувач міг повернутись до введеного тексту
     setTweetPopup({ ...tweetPopup, visible: false });
   };
 
@@ -258,7 +292,6 @@ const Board = ({ token, currentUser, onLogout }) => {
     updatePosition(tweet._id, data.x, data.y);
   };
 
-  // Перевірка, чи знаходиться твіт у полі зору
   const isTweetVisible = (tweet) => {
     if (!boardMainRef.current) return true;
     const { clientWidth, clientHeight } = boardMainRef.current;
@@ -272,7 +305,6 @@ const Board = ({ token, currentUser, onLogout }) => {
     );
   };
 
-  // Центруємо дошку відносно вибраного (focused) твіту
   const centerFocusedTweet = () => {
     if (focusedTweet && boardMainRef.current) {
       const { clientWidth, clientHeight } = boardMainRef.current;
@@ -303,6 +335,9 @@ const Board = ({ token, currentUser, onLogout }) => {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         <div
           className="board-inner"
@@ -422,7 +457,6 @@ const Board = ({ token, currentUser, onLogout }) => {
             </div>
           )}
         </div>
-        {/* Якщо вибраний твіт не видно, показуємо кнопку для повернення */}
         {focusedTweet && !isTweetVisible(focusedTweet) && (
           <div
             className="return-button"
