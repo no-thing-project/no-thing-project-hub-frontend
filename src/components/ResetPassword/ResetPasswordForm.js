@@ -21,8 +21,23 @@ const ResetPasswordForm = ({ theme }) => {
   const navigate = useNavigate();
 
   // Парсимо токен з URL
+  // useEffect(() => {
+  //   const searchParams = new URLSearchParams(window.location.search);
+  //   console.log(searchParams);
+  //   const tokenFromUrl = searchParams.get("token");
+  //   if (tokenFromUrl) {
+  //     setToken(tokenFromUrl);
+  //   } else {
+  //     setError("Токен відсутній у URL");
+  //   }
+  // }, []);
+
   useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
+    const hash = window.location.hash;
+    const searchParams = new URLSearchParams(hash.split("?")[1]); // Беремо параметри після `?`
+
+    console.log(searchParams);
+
     const tokenFromUrl = searchParams.get("token");
     if (tokenFromUrl) {
       setToken(tokenFromUrl);
@@ -104,7 +119,11 @@ const ResetPasswordForm = ({ theme }) => {
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert onClose={handleCloseSnackbar} severity="error" sx={{ width: "100%" }}>
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity="error"
+          sx={{ width: "100%" }}
+        >
           {error}
         </Alert>
       </Snackbar>
@@ -114,7 +133,11 @@ const ResetPasswordForm = ({ theme }) => {
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity="success"
+          sx={{ width: "100%" }}
+        >
           {success}
         </Alert>
       </Snackbar>
