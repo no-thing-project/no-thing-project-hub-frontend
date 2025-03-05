@@ -7,12 +7,11 @@ const config = {
   },
   staging: {
     REACT_APP_HUB_API_URL: process.env.REACT_APP_HUB_API_URL || "",
-    PUBLIC_URL: process.env.PUBLIC_URL || "https://no-thing-project.github.io/no-thing-project-hub-frontend/",
-
+    PUBLIC_URL: process.env.PUBLIC_URL || "https://hub.nothingproject.io",
   },
   production: {
     REACT_APP_HUB_API_URL: process.env.REACT_APP_HUB_API_URL || "",
-    PUBLIC_URL: process.env.PUBLIC_URL || "https://no-thing-project.github.io/no-thing-project-hub-frontend/",
+    PUBLIC_URL: process.env.PUBLIC_URL || "https://hub.nothingproject.io",
 
   },
 };

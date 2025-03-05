@@ -1,8 +1,8 @@
 {
-  "name": "nothing_hub_front",
+  "name": "nothing_hub_front_end",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://no-thing-project.github.io/no-thing-project-hub-frontend/",
+  "homepage": "https://hub.nothingproject.io",
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
