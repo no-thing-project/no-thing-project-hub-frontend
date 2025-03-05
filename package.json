@@ -2,13 +2,22 @@
   "name": "nothing_hub_front",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://no-thing-project.github.io/no-thing-project-hub-frontend/",
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^6.4.6",
+    "@mui/material": "^6.4.6",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^13.5.0",
+    "axios": "^1.8.1",
+    "cross-env": "^7.0.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-draggable": "^4.4.6",
+    "react-router-dom": "^7.2.0",
     "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4"
   },
@@ -16,7 +25,13 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "build:staging": "cross-env APP_ENV=staging react-scripts build",
+    "build:production": "cross-env APP_ENV=production react-scripts build",
+    "serve:staging": "cross-env APP_ENV=staging react-scripts start",
+    "serve:production": "cross-env APP_ENV=production react-scripts start",
+    "serve": "react-scripts start"
+
   },
   "eslintConfig": {
     "extends": [
