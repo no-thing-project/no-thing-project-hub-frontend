@@ -1,17 +1,105 @@
 # Node.js
 node_modules/
 package-lock.json
+yarn.lock
+pnpm-lock.yaml
 .env
+.env.development
+.env.staging
+.env.production
+.env.local
 
-# Logs
+# Logs & Debugging
 logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+debug.log
+pm2.log
+pm2.pid
+nohup.out
 
 # IDE & System files
 .vscode/
 .DS_Store
+*.swp
+*.swo
+*.swn
+*.bak
+*.tmp
+.idea/
+*.iml
 
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
+
+# AWS
+.aws/
+*.pem
+*.key
+*.crt
+
+# GitHub Actions Cache & CI/CD
+.github/workflows/node_modules/
+.github/workflows/.cache/
+dist/
 build/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+docker-compose.yml
+Dockerfile
+Dockerfile.dev
+
+# Jest & Testing
+coverage/
+jest/
+jest-cache/
+jest-output/
+*.test.js
+*.spec.js
+*.snap
+
+# Next.js
+.next/
+out/
+
+# Nuxt.js
+.nuxt/
+dist/
+
+# Expo & React Native
+.expo/
+.expo-shared/
+*.expo/
+
+# Prisma & ORM
+prisma/migrations/
+prisma/.env
+
+# Cypress & Playwright (E2E Testing)
+cypress/screenshots/
+cypress/videos/
+playwright-report/
+
+# Webpack & Cache
+.cache/
+.nyc_output/
+.eslintcache
+parcel-cache/
+turbo/
+.vite/
+vite.config.js
+next.config.js
+webpack.config.js
+
+# TypeScript
+*.tsbuildinfo
+
+# Miscellaneous
+*.sqlite
+*.sqlite-journal

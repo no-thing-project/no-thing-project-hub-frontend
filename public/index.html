@@ -1,43 +1,94 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <meta
-      name="description"
-      content="Web site created using create-react-app"
-    />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
-    <!--
-      manifest.json provides metadata used when your web app is installed on a
-      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-    -->
-    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
-
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
-    <title>React App</title>
-  </head>
-  <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+<html lang="en" prefix="og: http://ogp.me/ns#">
+<head>
+    <!-- Core Meta Tags -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <meta name="format-detection" content="telephone=no"> <!-- Запобігає форматуванню номерів телефону -->
+    
+    <!-- SEO Optimization -->
+    <title>GATE - No.Thing Project</title>
+    <meta name="description" content="No.Thing Project is a global movement transforming minimalism, creativity, and technology into impact. A new way of thinking, creating, and innovating.">
+    <meta name="keywords" content="No.Thing Project, Gate, gate, GATE, HUB, hub, minimalism, creativity, innovation, design, future, AI, Web3, sustainability, NFT, crypto, philosophy, art, architecture, digital transformation">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="author" content="No.Thing Project Team">
+    <meta name="googlebot" content="index, follow">
+    <link rel="canonical" href="https://nothingproject.io/"> <!-- Канонічний URL -->
+    
+    <!-- Open Graph (Facebook, LinkedIn, etc.) -->
+    <meta property="og:title" content="GATE - No.Thing Project">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://nothingproject.io/">
+    <meta property="og:description" content="Join No.Thing Project – a global ecosystem where minimalism, art, and technology redefine creativity, business, and life.">
+    <meta property="og:image" content="https://hub.nothingproject.io/logo_main_white.png">
+    <meta property="og:image:alt" content="Gate No.Thing Project Logo">
+    <meta property="og:image:width" content="1200"> <!-- Додано розміри для оптимізації -->
+    <meta property="og:image:height" content="630">
+    <meta property="og:site_name" content="Gate - No.Thing Project">
+    <meta property="og:locale" content="en_US"> <!-- Локалізація -->
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="GATE - No.Thing Projects">
+    <meta name="twitter:description" content="A global platform where nothing turns into everything. Art, design, Web3, AI, sustainability, and philosophy in one ecosystem.">
+    <meta name="twitter:image" content="https://hub.nothingproject.io/logo_main_white.png">
+    <meta name="twitter:site" content="@nooneonnothing"> <!-- Додайте ваш Twitter handle -->
+    <meta name="twitter:creator" content="@nothingproject">
+    
+    <!-- Icons & Manifest -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="/logo192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png"> <!-- Додаткові розміри -->
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes"> <!-- PWA сумісність -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" integrity="sha512-SfTiTlX6kk+qitfevl/7LibUOeJWlt9rbyDn92a1DqWOw9vWG2MFoays0sgObmWazO5BQPiFucnnEAjpAB+/Sw==" crossorigin="anonymous" media="screen">
+    
+    <!-- Preload & Preconnect -->
+    <link rel="preload" href="/logo_main_white.png" as="image" type="image/png">
+    <link rel="preload" href="/src/index.js" as="script"> <!-- Попереднє завантаження скрипту -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin> <!-- Швидший CDN -->
+    <link rel="dns-prefetch" href="https://hub.nothingproject.io"> <!-- Попереднє розпізнавання DNS -->
+    
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Gate - No.Thing Project",
+        "url": "https://hub.nothingproject.io/",
+        "logo": "https://hubnothingproject.io/logo_main_white.png",
+        "description": "A global movement uniting minimalism, creativity, and technology.",
+        "sameAs": [
+            "https://twitter.com/nooneonnothing",
+            "https://www.linkedin.com/company/no-thing-project/",
+            "https://www.instagram.com/no.thing.project"
+        ]
+    }
+    </script>
+</head>
+<body>
+    <noscript>
+        JavaScript is required to run this application. Please enable it in your browser settings to experience No.Thing Project.
+    </noscript>
     <div id="root"></div>
+    
+    <!-- Scripts -->
+    <script type="module" src="/src/index.js" async defer></script>
+    <!-- Аналітика (опціонально) -->
     <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
-
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
-
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-XXXXXXXXXX');
+    </script>
     -->
-  </body>
+</body>
 </html>

@@ -2,17 +2,16 @@ const ENV = process.env.APP_ENV || process.env.NODE_ENV;
 
 const config = {
   development: {
-    REACT_APP_HUB_API_URL: process.env.REACT_APP_HUB_API_URL || "",
-    PUBLIC_URL: process.env.PUBLIC_URL || "http://localhost:3000",
+    API_HUB_URL: process.env.API_HUB_URL || "https://api-dev.hub.nothingproject.io" || "http://localhost:8081",
+    PUBLIC_HUB_URL: process.env.PUBLIC_HUB_URL || "https://dev-hub.nothingproject.io" || "http://localhost:3001",
   },
   staging: {
-    REACT_APP_HUB_API_URL: process.env.REACT_APP_HUB_API_URL || "",
-    PUBLIC_URL: process.env.PUBLIC_URL || "https://hub.nothingproject.io",
+    API_HUB_URL: process.env.API_HUB_URL || "https://api-stage.hub.nothingproject.io",
+    PUBLIC_HUB_URL: process.env.PUBLIC_HUB_URL || "https://hub-stage.nothingproject.io",
   },
   production: {
-    REACT_APP_HUB_API_URL: process.env.REACT_APP_HUB_API_URL || "",
-    PUBLIC_URL: process.env.PUBLIC_URL || "https://hub.nothingproject.io",
-
+    API_HUB_URL: process.env.API_HUB_URL || "https://api.hub.nothingproject.io",
+    PUBLIC_HUB_URL: process.env.PUBLIC_HUB_URL || "https://hub.nothingproject.io",
   },
 };
 
