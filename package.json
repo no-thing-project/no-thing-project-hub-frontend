@@ -19,6 +19,7 @@
     "react-draggable": "^4.4.6",
     "react-router-dom": "^7.2.0",
     "react-scripts": "5.0.1",
+    "socket.io-client": "^4.8.1",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
@@ -31,7 +32,6 @@
     "serve:staging": "cross-env APP_ENV=staging react-scripts start",
     "serve:production": "cross-env APP_ENV=production react-scripts start",
     "serve": "react-scripts start"
-
   },
   "eslintConfig": {
     "extends": [

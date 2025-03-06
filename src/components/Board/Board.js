@@ -3,6 +3,7 @@ import { Typography, IconButton, Paper, Button } from "@mui/material";
 import ThumbUpIcon from "@mui/icons-material/ThumbUp";
 import DeleteIcon from "@mui/icons-material/Delete";
 import axios from "axios";
+import io from "socket.io-client";
 import DraggableTweet from "../Tweet/Tweet";
 import TweetPopup from "../Tweet/TweetPopup";
 import Header from "../Header/Header";
@@ -12,14 +13,16 @@ const BOARD_SIZE = 10000; // симулюємо "безкінечну" дошк�
 const Board = ({ token, currentUser, onLogout }) => {
   const [tweets, setTweets] = useState([]);
   const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0 });
-  const [tweetDraft, setTweetDraft] = useState(""); // збереження тексту твіта
+  const [tweetDraft, setTweetDraft] = useState("");
   const [boardOffset, setBoardOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [focusedTweet, setFocusedTweet] = useState(null);
   const boardMainRef = useRef(null);
   const dragStart = useRef(null);
   const isDragging = useRef(false);
+  const socketRef = useRef(null);
 
+  // Початкове завантаження твітів та підключення до Socket.IO
   useEffect(() => {
     fetchTweets();
     // Центруємо дошку при першому завантаженні
@@ -30,19 +33,49 @@ const Board = ({ token, currentUser, onLogout }) => {
         y: clientHeight / 2 - BOARD_SIZE / 2,
       });
     }
-  }, []);
+    // Підключення до WebSocket серверу з передачею токена
+    const socket = io(process.env.REACT_APP_WS_URL, {
+      query: { token }
+    });
+    socketRef.current = socket;
+    socket.on("tweetCreated", (newTweet) => {
+      // Якщо твіт уже існує — не додаємо дубль
+      setTweets((prev) => {
+        if (prev.find(tweet => tweet._id === newTweet._id)) return prev;
+        return [...prev, newTweet];
+      });
+    });
+    socket.on("tweetUpdated", (updatedTweet) => {
+      setTweets((prev) =>
+        prev.map((tweet) =>
+          tweet._id === updatedTweet._id ? updatedTweet : tweet
+        )
+      );
+    });
+    socket.on("tweetDeleted", ({ _id }) => {
+      setTweets((prev) => prev.filter((tweet) => tweet._id !== _id));
+    });
+    socket.on("error", (err) => {
+      console.error("Socket error:", err.message);
+    });
+    return () => {
+      socket.disconnect();
+    };
+  }, [token]);
 
   const fetchTweets = async () => {
     try {
       const res = await axios.get(
         `${process.env.REACT_APP_HUB_API_URL}/tweets`
       );
+      // Обчислюємо кількість лайків з likedUsers, якщо likes відсутнє
       const tweetsData = res.data.content.map((tweet) => ({
         ...tweet,
         likedUsers: tweet.likedUsers || [],
         likedByUser: (tweet.likedUsers || []).some(
-          (u) => u.user_id === currentUser?.user_id
+          (u) => u.user_id === currentUser?._id
         ),
+        likes: tweet.likes !== undefined ? tweet.likes : (tweet.likedUsers || []).length,
       }));
       setTweets(tweetsData);
     } catch (err) {
@@ -57,7 +90,7 @@ const Board = ({ token, currentUser, onLogout }) => {
         x,
         y,
         user: {
-          id: currentUser?.user_id,
+          id: currentUser?._id,
           username: currentUser?.username,
         },
       };
@@ -73,10 +106,15 @@ const Board = ({ token, currentUser, onLogout }) => {
         y: createdTweet.y ?? y,
         likedUsers: createdTweet.likedUsers || [],
         likedByUser: (createdTweet.likedUsers || []).some(
-          (u) => u.user_id === currentUser?.user_id
+          (u) => u.user_id === currentUser?._id
         ),
+        likes: createdTweet.likes !== undefined ? createdTweet.likes : (createdTweet.likedUsers || []).length,
       };
-      setTweets((prev) => [...prev, tweetWithPosition]);
+      // Для оптимістичного оновлення перевіряємо, чи твіт вже є в стані
+      setTweets((prev) => {
+        if (prev.find(tweet => tweet._id === tweetWithPosition._id)) return prev;
+        return [...prev, tweetWithPosition];
+      });
       setFocusedTweet(tweetWithPosition);
     } catch (err) {
       console.error(err);
@@ -118,7 +156,6 @@ const Board = ({ token, currentUser, onLogout }) => {
   };
 
   const handleMouseUp = (e) => {
-    // Якщо клік відбувся по кнопці повернення, не відкриваємо попап
     if (e.target.closest(".return-button")) {
       dragStart.current = null;
       isDragging.current = false;
@@ -138,7 +175,7 @@ const Board = ({ token, currentUser, onLogout }) => {
     setDragging(false);
   };
 
-  // Додаємо аналогічну обробку для touch-подій (для мобільних пристроїв)
+  // Аналогічна обробка для touch-подій
   const handleTouchStart = (e) => {
     if (e.touches && e.touches.length === 1) {
       const touch = e.touches[0];
@@ -158,7 +195,6 @@ const Board = ({ token, currentUser, onLogout }) => {
         clientY: touch.clientY,
         target: e.target,
       });
-      // Запобігаємо стандартному скролу
       e.preventDefault();
     }
   };
@@ -180,7 +216,7 @@ const Board = ({ token, currentUser, onLogout }) => {
 
   const handlePopupSubmit = (text, x, y) => {
     createTweet(text, x, y);
-    setTweetDraft(""); // очищаємо текст після створення
+    setTweetDraft("");
     setTweetPopup({ ...tweetPopup, visible: false });
   };
 
@@ -190,7 +226,7 @@ const Board = ({ token, currentUser, onLogout }) => {
 
   const isTweetLikedByCurrentUser = (tweet) => {
     return (tweet.likedUsers || []).some(
-      (u) => u.user_id === currentUser?.user_id
+      (u) => u.user_id === currentUser?._id
     );
   };
 
@@ -213,27 +249,12 @@ const Board = ({ token, currentUser, onLogout }) => {
           { headers: { Authorization: `Bearer ${token}` } }
         );
       }
-
+      const updatedTweet = res.data.content || res.data;
       const updatedLikes =
-        res.data && res.data.likes !== undefined
-          ? res.data.likes
-          : alreadyLiked
-          ? tweet.likes - 1
-          : tweet.likes + 1;
-
-      const updatedLikedUsers =
-        res.data && res.data.likedUsers !== undefined
-          ? res.data.likedUsers
-          : alreadyLiked
-          ? tweet.likedUsers.filter((u) => u.user_id !== currentUser?.user_id)
-          : [
-              ...tweet.likedUsers,
-              {
-                user_id: currentUser?.user_id,
-                username: currentUser?.username,
-              },
-            ];
-
+        updatedTweet.likes !== undefined
+          ? updatedTweet.likes
+          : (updatedTweet.likedUsers || []).length;
+      const updatedLikedUsers = updatedTweet.likedUsers || [];
       setTweets((prevTweets) =>
         prevTweets.map((t) =>
           t._id === id
@@ -242,7 +263,7 @@ const Board = ({ token, currentUser, onLogout }) => {
                 likes: updatedLikes,
                 likedUsers: updatedLikedUsers,
                 likedByUser: updatedLikedUsers.some(
-                  (u) => u.user_id === currentUser?.user_id
+                  (u) => u.user_id === currentUser?._id
                 ),
               }
             : t
@@ -260,14 +281,14 @@ const Board = ({ token, currentUser, onLogout }) => {
         { x, y },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      const updatedTweet = res.data.content || res.data;
       setTweets((prevTweets) =>
         prevTweets.map((t) =>
           t._id === id
             ? {
                 ...t,
-                x: res.data.x !== undefined ? res.data.x : x,
-                y: res.data.y !== undefined ? res.data.y : t.y,
-                text: t.text,
+                x: updatedTweet.x !== undefined ? updatedTweet.x : x,
+                y: updatedTweet.y !== undefined ? updatedTweet.y : t.y,
               }
             : t
         )
@@ -316,10 +337,7 @@ const Board = ({ token, currentUser, onLogout }) => {
   };
 
   return (
-    <div
-      className="board-layout"
-      style={{ width: "100vw", height: "100vh", overflow: "hidden" }}
-    >
+    <div className="board-layout" style={{ width: "100vw", height: "100vh", overflow: "hidden" }}>
       <Header onLogout={onLogout} />
       <div
         className="board-main"
@@ -348,15 +366,13 @@ const Board = ({ token, currentUser, onLogout }) => {
             width: BOARD_SIZE,
             height: BOARD_SIZE,
             backgroundColor: "#fff",
-            backgroundImage:
-              "radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)",
+            backgroundImage: "radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)",
             backgroundSize: "20px 20px",
             boxShadow: "inset 0 0 10px rgba(0,0,0,0.1)",
           }}
         >
           {tweets.map((tweet) => {
-            const authorUsername =
-              tweet.username || currentUser?.username || "Unknown";
+            const authorUsername = tweet.username || currentUser?.username || "Unknown";
             const tweetContent = (
               <Paper
                 className="tweet-card"
@@ -375,43 +391,27 @@ const Board = ({ token, currentUser, onLogout }) => {
                   transition: "transform 0.2s ease, box-shadow 0.2s ease",
                 }}
               >
-                <Typography
-                  variant="body1"
-                  style={{ marginBottom: "8px", color: "#424242" }}
-                >
+                <Typography variant="body1" style={{ marginBottom: "8px", color: "#424242" }}>
                   {tweet.text}
                 </Typography>
                 <Typography variant="caption" style={{ color: "#757575" }}>
                   Автор: {authorUsername}
                 </Typography>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    marginTop: 8,
-                  }}
-                >
+                <div style={{ display: "flex", alignItems: "center", marginTop: 8 }}>
                   <IconButton
                     size="small"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleLike(tweet._id);
                     }}
-                    color={
-                      isTweetLikedByCurrentUser(tweet)
-                        ? "primary"
-                        : "default"
-                    }
+                    color={isTweetLikedByCurrentUser(tweet) ? "primary" : "default"}
                   >
                     <ThumbUpIcon fontSize="small" />
                   </IconButton>
-                  <Typography
-                    variant="caption"
-                    style={{ marginLeft: 4, transition: "all 0.3s ease" }}
-                  >
+                  <Typography variant="caption" style={{ marginLeft: 4, transition: "all 0.3s ease" }}>
                     {tweet.likes}
                   </Typography>
-                  {tweet.user_id === currentUser?.user_id && (
+                  {tweet.user_id === currentUser?._id && (
                     <IconButton
                       size="small"
                       onClick={(e) => {
@@ -426,8 +426,7 @@ const Board = ({ token, currentUser, onLogout }) => {
                 </div>
               </Paper>
             );
-
-            return currentUser?.user_id === tweet.user_id ? (
+            return currentUser?._id === tweet.user_id ? (
               <DraggableTweet key={tweet._id} tweet={tweet} onStop={onStopDrag}>
                 {tweetContent}
               </DraggableTweet>
@@ -473,9 +472,7 @@ const Board = ({ token, currentUser, onLogout }) => {
               centerFocusedTweet();
             }}
           >
-            <Button variant="contained">
-              Повернутись до поста
-            </Button>
+            <Button variant="contained">Повернутись до поста</Button>
           </div>
         )}
       </div>
