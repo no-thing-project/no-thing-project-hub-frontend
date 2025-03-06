@@ -7,6 +7,7 @@ import io from "socket.io-client";
 import DraggableTweet from "../Tweet/Tweet";
 import TweetPopup from "../Tweet/TweetPopup";
 import Header from "../Header/Header";
+import config from "../../config";
 
 const BOARD_SIZE = 10000; // симулюємо "безкінечну" дошку
 
@@ -34,7 +35,7 @@ const Board = ({ token, currentUser, onLogout }) => {
       });
     }
     // Підключення до WebSocket серверу з передачею токена
-    const socket = io(process.env.REACT_APP_WS_URL, {
+    const socket = io(config.REACT_APP_WS_URL, {
       query: { token }
     });
     socketRef.current = socket;
@@ -66,7 +67,7 @@ const Board = ({ token, currentUser, onLogout }) => {
   const fetchTweets = async () => {
     try {
       const res = await axios.get(
-        `${process.env.REACT_APP_HUB_API_URL}/tweets`
+        `${config.REACT_APP_HUB_API_URL}/tweets`
       );
       // Обчислюємо кількість лайків з likedUsers, якщо likes відсутнє
       const tweetsData = res.data.content.map((tweet) => ({
@@ -95,7 +96,7 @@ const Board = ({ token, currentUser, onLogout }) => {
         },
       };
       const res = await axios.post(
-        `${process.env.REACT_APP_HUB_API_URL}/tweets`,
+        `${config.REACT_APP_HUB_API_URL}/tweets`,
         payload,
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -238,13 +239,13 @@ const Board = ({ token, currentUser, onLogout }) => {
       let res;
       if (alreadyLiked) {
         res = await axios.put(
-          `${process.env.REACT_APP_HUB_API_URL}/tweets/${id}/dislike`,
+          `${config.REACT_APP_HUB_API_URL}/tweets/${id}/dislike`,
           {},
           { headers: { Authorization: `Bearer ${token}` } }
         );
       } else {
         res = await axios.put(
-          `${process.env.REACT_APP_HUB_API_URL}/tweets/${id}/like`,
+          `${config.REACT_APP_HUB_API_URL}/tweets/${id}/like`,
           {},
           { headers: { Authorization: `Bearer ${token}` } }
         );
@@ -277,7 +278,7 @@ const Board = ({ token, currentUser, onLogout }) => {
   const updatePosition = async (id, x, y) => {
     try {
       const res = await axios.put(
-        `${process.env.REACT_APP_HUB_API_URL}/tweets/${id}/position`,
+        `${config.REACT_APP_HUB_API_URL}/tweets/${id}/position`,
         { x, y },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -300,7 +301,7 @@ const Board = ({ token, currentUser, onLogout }) => {
 
   const handleDelete = async (id) => {
     try {
-      await axios.delete(`${process.env.REACT_APP_HUB_API_URL}/tweets/${id}`, {
+      await axios.delete(`${config.REACT_APP_HUB_API_URL}/tweets/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setTweets((prevTweets) => prevTweets.filter((t) => t._id !== id));

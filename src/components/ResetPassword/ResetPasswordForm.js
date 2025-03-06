@@ -11,6 +11,7 @@ import {
 } from "@mui/material";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import config from "../../config";
 
 const ResetPasswordForm = ({ theme }) => {
   const [newPassword, setNewPassword] = useState("");
@@ -61,7 +62,7 @@ const ResetPasswordForm = ({ theme }) => {
 
     try {
       await axios.post(
-        `${process.env.REACT_APP_HUB_API_URL}/reset/set-password`,
+        `${config.REACT_APP_HUB_API_URL}/reset/set-password`,
         { token, newPassword }
       );
       setSuccess("Пароль успішно змінено");

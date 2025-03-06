@@ -10,6 +10,7 @@ import {
   Alert,
 } from "@mui/material";
 import axios from "axios";
+import config from "../../config";
 
 const LoginForm = ({ theme, onLogin }) => {
   const [email, setEmail] = useState("");
@@ -19,7 +20,7 @@ const LoginForm = ({ theme, onLogin }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post(`${process.env.REACT_APP_HUB_API_URL}/auth/login`, { email, password });
+      const res = await axios.post(`${config.REACT_APP_HUB_API_URL}/auth/login`, { email, password });
       onLogin(res.data.token, res.data.authData);
     } catch (err) {
       console.error(err);
