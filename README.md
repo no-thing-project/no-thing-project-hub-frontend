@@ -1,70 +1,78 @@
-# Getting Started with Create React App
+# No.Thing Hub Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+## Опис
+No.Thing Hub — це клієнтська частина веб-додатку, який надає користувачам можливість взаємодіяти з платформою No.Thing Project. Додаток підтримує авторизацію, створення та редагування контенту, а також реальний час оновлення за допомогою WebSockets.
 
-## Available Scripts
+## Функціонал
+- **Аутентифікація користувачів** (реєстрація, вхід, вихід, відновлення пароля).
+- **Інтерактивна дошка** для створення та розміщення твітів.
+- **Реалтайм оновлення** твітів через WebSocket.
+- **Темізація** за допомогою MUI Theme.
+- **Адаптивний дизайн**.
 
-In the project directory, you can run:
+## Технології
+- **React 19** - бібліотека для створення UI.
+- **React Router** - маршрутизація в SPA.
+- **Material-UI (MUI)** - компоненти для інтерфейсу.
+- **Socket.IO** - для оновлення контенту в реальному часі.
+- **Axios** - для запитів до API.
+- **Jest & React Testing Library** - тестування компонентів.
 
-### `npm start`
+## Встановлення
+1. Клонуйте репозиторій:
+   ```sh
+   git clone https://github.com/nothingproject/hub-frontend.git
+   ```
+2. Перейдіть у директорію проекту:
+   ```sh
+   cd hub-frontend
+   ```
+3. Встановіть залежності:
+   ```sh
+   npm install
+   ```
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Запуск
+Запустіть локальний сервер:
+```sh
+npm run start
+```
+Додаток буде доступний за адресою `http://localhost:3000`.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Конфігурація
+Файл `config.js` визначає API-ендпоінти для різних середовищ (`development`, `staging`, `production`). Конфігурація залежить від змінних оточення, які можуть бути налаштовані у вашому `.env` файлі або передані під час запуску додатку.
 
-### `npm test`
+### Змінні оточення
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- `API_HUB_URL` - URL API-сервера.
+- `PUBLIC_HUB_URL` - URL фронтенду.
+- `WS_URL` - WebSocket сервер.
+- `APP_ENV` - Вказує середовище (`development`, `staging`, `production`).
 
-### `npm run build`
+Приклад `.env` файлу:
+```ini
+APP_ENV=development
+API_HUB_URL=http://localhost:8080/api
+PUBLIC_HUB_URL=http://localhost:3001
+WS_URL=http://localhost:3002
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Структура проекту
+```
+/
+├── public/              # Статичні файли
+├── src/
+│   ├── components/      # UI-компоненти
+│   ├── pages/           # Основні сторінки
+│   ├── styles/          # CSS стилі
+│   ├── utils/           # Утилітарні функції
+│   ├── App.js           # Головний компонент
+│   ├── index.js         # Точка входу
+│   ├── config.js        # Конфігураційний файл
+├── package.json         # Файл налаштувань npm
+└── README.md            # Документація
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## Ліцензія
+Проект ліцензовано під [MIT License](LICENSE).
