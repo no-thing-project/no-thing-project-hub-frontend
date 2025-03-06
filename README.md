@@ -21,7 +21,7 @@ No.Thing Hub — це клієнтська частина веб-додатку,
 ## Встановлення
 1. Клонуйте репозиторій:
    ```sh
-   git clone https://github.com/nothingproject/hub-frontend.git
+   git clone https://github.com/nothingproject/no-thing-project-hub-frontend.git
    ```
 2. Перейдіть у директорію проекту:
    ```sh
