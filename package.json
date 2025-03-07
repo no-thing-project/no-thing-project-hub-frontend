@@ -24,13 +24,19 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "start:local": "cross-env APP_ENV=local react-scripts start",
     "start:development": "cross-env APP_ENV=development react-scripts start",
     "start:staging": "cross-env APP_ENV=staging react-scripts start",
     "start:production": "cross-env APP_ENV=production react-scripts start",
+
+
     "build": "react-scripts build",
+    "build:local": "cross-env APP_ENV=local react-scripts build",
     "build:development": "cross-env APP_ENV=development react-scripts build",
     "build:staging": "cross-env APP_ENV=staging react-scripts build",
     "build:production": "cross-env APP_ENV=production react-scripts build",
+
+    
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "serve": "serve -s build",
