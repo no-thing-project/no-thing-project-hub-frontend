@@ -53,7 +53,7 @@ const Board = ({ token, currentUser, onLogout }) => {
   };
 
   const setupWebSocket = () => {
-    const socket = io(config.REACT_APP_WS_API_URL, { query: { token } });
+    const socket = io(config.REACT_APP_WS_URL, { query: { token } });
     socketRef.current = socket;
 
     socket.on("tweetCreated", (newTweet) => {
@@ -365,7 +365,7 @@ const Board = ({ token, currentUser, onLogout }) => {
   const updatePosition = async (id, x, y) => {
     try {
       const res = await axios.put(
-        `${config.REACT_APP_WS_API_URL}/tweets/${id}/position`,
+        `${config.REACT_APP_HUB_API_URL}/tweets/${id}/position`,
         { x, y },
         { headers: { Authorization: `Bearer ${token}` } }
       );
