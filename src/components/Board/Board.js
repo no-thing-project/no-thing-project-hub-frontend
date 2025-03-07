@@ -1,32 +1,48 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Typography, IconButton, Paper, Button } from "@mui/material";
+import { Box, Typography, IconButton, Paper, Button } from "@mui/material";
 import ThumbUpIcon from "@mui/icons-material/ThumbUp";
 import DeleteIcon from "@mui/icons-material/Delete";
+import AddIcon from "@mui/icons-material/Add";
+import RemoveIcon from "@mui/icons-material/Remove";
 import axios from "axios";
 import io from "socket.io-client";
+import { useParams } from "react-router-dom";
 import DraggableTweet from "../Tweet/Tweet";
 import TweetPopup from "../Tweet/TweetPopup";
-import Header from "../Header/Header";
 import config from "../../config";
 
-const BOARD_SIZE = 10000; // симулюємо "безкінечну" дошку
+import LeftDrawer from "../Drawer/LeftDrawer";
+import TopBar from "../Header/Header";
+
+const BOARD_SIZE = 10000;
 
 const Board = ({ token, currentUser, onLogout }) => {
+  const { id: boardId } = useParams();
   const [tweets, setTweets] = useState([]);
   const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0 });
   const [tweetDraft, setTweetDraft] = useState("");
   const [boardOffset, setBoardOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [focusedTweet, setFocusedTweet] = useState(null);
+  const [scale, setScale] = useState(1);
+
   const boardMainRef = useRef(null);
   const dragStart = useRef(null);
   const isDragging = useRef(false);
   const socketRef = useRef(null);
 
-  // Початкове завантаження твітів та підключення до Socket.IO
   useEffect(() => {
     fetchTweets();
-    // Центруємо дошку при першому завантаженні
+    centerBoardInitially();
+    setupWebSocket();
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, [token, boardId]);
+
+  const centerBoardInitially = () => {
     if (boardMainRef.current) {
       const { clientWidth, clientHeight } = boardMainRef.current;
       setBoardOffset({
@@ -34,18 +50,19 @@ const Board = ({ token, currentUser, onLogout }) => {
         y: clientHeight / 2 - BOARD_SIZE / 2,
       });
     }
-    // Підключення до WebSocket серверу з передачею токена
-    const socket = io(config.REACT_APP_WS_URL, {
-      query: { token }
-    });
+  };
+
+  const setupWebSocket = () => {
+    const socket = io(config.REACT_APP_WS_API_URL, { query: { token } });
     socketRef.current = socket;
+
     socket.on("tweetCreated", (newTweet) => {
-      // Якщо твіт уже існує — не додаємо дубль
       setTweets((prev) => {
-        if (prev.find(tweet => tweet._id === newTweet._id)) return prev;
+        if (prev.some((tweet) => tweet._id === newTweet._id)) return prev;
         return [...prev, newTweet];
       });
     });
+
     socket.on("tweetUpdated", (updatedTweet) => {
       setTweets((prev) =>
         prev.map((tweet) =>
@@ -53,30 +70,31 @@ const Board = ({ token, currentUser, onLogout }) => {
         )
       );
     });
+
     socket.on("tweetDeleted", ({ _id }) => {
       setTweets((prev) => prev.filter((tweet) => tweet._id !== _id));
     });
+
     socket.on("error", (err) => {
       console.error("Socket error:", err.message);
     });
-    return () => {
-      socket.disconnect();
-    };
-  }, [token]);
+  };
 
   const fetchTweets = async () => {
     try {
       const res = await axios.get(
-        `${config.REACT_APP_HUB_API_URL}/tweets`
+        `${config.REACT_APP_HUB_API_URL}/tweets?board_id=${boardId}`
       );
-      // Обчислюємо кількість лайків з likedUsers, якщо likes відсутнє
       const tweetsData = res.data.content.map((tweet) => ({
         ...tweet,
         likedUsers: tweet.likedUsers || [],
         likedByUser: (tweet.likedUsers || []).some(
           (u) => u.user_id === currentUser?._id
         ),
-        likes: tweet.likes !== undefined ? tweet.likes : (tweet.likedUsers || []).length,
+        likes:
+          tweet.likes !== undefined
+            ? tweet.likes
+            : (tweet.likedUsers || []).length,
       }));
       setTweets(tweetsData);
     } catch (err) {
@@ -86,10 +104,12 @@ const Board = ({ token, currentUser, onLogout }) => {
 
   const createTweet = async (text, x, y) => {
     try {
+      // x, y передаються у "бордових" координатах (без маштабування)
       const payload = {
         text,
         x,
         y,
+        board_id: boardId,
         user: {
           id: currentUser?._id,
           username: currentUser?.username,
@@ -109,11 +129,13 @@ const Board = ({ token, currentUser, onLogout }) => {
         likedByUser: (createdTweet.likedUsers || []).some(
           (u) => u.user_id === currentUser?._id
         ),
-        likes: createdTweet.likes !== undefined ? createdTweet.likes : (createdTweet.likedUsers || []).length,
+        likes:
+          createdTweet.likes !== undefined
+            ? createdTweet.likes
+            : (createdTweet.likedUsers || []).length,
       };
-      // Для оптимістичного оновлення перевіряємо, чи твіт вже є в стані
       setTweets((prev) => {
-        if (prev.find(tweet => tweet._id === tweetWithPosition._id)) return prev;
+        if (prev.some((t) => t._id === tweetWithPosition._id)) return prev;
         return [...prev, tweetWithPosition];
       });
       setFocusedTweet(tweetWithPosition);
@@ -122,12 +144,74 @@ const Board = ({ token, currentUser, onLogout }) => {
     }
   };
 
-  // Обробка подій для перетягування дошки (для миші)
+  // Функції маштабування: для кнопок масштабування відносно центру екрану
+  const handleZoomIn = (cursorX, cursorY) => {
+    setScale((prev) => {
+      const newScale = Math.min(prev + 0.1, 2);
+      adjustOffsetForZoom(cursorX, cursorY, prev, newScale);
+      return newScale;
+    });
+  };
+
+  const handleZoomOut = (cursorX, cursorY) => {
+    setScale((prev) => {
+      const newScale = Math.max(prev - 0.1, 0.5);
+      adjustOffsetForZoom(cursorX, cursorY, prev, newScale);
+      return newScale;
+    });
+  };
+
+  // При натисканні кнопок масштабування використовуємо центр boardMainRef
+  const handleZoomInButton = () => {
+    if (!boardMainRef.current) return;
+    const rect = boardMainRef.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    handleZoomIn(centerX, centerY);
+  };
+
+  const handleZoomOutButton = () => {
+    if (!boardMainRef.current) return;
+    const rect = boardMainRef.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    handleZoomOut(centerX, centerY);
+  };
+
+  // Регулює зсув, щоб точка під курсором залишалась незмінною.
+  const adjustOffsetForZoom = (cursorX, cursorY, oldScale, newScale) => {
+    if (!boardMainRef.current) return;
+    const rect = boardMainRef.current.getBoundingClientRect();
+    const relativeX = cursorX - rect.left;
+    const relativeY = cursorY - rect.top;
+    const boardX = (relativeX - boardOffset.x) / oldScale;
+    const boardY = (relativeY - boardOffset.y) / oldScale;
+    const newOffsetX = relativeX - boardX * newScale;
+    const newOffsetY = relativeY - boardY * newScale;
+    setBoardOffset({ x: newOffsetX, y: newOffsetY });
+  };
+
+  // Плавне маштабування мишкою/тачпадом навколо курсору
+  const handleWheel = (e) => {
+    e.preventDefault();
+    if (!boardMainRef.current) return;
+    const sensitivity = 0.001;
+    const delta = -e.deltaY * sensitivity;
+    const newScale = Math.min(2, Math.max(0.5, scale + delta));
+    const cursorX = e.clientX;
+    const cursorY = e.clientY;
+    adjustOffsetForZoom(cursorX, cursorY, scale, newScale);
+    setScale(newScale);
+  };
+
+  // Обробка перетягування: тепер розрахунок враховує scale
   const handleMouseDown = (e) => {
+    // Не ініціювати драг, якщо клік на елементах, які не мають викликати переміщення
     if (
       e.target.closest(".tweet-card") ||
       e.target.closest(".tweet-popup") ||
-      e.target.closest(".return-button")
+      e.target.closest(".return-button") ||
+      e.target.closest(".zoom-controls")
     )
       return;
     dragStart.current = {
@@ -142,16 +226,16 @@ const Board = ({ token, currentUser, onLogout }) => {
 
   const handleMouseMove = (e) => {
     if (!dragStart.current) return;
-    const dx = e.clientX - dragStart.current.x;
-    const dy = e.clientY - dragStart.current.y;
+    const dx = (e.clientX - dragStart.current.x) / scale;
+    const dy = (e.clientY - dragStart.current.y) / scale;
     if (!isDragging.current && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
       isDragging.current = true;
       setDragging(true);
     }
     if (isDragging.current) {
       setBoardOffset({
-        x: dragStart.current.offsetX + dx,
-        y: dragStart.current.offsetY + dy,
+        x: dragStart.current.offsetX + dx * scale,
+        y: dragStart.current.offsetY + dy * scale,
       });
     }
   };
@@ -163,12 +247,13 @@ const Board = ({ token, currentUser, onLogout }) => {
       setDragging(false);
       return;
     }
+    // Якщо це не перетягування, відкриваємо попап для створення твіту
     if (!isDragging.current && dragStart.current) {
       const boardRect = boardMainRef.current.getBoundingClientRect();
       const clickX = e.clientX - boardRect.left;
       const clickY = e.clientY - boardRect.top;
-      const tweetX = clickX - boardOffset.x;
-      const tweetY = clickY - boardOffset.y;
+      const tweetX = (clickX - boardOffset.x) / scale;
+      const tweetY = (clickY - boardOffset.y) / scale;
       setTweetPopup({ visible: true, x: tweetX, y: tweetY });
     }
     dragStart.current = null;
@@ -176,9 +261,9 @@ const Board = ({ token, currentUser, onLogout }) => {
     setDragging(false);
   };
 
-  // Аналогічна обробка для touch-подій
+  // Обробка touch-подій
   const handleTouchStart = (e) => {
-    if (e.touches && e.touches.length === 1) {
+    if (e.touches?.length === 1) {
       const touch = e.touches[0];
       handleMouseDown({
         clientX: touch.clientX,
@@ -189,7 +274,7 @@ const Board = ({ token, currentUser, onLogout }) => {
   };
 
   const handleTouchMove = (e) => {
-    if (e.touches && e.touches.length === 1) {
+    if (e.touches?.length === 1) {
       const touch = e.touches[0];
       handleMouseMove({
         clientX: touch.clientX,
@@ -201,7 +286,7 @@ const Board = ({ token, currentUser, onLogout }) => {
   };
 
   const handleTouchEnd = (e) => {
-    if (e.changedTouches && e.changedTouches.length === 1) {
+    if (e.changedTouches?.length === 1) {
       const touch = e.changedTouches[0];
       handleMouseUp({
         clientX: touch.clientX,
@@ -211,6 +296,7 @@ const Board = ({ token, currentUser, onLogout }) => {
     }
   };
 
+  // Popup для створення твіту
   const handlePopupClick = (e) => {
     e.stopPropagation();
   };
@@ -225,6 +311,7 @@ const Board = ({ token, currentUser, onLogout }) => {
     setTweetPopup({ ...tweetPopup, visible: false });
   };
 
+  // Лайки та видалення
   const isTweetLikedByCurrentUser = (tweet) => {
     return (tweet.likedUsers || []).some(
       (u) => u.user_id === currentUser?._id
@@ -278,7 +365,7 @@ const Board = ({ token, currentUser, onLogout }) => {
   const updatePosition = async (id, x, y) => {
     try {
       const res = await axios.put(
-        `${config.REACT_APP_HUB_API_URL}/tweets/${id}/position`,
+        `${config.REACT_APP_WS_API_URL}/tweets/${id}/position`,
         { x, y },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -317,8 +404,8 @@ const Board = ({ token, currentUser, onLogout }) => {
   const isTweetVisible = (tweet) => {
     if (!boardMainRef.current) return true;
     const { clientWidth, clientHeight } = boardMainRef.current;
-    const tweetScreenX = tweet.x + boardOffset.x;
-    const tweetScreenY = tweet.y + boardOffset.y;
+    const tweetScreenX = tweet.x * scale + boardOffset.x;
+    const tweetScreenY = tweet.y * scale + boardOffset.y;
     return (
       tweetScreenX >= 0 &&
       tweetScreenX <= clientWidth &&
@@ -331,153 +418,193 @@ const Board = ({ token, currentUser, onLogout }) => {
     if (focusedTweet && boardMainRef.current) {
       const { clientWidth, clientHeight } = boardMainRef.current;
       setBoardOffset({
-        x: clientWidth / 2 - focusedTweet.x,
-        y: clientHeight / 2 - focusedTweet.y,
+        x: clientWidth / 2 - focusedTweet.x * scale,
+        y: clientHeight / 2 - focusedTweet.y * scale,
       });
     }
   };
 
   return (
-    <div className="board-layout" style={{ width: "100vw", height: "100vh", overflow: "hidden" }}>
-      <Header onLogout={onLogout} />
-      <div
-        className="board-main"
-        ref={boardMainRef}
-        style={{
-          marginTop: 64,
-          width: "100%",
-          height: "calc(100vh - 64px)",
-          overflow: "hidden",
-          position: "relative",
-          cursor: dragging ? "grabbing" : "grab",
-        }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        <div
-          className="board-inner"
-          style={{
-            position: "absolute",
-            top: boardOffset.y,
-            left: boardOffset.x,
-            width: BOARD_SIZE,
-            height: BOARD_SIZE,
-            backgroundColor: "#fff",
-            backgroundImage: "radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)",
-            backgroundSize: "20px 20px",
-            boxShadow: "inset 0 0 10px rgba(0,0,0,0.1)",
+    <Box sx={{ display: "flex", width: "100vw", height: "100vh", overflow: "hidden" }}>
+      <LeftDrawer onLogout={onLogout} />
+      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
+        <TopBar currentUser={currentUser} />
+        <Box
+          ref={boardMainRef}
+          sx={{
+            flex: 1,
+            position: "relative",
+            overflow: "hidden",
+            cursor: dragging ? "grabbing" : "grab",
           }}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onWheel={handleWheel}
         >
-          {tweets.map((tweet) => {
-            const authorUsername = tweet.username || currentUser?.username || "Unknown";
-            const tweetContent = (
-              <Paper
-                className="tweet-card"
-                elevation={3}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setFocusedTweet(tweet);
-                }}
-                style={{
-                  padding: "16px",
-                  backgroundColor: "#fff",
-                  borderRadius: "12px",
-                  minWidth: "180px",
-                  maxWidth: "300px",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                  transition: "transform 0.2s ease, box-shadow 0.2s ease",
-                }}
-              >
-                <Typography variant="body1" style={{ marginBottom: "8px", color: "#424242" }}>
-                  {tweet.text}
-                </Typography>
-                <Typography variant="caption" style={{ color: "#757575" }}>
-                  Автор: {authorUsername}
-                </Typography>
-                <div style={{ display: "flex", alignItems: "center", marginTop: 8 }}>
-                  <IconButton
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleLike(tweet._id);
-                    }}
-                    color={isTweetLikedByCurrentUser(tweet) ? "primary" : "default"}
-                  >
-                    <ThumbUpIcon fontSize="small" />
-                  </IconButton>
-                  <Typography variant="caption" style={{ marginLeft: 4, transition: "all 0.3s ease" }}>
-                    {tweet.likes}
+          <Box
+            className="board-inner"
+            sx={{
+              position: "absolute",
+              top: boardOffset.y,
+              left: boardOffset.x,
+              width: BOARD_SIZE,
+              height: BOARD_SIZE,
+              backgroundColor: "#fff",
+              backgroundImage: "radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)",
+              backgroundSize: "20px 20px",
+              boxShadow: "inset 0 0 10px rgba(0,0,0,0.1)",
+              transform: `scale(${scale})`,
+              transformOrigin: "top left",
+            }}
+          >
+            {tweets.map((tweet) => {
+              const authorUsername = tweet.username || currentUser?.username || "Unknown";
+              const tweetContent = (
+                <Paper
+                  className="tweet-card"
+                  elevation={3}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFocusedTweet(tweet);
+                  }}
+                  sx={{
+                    padding: "16px",
+                    backgroundColor: "#fff",
+                    borderRadius: "12px",
+                    minWidth: "180px",
+                    maxWidth: "300px",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                    transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                  }}
+                >
+                  <Typography variant="body1" sx={{ marginBottom: "8px", color: "#424242" }}>
+                    {tweet.text}
                   </Typography>
-                  {tweet.user_id === currentUser?._id && (
+                  <Typography variant="caption" sx={{ color: "#757575" }}>
+                    Автор: {authorUsername}
+                  </Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", marginTop: 1 }}>
                     <IconButton
                       size="small"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDelete(tweet._id);
+                        handleLike(tweet._id);
                       }}
-                      color="error"
+                      color={isTweetLikedByCurrentUser(tweet) ? "primary" : "default"}
                     >
-                      <DeleteIcon fontSize="small" />
+                      <ThumbUpIcon fontSize="small" />
                     </IconButton>
-                  )}
-                </div>
-              </Paper>
-            );
-            return currentUser?._id === tweet.user_id ? (
-              <DraggableTweet key={tweet._id} tweet={tweet} onStop={onStopDrag}>
-                {tweetContent}
-              </DraggableTweet>
-            ) : (
-              <div
-                key={tweet._id}
-                style={{ position: "absolute", top: tweet.y, left: tweet.x }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setFocusedTweet(tweet);
-                }}
-              >
-                {tweetContent}
-              </div>
-            );
-          })}
-          {tweetPopup.visible && (
-            <div onClick={handlePopupClick}>
-              <TweetPopup
-                x={tweetPopup.x}
-                y={tweetPopup.y}
-                draft={tweetDraft}
-                onDraftChange={setTweetDraft}
-                onSubmit={handlePopupSubmit}
-                onClose={handlePopupClose}
-              />
-            </div>
+                    <Typography variant="caption" sx={{ marginLeft: 1, transition: "all 0.3s ease" }}>
+                      {tweet.likes}
+                    </Typography>
+                    {tweet.user_id === currentUser?._id && (
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(tweet._id);
+                        }}
+                        color="error"
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Box>
+                </Paper>
+              );
+              return currentUser?._id === tweet.user_id ? (
+                <DraggableTweet key={tweet._id} tweet={tweet} onStop={onStopDrag}>
+                  {tweetContent}
+                </DraggableTweet>
+              ) : (
+                <Box
+                  key={tweet._id}
+                  sx={{ position: "absolute", top: tweet.y, left: tweet.x }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFocusedTweet(tweet);
+                  }}
+                >
+                  {tweetContent}
+                </Box>
+              );
+            })}
+            {tweetPopup.visible && (
+              <Box onClick={handlePopupClick}>
+                <TweetPopup
+                  x={tweetPopup.x}
+                  y={tweetPopup.y}
+                  draft={tweetDraft}
+                  onDraftChange={setTweetDraft}
+                  onSubmit={handlePopupSubmit}
+                  onClose={handlePopupClose}
+                />
+              </Box>
+            )}
+          </Box>
+          {focusedTweet && !isTweetVisible(focusedTweet) && (
+            <Box
+              className="return-button"
+              sx={{
+                position: "absolute",
+                bottom: 2,
+                right: 2,
+                zIndex: 1000,
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                centerFocusedTweet();
+              }}
+            >
+              <Button variant="contained">Повернутись до поста</Button>
+            </Box>
           )}
-        </div>
-        {focusedTweet && !isTweetVisible(focusedTweet) && (
-          <div
-            className="return-button"
-            style={{
+          {/* Zoom controls - розташовані у нижньому правому куті */}
+          <Box
+            className="zoom-controls"
+            sx={{
               position: "absolute",
-              bottom: 20,
-              right: 20,
-              zIndex: 1000,
+              bottom: 16,
+              right: 16,
+              zIndex: 1100,
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              backgroundColor: "rgba(255,255,255,0.8)",
+              borderRadius: 1,
+              padding: "4px",
             }}
             onMouseDown={(e) => e.stopPropagation()}
-            onMouseUp={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              centerFocusedTweet();
-            }}
           >
-            <Button variant="contained">Повернутись до поста</Button>
-          </div>
-        )}
-      </div>
-    </div>
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation();
+                handleZoomOutButton();
+              }}
+              size="small"
+            >
+              <RemoveIcon />
+            </IconButton>
+            <Typography variant="body2">{Math.round(scale * 100)}%</Typography>
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation();
+                handleZoomInButton();
+              }}
+              size="small"
+            >
+              <AddIcon />
+            </IconButton>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 };
 

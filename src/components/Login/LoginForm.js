@@ -11,17 +11,20 @@ import {
 } from "@mui/material";
 import axios from "axios";
 import config from "../../config";
+import { useNavigate } from "react-router-dom";
 
 const LoginForm = ({ theme, onLogin }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       const res = await axios.post(`${config.REACT_APP_HUB_API_URL}/auth/login`, { email, password });
       onLogin(res.data.token, res.data.authData);
+      navigate("/profile");
     } catch (err) {
       console.error(err);
       if (err.response) {
