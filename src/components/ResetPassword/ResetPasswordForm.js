@@ -62,7 +62,7 @@ const ResetPasswordForm = ({ theme }) => {
 
     try {
       await axios.post(
-        `${config.REACT_APP_HUB_API_URL}/reset/set-password`,
+        `${config.REACT_APP_HUB_API_URL}/private/set-password`,
         { token, newPassword }
       );
       setSuccess("Пароль успішно змінено");
