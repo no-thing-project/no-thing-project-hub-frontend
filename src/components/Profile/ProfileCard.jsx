@@ -6,9 +6,9 @@ import { Link } from "react-router-dom";
  * Картка з даними профілю та списком бордів.
  */
 const ProfileCard = ({ currentUser, boards }) => {
-  const userFullName = currentUser.fullName || "Alexa Rawles";
-  const userNickName = currentUser.username || "Alexa";
-  const userEmail = currentUser.email || "alexarawles@gmail.com";
+  const userFullName = currentUser.fullName || "Someone";
+  const userName = currentUser.username || "Noone";
+  const userEmail = currentUser.email || "userEmail";
 
   return (
     <>
@@ -34,7 +34,7 @@ const ProfileCard = ({ currentUser, boards }) => {
           >
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 500 }}>
-                {userFullName}
+                {userName}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 {userEmail}
@@ -55,9 +55,9 @@ const ProfileCard = ({ currentUser, boards }) => {
             </Grid>
             <Grid item xs={12} md={6}>
               <Typography variant="subtitle2" sx={{ color: "#666" }}>
-                Nick Name
+                Username
               </Typography>
-              <Typography variant="body1">{userNickName}</Typography>
+              <Typography variant="body1">{userName}</Typography>
             </Grid>
 
             <Grid item xs={12} md={6}>
@@ -65,7 +65,7 @@ const ProfileCard = ({ currentUser, boards }) => {
                 Gender
               </Typography>
               <Typography variant="body1">
-                {currentUser.gender || "Not specified"}
+                {currentUser.gender || "Any"}
               </Typography>
             </Grid>
             <Grid item xs={12} md={6}>
@@ -73,7 +73,7 @@ const ProfileCard = ({ currentUser, boards }) => {
                 Country
               </Typography>
               <Typography variant="body1">
-                {currentUser.country || "Not specified"}
+                {currentUser.country || "Everywhere"}
               </Typography>
             </Grid>
 
@@ -82,7 +82,7 @@ const ProfileCard = ({ currentUser, boards }) => {
                 Language
               </Typography>
               <Typography variant="body1">
-                {currentUser.language || "Not specified"}
+                {currentUser.language || "Any"}
               </Typography>
             </Grid>
             <Grid item xs={12} md={6}>
@@ -90,7 +90,7 @@ const ProfileCard = ({ currentUser, boards }) => {
                 Time Zone
               </Typography>
               <Typography variant="body1">
-                {currentUser.timezone || "Not specified"}
+                {currentUser.timezone || "Somewhere"}
               </Typography>
             </Grid>
           </Grid>

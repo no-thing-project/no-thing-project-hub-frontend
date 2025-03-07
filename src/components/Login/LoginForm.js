@@ -26,16 +26,27 @@ const LoginForm = ({ theme, onLogin }) => {
       onLogin(res.data.token, res.data.authData);
       navigate("/profile");
     } catch (err) {
-      console.error(err);
-      if (err.response) {
-        err.response.data.errors.forEach((error) => {
-          setError(error);
-        });
+      console.error("Login error:", err);
 
-        return;
+      // Handle API response errors
+      if (err.response && err.response.data) {
+        // Check if errors is an array
+        if (Array.isArray(err.response.data.errors)) {
+          setError(err.response.data.errors[0]); // Set the first error message
+        }
+        // Check if there's a single message
+        else if (err.response.data.message) {
+          setError(err.response.data.message);
+        }
+        // Fallback for unexpected structure
+        else {
+          setError("An unexpected error occurred");
+        }
       }
-
-      setError(err.message);
+      // Handle network errors or other issues
+      else {
+        setError(err.message || "Network error, please try again");
+      }
     }
   };
 
