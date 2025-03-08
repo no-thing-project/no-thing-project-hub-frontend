@@ -1,3 +1,4 @@
+//src/components/Profile/ProfilePage.jsx
 import React from "react";
 import { Box } from "@mui/material";
 import LeftDrawer from "../Drawer/LeftDrawer";

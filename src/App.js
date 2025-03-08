@@ -1,3 +1,4 @@
+// App.js
 import React, { useState, useEffect } from "react";
 import {
   HashRouter as Router,
@@ -42,6 +43,7 @@ function App() {
   const [boards, setBoards] = useState([]);
 
   const handleLogin = (token, authDataFromResponse) => {
+    console.log("handleLogin called with:", { token, authDataFromResponse });
     setToken(token);
     localStorage.setItem("token", token);
 
@@ -87,7 +89,6 @@ function App() {
     }
   }, [token, authData]);
 
-  // Завантаження списку бордів після отримання токена
   useEffect(() => {
     if (token) {
       const fetchBoards = async () => {
@@ -116,7 +117,7 @@ function App() {
         <Routes>
           <Route
             path="/reset-password"
-            element={<ResetPasswordForm theme={theme} />}
+            element={<ResetPasswordForm theme={theme} onLogin={handleLogin} />}
           />
           <Route
             path="/login"
