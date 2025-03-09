@@ -19,7 +19,7 @@ const ProfilePage = ({ currentUser, boards, onLogout, token }) => {
     const fetchProfile = async () => {
       setLoading(true);
       try {
-        const ownUserId = currentUser?.user_id;
+        const ownUserId = currentUser?.user_id;      
         console.log("Current user:", currentUser);
         console.log("Requested userId from URL:", userId);
         console.log("Hub API URL:", config.REACT_APP_HUB_API_URL);
@@ -29,18 +29,12 @@ const ProfilePage = ({ currentUser, boards, onLogout, token }) => {
         }
 
         if (!userId || userId === ownUserId) {
-          // Для власного профілю беремо дані з currentUser
-          console.log("Using currentUser data for own profile");
           setProfileData(currentUser);
           setIsOwnProfile(true);
         } else {
-          if (!userId || userId === "undefined") {
-            throw new Error("Requested userId is invalid or undefined");
-          }
           const url = `${config.REACT_APP_HUB_API_URL}/profile/${userId}`;
           console.log("Fetching profile for userId at:", url);
           const response = await axios.get(url);
-          console.log("Profile response:", response.data);
           setProfileData(response.data.authData);
           setIsOwnProfile(false);
         }

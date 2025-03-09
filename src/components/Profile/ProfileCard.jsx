@@ -20,9 +20,6 @@ import { Edit, Save } from "@mui/icons-material";
 import axios from "axios";
 import config from "../../config";
 
-/**
- * Картка з даними профілю та списком бордів.
- */
 const ProfileCard = ({ currentUser, boards, isOwnProfile }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [userData, setUserData] = useState({
@@ -35,6 +32,7 @@ const ProfileCard = ({ currentUser, boards, isOwnProfile }) => {
     timezone: currentUser.timezone || "Somewhere",
     bio: currentUser.bio || "",
     isPublic: currentUser.isPublic || false,
+    points: currentUser.points || 0,
     socialLinks: {
       twitter: currentUser.social_links?.twitter || "",
       instagram: currentUser.social_links?.instagram || "",
@@ -101,7 +99,6 @@ const ProfileCard = ({ currentUser, boards, isOwnProfile }) => {
     setSuccess("");
   };
 
-  // Функція для форматування статусу
   const formatStatus = (status) => {
     return status === "INACTIVE" ? "INACTIVE" : status;
   };
@@ -140,6 +137,10 @@ const ProfileCard = ({ currentUser, boards, isOwnProfile }) => {
               ) : (
                 <Typography variant="body1">{userData.fullName}</Typography>
               )}
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" sx={{ color: "#666" }}>Points</Typography>
+              <Typography variant="body1">{userData.points}</Typography>
             </Grid>
             <Grid item xs={12} md={6}>
               <Typography variant="subtitle2" sx={{ color: "#666" }}>Username</Typography>
