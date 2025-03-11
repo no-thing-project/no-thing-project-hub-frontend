@@ -1,25 +1,23 @@
-//src/App.js (HUB FE)
+// src/App.js (HUB FE)
 import React, { useState, useEffect, useCallback } from "react";
-import { HashRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import {
+  HashRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 import LoginForm from "./components/Login/LoginForm";
 import Board from "./components/Board/Board";
 import ResetPasswordForm from "./components/ResetPassword/ResetPasswordForm";
 import ProfilePage from "./components/Profile/ProfilePage";
 import "./index.css";
-import { createTheme, ThemeProvider } from "@mui/material";
+import { ThemeProvider } from "@mui/material";
 import axios from "axios";
 import config from "./config";
-
-// Тема Material-UI
-const theme = createTheme({
-  palette: {
-    mode: "light",
-    primary: { main: "#212529" },
-    secondary: { main: "#343A40" },
-    background: { default: "#F0F2F5" },
-  },
-  typography: { fontFamily: "Roboto, sans-serif" },
-});
+import theme from "./Theme";
+import HomePage from "./components/Home/HomePage";
+import BoardsPage from "./components/Boards/BoardsPage";
+import DonationPage from "./components/Donation/Donation";
 
 const decodeToken = (token) => {
   try {
@@ -54,8 +52,7 @@ function App() {
     setToken(null);
     setAuthData(null);
     setBoards([]);
-    localStorage.removeItem("token");
-    localStorage.removeItem("authData");
+    localStorage.clear();
     if (message) console.log(message);
   }, []);
 
@@ -71,37 +68,63 @@ function App() {
       }
     );
     return () => axios.interceptors.response.eject(axiosInterceptor);
-  }, [handleLogout]); // Додано handleLogout до залежностей
+  }, [handleLogout]);
 
   // Обробка логіну
-  const handleLogin = useCallback((token, authDataFromResponse) => {
-    console.log("handleLogin called with:", { token, authDataFromResponse });
-    setToken(token);
-    localStorage.setItem("token", token);
+  const handleLogin = useCallback(
+    (token, authDataFromResponse) => {
+      setToken(token);
+      localStorage.setItem("token", token);
 
-    let normalizedAuthData;
-    if (authDataFromResponse) {
-      normalizedAuthData = {
-        user: {
-          id: authDataFromResponse.user_id,
+      let normalizedAuthData;
+      if (authDataFromResponse) {
+        normalizedAuthData = {
+          id: authDataFromResponse._id,
+          anonymous_id: authDataFromResponse.anonymous_id,
           email: authDataFromResponse.email,
           username: authDataFromResponse.username,
-        },
-        ...authDataFromResponse,
-      };
-      console.log("Setting authData from response:", normalizedAuthData);
-    } else {
-      normalizedAuthData = decodeToken(token);
-      if (!normalizedAuthData) {
-        handleLogout("Invalid token detected.");
-        return;
-      }
-      console.log("Decoded token payload:", normalizedAuthData);
-    }
+          access_level: authDataFromResponse.access_level,
+          created_at: authDataFromResponse.created_at,
+          updated_at: authDataFromResponse.updated_at,
+          created_content: authDataFromResponse.created_content,
+          dateOfBirth: authDataFromResponse.dateOfBirth,
+          total_points: authDataFromResponse.total_points,
+          donated_points: authDataFromResponse.donated_points,
+          gender: authDataFromResponse.gender,
+          ethnicity: authDataFromResponse.ethnicity,
+          fullName: authDataFromResponse.fullName,
+          gate: authDataFromResponse.gate,
+          is_user_active: authDataFromResponse.isActive,
+          is_user_public: authDataFromResponse.isPublic,
+          lastSeen: authDataFromResponse.lastSeen,
+          last_synced_at: authDataFromResponse.last_synced_at,
+          likes_points: authDataFromResponse.likes_points,
+          location: authDataFromResponse.location,
+          messages: authDataFromResponse.messages,
+          nameVisibility: authDataFromResponse.nameVisibility,
+          onlineStatus: authDataFromResponse.onlineStatus,
+          preferences: authDataFromResponse.preferences,
+          profile_picture: authDataFromResponse.profile_picture,
+          social_links: authDataFromResponse.social_links,
+          stats: authDataFromResponse.stats,
+          timezone: authDataFromResponse.timezone,
+          total_points: authDataFromResponse.total_points,
+          tweet_points: authDataFromResponse.tweet_points
+        };
+      } else {
+        normalizedAuthData = decodeToken(token);
 
-    setAuthData(normalizedAuthData);
-    localStorage.setItem("authData", JSON.stringify(normalizedAuthData));
-  }, [handleLogout]);
+        if (!normalizedAuthData) {
+          handleLogout("Invalid token detected.");
+          return;
+        }
+      }
+
+      setAuthData(normalizedAuthData);
+      localStorage.setItem("authData", JSON.stringify(normalizedAuthData));
+    },
+    [handleLogout]
+  );
 
   // Синхронізація authData з токеном
   useEffect(() => {
@@ -111,12 +134,12 @@ function App() {
         setAuthData(payload);
         localStorage.setItem("authData", JSON.stringify(payload));
       } else {
-        handleLogout("Invalid token detected.");
+        handleLogout("Invalid or corrupted token detected.");
       }
     } else if (!token && authData) {
       handleLogout("No token found, clearing auth data.");
     }
-  }, [token, authData, handleLogout]); // Додано всі залежності
+  }, [token, authData, handleLogout]);
 
   // Завантаження бордів
   const fetchBoards = useCallback(async () => {
@@ -125,14 +148,13 @@ function App() {
       return;
     }
     try {
-      const res = await axios.get(`${config.REACT_APP_HUB_API_URL}/boards`, {
+      const res = await axios.get(`${config.REACT_APP_HUB_API_URL}/api/v1/boards`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setBoards(res.data.content || []);
     } catch (err) {
       console.error("Error fetching boards:", err);
       if (err.response?.status !== 401) {
-        // 401 обробляється в interceptor
         console.error("Failed to fetch boards");
       }
     }
@@ -156,10 +178,25 @@ function App() {
             path="/login"
             element={
               isAuthenticated ? (
-                <Navigate to={`/profile/${authData?.user?.id}`} replace />
+                <Navigate to={`/home`} replace />
               ) : (
                 <LoginForm theme={theme} onLogin={handleLogin} />
               )
+            }
+          />
+          <Route
+            path="/home"
+            element={
+              <PrivateRoute
+                isAuthenticated={isAuthenticated}
+                element={
+                  <HomePage
+                    currentUser={authData}
+                    onLogout={handleLogout}
+                    token={token}
+                  />
+                }
+              />
             }
           />
           <Route
@@ -170,9 +207,24 @@ function App() {
                 element={
                   <ProfilePage
                     currentUser={authData}
-                    boards={boards}
                     onLogout={handleLogout}
                     token={token}
+                  />
+                }
+              />
+            }
+          />
+          <Route
+            path="/boards"
+            element={
+              <PrivateRoute
+                isAuthenticated={isAuthenticated}
+                element={
+                  <BoardsPage
+                    currentUser={authData}
+                    token={token}
+                    onLogout={handleLogout}
+                    boards={boards}
                   />
                 }
               />
@@ -183,14 +235,21 @@ function App() {
             element={
               <PrivateRoute
                 isAuthenticated={isAuthenticated}
-                element={<Board token={token} currentUser={authData} onLogout={handleLogout} />}
+                element={
+                  <Board
+                    token={token}
+                    currentUser={authData}
+                    boards={boards}
+                    onLogout={handleLogout}
+                  />
+                }
               />
             }
           />
           <Route
             path="*"
             element={
-              <Navigate to={isAuthenticated ? `/profile/${authData?.user?.id}` : "/login"} replace />
+              <Navigate to={isAuthenticated ? `/home` : "/login"} replace />
             }
           />
         </Routes>

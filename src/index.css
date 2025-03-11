@@ -1,23 +1,42 @@
-/* Global styles */
+/* Global styles & Design Tokens */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@100;200;300;400;500;600&display=swap');
+
 body,
 html,
 #root {
   margin: 0;
   padding: 0;
   height: 100%;
-  font-family: 'Roboto', sans-serif;
-  background-color: var(--dark-bg-color);
+  font-family: 'Poppins', sans-serif;
+  background-color: var(--color-bg);
 }
 
 :root {
-  --light-bg-color: #F7F7F7;
-  --dark-bg-color: #F0F2F5; /* сучасний світлий фон */
+  /* Кольори */
+  --color-bg: #F8F8F8;
+  --color-text-primary: #3E435D;
+  --color-text-secondary: #ADA7A7;
+  --color-icon-default: #BEBEBE;
+  --color-icon-hover: #3E435D;
+
+  /* Розміри */
   --header-height: 64px;
-  --primary-color: #1976d2;  /* яскравий блакитний */
-  --secondary-color: #424242;
+
+  /* Типографіка */
+  --font-size-h5: 1.5rem;
+  --font-size-body1: 1rem;
+  --font-size-body2: 1rem;
+  --font-size-body3: 1rem;
+  --font-size-body4: 1rem;
+  --font-size-body5: 1rem;
+  --font_weight-thin: 100;
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 600;
 }
 
-/* Board layout */
+/* Загальна верстка */
 .board-layout {
   display: flex;
   flex-direction: column;
@@ -26,7 +45,7 @@ html,
   position: relative;
 }
 
-/* Header styles */
+/* Шапка */
 .board-header {
   z-index: 1100;
   position: fixed;
@@ -34,38 +53,38 @@ html,
   left: 0;
   right: 0;
   height: var(--header-height);
-  background-color: var(--primary-color);
-  color: #fff;
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
   display: flex;
   align-items: center;
   padding: 0 16px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
-.logout-button {
-  margin-left: auto;
-}
-
-/* Board main */
+/* Основна частина */
 .board-main {
   flex: 1;
   margin-top: var(--header-height);
   position: relative;
   overflow: hidden;
-  background-color: var(--dark-bg-color);
+  background-color: var(--color-bg);
 }
 
-/* Board inner – робоча область з патерном */
+/* Робоча область */
 .board-inner {
   position: relative;
   width: 100%;
   height: 100%;
-  background-color: #fff;
-  background-image: repeating-linear-gradient(45deg, #f5f5f5, #f5f5f5 10px, #e0e0e0 10px, #e0e0e0 20px);
-  box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+  background-color: #FFFFFF;
+  background-image: repeating-linear-gradient(
+    45deg,
+    #f5f5f5,
+    #f5f5f5 10px,
+    #e0e0e0 10px,
+    #e0e0e0 20px
+  );
 }
 
-/* Tweet styles */
+/* Твіт-картки */
 .tweet-card {
   padding: 16px;
   background-color: #fff;
@@ -75,62 +94,28 @@ html,
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
-
 .tweet-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0,0,0,0.15);
 }
 
-/* Draggable tweet container */
-.draggable-tweet {
-  position: absolute;
-  z-index: 2;
-  border-radius: 12px;
-}
-
-/* Popup styles */
-.tweet-popup {
-  position: absolute;
-  padding: 16px;
-  z-index: 1000;
-  border-radius: 12px;
-  background-color: #ffffff;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-/* Form styles */
-.form-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  width: 100vw;
-}
-
+/* Діалогові вікна, форми */
 .form-paper {
   padding: 32px;
-  background-color: var(--light-bg-color);
+  background-color: var(--color-bg);
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-.form-title {
-  text-align: center;
-  margin-bottom: 16px;
 }
 
 /********************************
- * Основне оформлення сторінки
+ * Профіль, банер, статистика
  ********************************/
- .profile-page {
+.profile-page {
   min-height: 100vh;
-  background-color: var(--dark-bg-color);
+  background-color: var(--color-bg);
   padding-top: var(--header-height);
 }
 
-/********************************
- * БАНЕР
- ********************************/
 .profile-banner {
   position: relative;
   width: 100%;
@@ -159,19 +144,14 @@ html,
 .profile-info {
   color: #fff;
 }
-
 .profile-username {
   margin: 0;
-  font-weight: 600;
+  font-weight: var(--font-weight-bold);
 }
-
 .profile-role {
   opacity: 0.9;
 }
 
-/********************************
- * ПАНЕЛЬ СТАТИСТИКИ
- ********************************/
 .profile-stats-bar {
   background: #fff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -185,57 +165,119 @@ html,
   text-align: center;
   margin: 0 24px;
 }
-
 .profile-stat-number {
   display: block;
   font-size: 20px;
-  font-weight: 600;
+  font-weight: var(--font-weight-bold);
 }
-
 .profile-stat-label {
   font-size: 14px;
-  color: #777;
+  color: var(--color-text-secondary);
 }
 
-/********************************
- * ОСНОВНИЙ ВМІСТ
- ********************************/
 .profile-content {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 16px 40px; /* додатковий відступ знизу */
-}
-
-.profile-content-card {
-  margin-bottom: 24px;
-  border-radius: 8px;
-}
-
-.profile-section {
-  margin-top: 24px;
-}
-
-.profile-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+  padding: 0 16px 40px;
 }
 
 /********************************
- * КАРТКИ ДЛЯ БОРДІВ
+ * Борди
  ********************************/
 .board-grid {
   margin-top: 16px;
 }
-
 .board-card {
   border-radius: 12px;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
-  background-color: var(--light-bg-color);
+  background-color: var(--color-bg);
 }
-
 .board-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 16px rgba(0,0,0,0.15);
 }
 
+/********************************
+ * Бокове меню
+ ********************************/
+.left-drawer {
+  width: 72px;
+  flex-shrink: 0;
+}
+.left-drawer .MuiDrawer-paper {
+  width: 72px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.drawer-list .MuiListItemIcon-root {
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  color: var(--color-icon-default);
+}
+
+/* Кнопка виходу */
+.logout-button {
+  margin-bottom: 8px;
+}
+
+/********************************
+ * Шапка (Header)
+ ********************************/
+.top-bar {
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+}
+
+.top-bar-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+}
+
+.top-bar-left {
+  display: flex;
+  flex-direction: column;
+}
+.welcome-text {
+  font-weight: var(--font-weight-normal);
+  margin: 0;
+}
+
+.date-text {
+  color: var(--color-text-secondary);
+}
+
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.points-text {
+  font-weight: var(--font-weight-medium);
+}
+
+.avatar-wrapper {
+  position: relative;
+  display: inline-block;
+}
+.user-avatar {
+  width: 50px !important;
+  height: 50px !important;
+}
+.status-indicator {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}

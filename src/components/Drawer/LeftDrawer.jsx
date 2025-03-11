@@ -1,57 +1,110 @@
 import React from "react";
-import { Drawer, List, ListItem, ListItemIcon, IconButton } from "@mui/material";
-import { Link } from "react-router-dom";
-import HomeIcon from "@mui/icons-material/Home";
+import { useLocation, Link } from "react-router-dom";
+import {
+  Drawer,
+  List,
+  ListItem,
+  ListItemIcon,
+  IconButton,
+  Box,
+} from "@mui/material";
+import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import DashboardIcon from "@mui/icons-material/Dashboard";
-import SettingsIcon from "@mui/icons-material/Settings";
-import LogoutIcon from "@mui/icons-material/Logout";
-
-const drawerWidth = 72;
+import ExitToAppRoundedIcon from "@mui/icons-material/ExitToAppRounded";
 
 const LeftDrawer = ({ onLogout }) => {
+  const location = useLocation();
+  const currentPath = location.pathname;
+
   return (
     <Drawer
       variant="permanent"
-      sx={{
-        width: drawerWidth,
-        flexShrink: 0,
-        [`& .MuiDrawer-paper`]: {
-          width: drawerWidth,
-          boxSizing: "border-box",
+      className="left-drawer"
+      PaperProps={{
+        sx: {
+          boxShadow: "none",
+          borderRight: "none",
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
-          justifyContent: "space-between",
-          paddingTop: 2,
-          paddingBottom: 2,
-          borderRight: "1px solid #e0e0e0",
+          width: 72,
         },
       }}
     >
-      <List>
-        <ListItem button component={Link} to="/profile">
-          <ListItemIcon sx={{ justifyContent: "center" }}>
-            <HomeIcon />
-          </ListItemIcon>
-        </ListItem>
-        <ListItem button component={Link} to="/boards">
-          <ListItemIcon sx={{ justifyContent: "center" }}>
-            <DashboardIcon />
-          </ListItemIcon>
-        </ListItem>
-        <ListItem button omponent={Link} to="/settings">
-          <ListItemIcon sx={{ justifyContent: "center" }}>
-            <SettingsIcon />
-          </ListItemIcon>
-        </ListItem>
-      </List>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          flex: 1,
+        }}
+      >
+        <List sx={{ p: 0, m: 0 }}>
+          <ListItem
+            button
+            component={Link}
+            to="/home"
+            sx={{
+              justifyContent: "center",
+              "&:hover .MuiListItemIcon-root": {
+                color: "var(--color-icon-hover)",
+              },
+            }}
+          >
+            <ListItemIcon
+              sx={{
+                minWidth: 0,
+                justifyContent: "center",
+                color:
+                  currentPath === "/home"
+                    ? "var(--color-icon-hover)"
+                    : "var(--color-icon-default)",
+              }}
+            >
+              <HomeRoundedIcon sx={{ fontSize: 30 }} />
+            </ListItemIcon>
+          </ListItem>
+
+          <ListItem
+            button
+            component={Link}
+            to="/boards"
+            sx={{
+              justifyContent: "center",
+              "&:hover .MuiListItemIcon-root": {
+                color: "var(--color-icon-hover)",
+              },
+            }}
+          >
+            <ListItemIcon
+              sx={{
+                minWidth: 0,
+                justifyContent: "center",
+                color:
+                  currentPath === "/boards"
+                    ? "var(--color-icon-hover)"
+                    : "var(--color-icon-default)",
+              }}
+            >
+              <DashboardIcon sx={{ fontSize: 30 }} />
+            </ListItemIcon>
+          </ListItem>
+        </List>
+      </Box>
 
       <IconButton
-        color="inherit"
         onClick={onLogout}
-        sx={{ mb: 1 }}
         title="Logout"
+        sx={{
+          alignSelf: "flex-start",
+          ml: 1,
+          mb: 2,
+          color: "var(--color-icon-default)",
+          "&:hover": { color: "var(--color-icon-hover)" },
+        }}
       >
-        <LogoutIcon />
+        <ExitToAppRoundedIcon sx={{ fontSize: 30 }} />
       </IconButton>
     </Drawer>
   );

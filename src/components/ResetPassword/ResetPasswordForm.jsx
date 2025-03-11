@@ -75,7 +75,7 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
 
     try {
       console.log("Sending reset password request with:", { token, newPassword });
-      const response = await axios.post(`${config.REACT_APP_HUB_API_URL}/auth/set-password`, {
+      const response = await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/auth/set-password`, {
         token,
         newPassword,
       });

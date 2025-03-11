@@ -1,136 +1,204 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { Edit, Save } from "@mui/icons-material";
 import {
+  Alert,
+  Box,
+  Button,
   Card,
   CardContent,
-  Box,
-  Typography,
-  Button,
-  Grid,
-  TextField,
-  Switch,
   FormControlLabel,
-  IconButton,
+  Grid,
+  MenuItem,
   Snackbar,
-  Alert,
-  CircularProgress,
+  Switch,
+  TextField,
+  Typography,
 } from "@mui/material";
-import { Link } from "react-router-dom";
-import { Edit, Save } from "@mui/icons-material";
 import axios from "axios";
+import React, { useCallback, useState } from "react";
 import config from "../../config";
+import StatusBadge from "./StatusBadge";
 
-// Компонент для відображення/редагування поля
-const ProfileField = ({ label, value, field, isEditing, onChange }) => (
-  <Grid item xs={12} md={6}>
-    <Typography variant="subtitle2" sx={{ color: "#666" }}>{label}</Typography>
-    {isEditing ? (
-      <TextField fullWidth value={value || ""} onChange={onChange(field)} />
-    ) : (
-      <Typography variant="body1">{value || "Not set"}</Typography>
-    )}
-  </Grid>
-);
-
-// Компонент для соціальних посилань
-const SocialLinks = ({ links, isEditing, onChange }) => (
-  <Grid item xs={12}>
-    <Typography variant="subtitle2" sx={{ color: "#666" }}>Social Links</Typography>
-    {isEditing ? (
-      <>
-        {["twitter", "instagram", "linkedin"].map((platform) => (
-          <TextField
-            key={platform}
-            label={platform.charAt(0).toUpperCase() + platform.slice(1)}
-            fullWidth
-            value={links[platform] || ""}
-            onChange={onChange(platform)}
-            sx={{ mt: 1 }}
-          />
-        ))}
-      </>
-    ) : (
-      <Box>
-        {["twitter", "instagram", "linkedin"].map((platform) => (
-          <Typography key={platform} variant="body1">
-            {platform.charAt(0).toUpperCase() + platform.slice(1)}: {links[platform] || "Not set"}
-          </Typography>
-        ))}
-      </Box>
-    )}
-  </Grid>
-);
-
-const ProfileCard = React.memo(({ currentUser, boards, isOwnProfile }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [userData, setUserData] = useState({
-    fullName: currentUser.fullName || "Someone",
-    username: currentUser.username || "Noone",
-    email: currentUser.email || "userEmail",
-    gender: currentUser.gender || "Any",
-    country: currentUser.country || "Everywhere",
-    language: currentUser.language || "Any",
-    timezone: currentUser.timezone || "Somewhere",
-    bio: currentUser.bio || "",
-    isPublic: currentUser.isPublic || false,
-    points: currentUser.points || 0,
-    socialLinks: {
-      twitter: currentUser.social_links?.twitter || "",
-      instagram: currentUser.social_links?.instagram || "",
-      linkedin: currentUser.social_links?.linkedin || "",
+/**
+ * Кастомні стилі для тоглів (Switch), щоб виглядали як на скріні
+ */
+const customSwitchSx = {
+  width: 42,
+  height: 24,
+  padding: 0,
+  "&:active .MuiSwitch-thumb": {
+    width: 15,
+  },
+  "& .MuiSwitch-switchBase": {
+    padding: 0.25,
+    "&.Mui-checked": {
+      transform: "translateX(18px)",
+      color: "#fff",
+      "& + .MuiSwitch-track": {
+        backgroundColor: "#3E435D",
+        opacity: 1,
+      },
     },
+    "&.Mui-disabled": {
+      color: "#9e9e9e",
+      "& + .MuiSwitch-track": {
+        backgroundColor: "#9e9e9e",
+        opacity: 1,
+      },
+    },
+  },
+  "& .MuiSwitch-thumb": {
+    boxShadow: "0 2px 4px rgba(0,0,0,0.3)",
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    transition: "all 0.2s ease",
+    backgroundColor: "#fff",
+    "&.Mui-disabled": {
+      backgroundColor: "#bdbdbd",
+      boxShadow: "none",
+    },
+  },
+  "& .MuiSwitch-track": {
+    borderRadius: 12,
+    backgroundColor: "#BEBEBE",
+    opacity: 1,
+    transition: "all 0.2s ease",
+    "&.Mui-disabled": {
+      backgroundColor: "#eeeeee",
+      opacity: 0.7,
+    },
+  },
+};
+
+/**
+ * Поле профілю (label + value або <TextField> при редагуванні)
+ * Якщо переданий пропс `select` та `options`, рендериться як селект.
+ */
+const ProfileField = ({
+  label,
+  value,
+  field,
+  isEditing,
+  onChange,
+  editSx = {},
+  select = false,
+  options = [],
+}) => (
+  <Box sx={{ mb: 2 }}>
+    <Typography variant="body2" sx={{ fontWeight: 400, mb: 0.5 }}>
+      {label}
+    </Typography>
+    {isEditing ? (
+      select ? (
+        <TextField
+          select
+          fullWidth
+          variant="outlined"
+          size="small"
+          value={value || ""}
+          onChange={onChange(field)}
+          sx={{
+            // Прибираємо рамки
+            "& .MuiOutlinedInput-notchedOutline": { border: "none" },
+            backgroundColor: "#F8F8F8",
+            borderRadius: 0.8,
+            ...editSx,
+          }}
+        >
+          {options.map((option) => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </TextField>
+      ) : (
+        <TextField
+          fullWidth
+          variant="outlined"
+          size="small"
+          value={value || ""}
+          onChange={onChange(field)}
+          sx={{
+            "& .MuiOutlinedInput-notchedOutline": { border: "none" },
+            backgroundColor: "#F8F8F8",
+            borderRadius: 0.8,
+            ...editSx,
+          }}
+        />
+      )
+    ) : (
+      <Typography variant="body2" sx={{ color: "text.secondary" }}>
+        {value || "Not set"}
+      </Typography>
+    )}
+  </Box>
+);
+
+/**
+ * Головний компонент профілю
+ */
+const ProfileCard = React.memo(({ currentUser, isOwnProfile }) => {
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Стан користувача
+  const [userData, setUserData] = useState({
+    username: currentUser.username || "-",
+    anonName: currentUser.anonName || "-",
+    email: currentUser.email || "-",
+    location: currentUser.location || "-",
+    timezone: currentUser.timezone || "-",
+    gender: currentUser.gender || "-",
+    birthday: currentUser.dateOfBirth || "-",
+    bio: currentUser.bio || "",
+    language: currentUser.language || "-",
+    socialPresence: currentUser.socialPresence || "-",
+    onlineStatus: currentUser.onlineStatus || "-",
+    isPublic: currentUser.isPublic || false,
+    theme: currentUser.theme || "-",
+    contentLanguage: currentUser.contentLanguage || "-",
+    notifications: {
+      email: currentUser.preferences?.notifications?.email ?? true,
+      push: currentUser.preferences?.notifications?.push ?? false,
+    },
+    access_level: currentUser.access_level || "-",
   });
-  const [tickets, setTickets] = useState([]);
-  const [loadingTickets, setLoadingTickets] = useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Мемоізована функція для завантаження тікетів
-  const fetchTickets = useCallback(async () => {
-    setLoadingTickets(true);
-    try {
-      const response = await axios.get(`${config.REACT_APP_HUB_API_URL}/tickets`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      setTickets(response.data.tickets || []);
-    } catch (err) {
-      setError(err.response?.data?.errors?.[0] || "Failed to fetch tickets");
-    } finally {
-      setLoadingTickets(false);
-    }
-  }, []);
+  // Хендлер змін у звичайних полях
+  const handleChange = useCallback(
+    (field) => (e) => {
+      setUserData((prev) => ({ ...prev, [field]: e.target.value }));
+    },
+    []
+  );
 
-  useEffect(() => {
-    if (isOwnProfile) fetchTickets();
-  }, [isOwnProfile, fetchTickets]);
-
-  const handleChange = useCallback((field) => (e) => {
-    setUserData((prev) => ({ ...prev, [field]: e.target.value }));
-  }, []);
-
-  const handleSocialChange = useCallback((platform) => (e) => {
-    setUserData((prev) => ({
-      ...prev,
-      socialLinks: { ...prev.socialLinks, [platform]: e.target.value },
-    }));
-  }, []);
-
-  const handlePublicToggle = useCallback(() => {
-    setUserData((prev) => ({ ...prev, isPublic: !prev.isPublic }));
-  }, []);
-
-  const handleSave = useCallback(async () => {
-    try {
-      const response = await axios.put(
-        `${config.REACT_APP_HUB_API_URL}/profile/update`,
-        userData,
-        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-      );
-      const updatedData = response.data.authData;
+  // Хендлер для свічів
+  const handleSwitchChange = useCallback(
+    (section, key) => () => {
       setUserData((prev) => ({
         ...prev,
-        ...updatedData,
-        socialLinks: updatedData.social_links || prev.socialLinks,
+        [section]: {
+          ...prev[section],
+          [key]: !prev[section][key],
+        },
       }));
+    },
+    []
+  );
+
+  // Збереження профілю
+  const handleSave = useCallback(async () => {
+    try {
+      // Тут ви викликаєте свій API для збереження
+      await axios.put(
+        `${config.REACT_APP_HUB_API_URL}/api/v1/profile/update`,
+        userData,
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        }
+      );
       setSuccess("Profile updated successfully!");
       setIsEditing(false);
     } catch (err) {
@@ -143,106 +211,439 @@ const ProfileCard = React.memo(({ currentUser, boards, isOwnProfile }) => {
     setSuccess("");
   }, []);
 
-  const formatStatus = (status) => (status === "INACTIVE" ? "INACTIVE" : status);
-
   return (
-    <>
-      <Card sx={{ maxWidth: 800, margin: "0 auto", borderRadius: 2, boxShadow: "0 2px 8px rgba(0,0,0,0.1)", p: 2 }}>
+    <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
+      {/* Верхній блок із ім'ям, класом та кнопками оновлення */}
+      <Card
+        sx={{
+          borderRadius: 1.5,
+          mb: 3,
+          backgroundColor: "#fff",
+          boxShadow: "none",
+        }}
+      >
         <CardContent>
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              mt: 1,
+              mb: 1,
+              ml: 3,
+              mr: 3,
+            }}
+          >
             <Box>
-              <Typography variant="h5" sx={{ fontWeight: 500 }}>{userData.username}</Typography>
-              <Typography variant="body2" color="text.secondary">{userData.email}</Typography>
+              <Typography
+                variant="h4"
+                sx={{ fontWeight: 400, color: "text.primary" }}
+              >
+                {userData.username}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Level: {<StatusBadge level={userData.access_level} />}
+              </Typography>
             </Box>
-            {isOwnProfile && (
-              <IconButton onClick={isEditing ? handleSave : () => setIsEditing(true)} color="primary">
-                {isEditing ? <Save /> : <Edit />}
-              </IconButton>
-            )}
-          </Box>
-
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <ProfileField label="Full Name" value={userData.fullName} field="fullName" isEditing={isEditing && isOwnProfile} onChange={handleChange} />
-            <Grid item xs={12} md={6}>
-              <Typography variant="subtitle2" sx={{ color: "#666" }}>Points</Typography>
-              <Typography variant="body1">{userData.points}</Typography>
-            </Grid>
-            <ProfileField label="Username" value={userData.username} field="username" isEditing={isEditing && isOwnProfile} onChange={handleChange} />
-            <ProfileField label="Gender" value={userData.gender} field="gender" isEditing={isEditing && isOwnProfile} onChange={handleChange} />
-            <ProfileField label="Country" value={userData.country} field="country" isEditing={isEditing && isOwnProfile} onChange={handleChange} />
-            <ProfileField label="Language" value={userData.language} field="language" isEditing={isEditing && isOwnProfile} onChange={handleChange} />
-            <ProfileField label="Time Zone" value={userData.timezone} field="timezone" isEditing={isEditing && isOwnProfile} onChange={handleChange} />
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" sx={{ color: "#666" }}>Bio</Typography>
-              {isEditing && isOwnProfile ? (
-                <TextField fullWidth multiline rows={3} value={userData.bio || ""} onChange={handleChange("bio")} />
+            {isOwnProfile &&
+              (isEditing ? (
+                <Box sx={{ display: "flex", gap: 2 }}>
+                  <Button
+                    variant="contained"
+                    onClick={handleSave}
+                    startIcon={<Save />}
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 500,
+                      borderRadius: 0.8,
+                      boxShadow: "none",
+                      padding: "10px 20px",
+                      transition: "all 0.5s ease",
+                      ":hover": {
+                        boxShadow: "none",
+                        backgroundColor: "#3E435D",
+                        color: "#fff",
+                        transition: "all 0.5s ease",
+                      },
+                    }}
+                  >
+                    Save Profile
+                  </Button>
+                  <Button
+                    variant="contained"
+                    onClick={() => setIsEditing(false)}
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 500,
+                      borderRadius: 0.8,
+                      boxShadow: "none",
+                      padding: "10px 20px",
+                      transition: "all 0.5s ease",
+                      ":hover": {
+                        boxShadow: "none",
+                        backgroundColor: "#3E435D",
+                        color: "#fff",
+                        transition: "all 0.5s ease",
+                      },
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </Box>
               ) : (
-                <Typography variant="body1">{userData.bio || "No bio yet"}</Typography>
-              )}
-            </Grid>
-            {isOwnProfile && (
-              <Grid item xs={12}>
-                <FormControlLabel
-                  control={<Switch checked={userData.isPublic} onChange={handlePublicToggle} disabled={!isEditing} />}
-                  label="Public Profile"
-                />
-              </Grid>
-            )}
-            <SocialLinks links={userData.socialLinks} isEditing={isEditing && isOwnProfile} onChange={handleSocialChange} />
-            {isOwnProfile && (
-              <Grid item xs={12}>
-                <Typography variant="subtitle2" sx={{ color: "#666" }}>My Tickets</Typography>
-                {loadingTickets ? (
-                  <CircularProgress size={24} sx={{ mt: 1 }} />
-                ) : tickets.length > 0 ? (
-                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, mt: 1 }}>
-                    {tickets.map((ticket) => (
-                      <Card key={ticket.ticket_id} sx={{ minWidth: 150, borderRadius: 2, boxShadow: "0 2px 4px rgba(0,0,0,0.1)", p: 1 }}>
-                        <CardContent sx={{ p: 1 }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>{ticket.ticketClass}</Typography>
-                          <Typography variant="body2">GATE: {ticket.gate}</Typography>
-                          <Typography variant="body2">SEAT: {ticket.seat}</Typography>
-                          <Typography variant="body2">STATUS: {formatStatus(ticket.status)}</Typography>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </Box>
-                ) : (
-                  <Typography variant="body1">No tickets yet</Typography>
-                )}
-              </Grid>
-            )}
-          </Grid>
+                <Button
+                  variant="contained"
+                  onClick={() => setIsEditing(true)}
+                  startIcon={<Edit />}
+                  sx={{
+                    textTransform: "none",
+                    fontWeight: 500,
+                    borderRadius: 0.8,
+                    boxShadow: "none",
+                    padding: "10px 20px",
+                    transition: "all 0.5s ease",
+                    ":hover": {
+                      boxShadow: "none",
+                      backgroundColor: "#3E435D",
+                      color: "#fff",
+                      transition: "all 0.5s ease",
+                    },
+                  }}
+                >
+                  Update Profile
+                </Button>
+              ))}
+          </Box>
         </CardContent>
       </Card>
 
-      {isOwnProfile && boards.length > 0 && (
-        <Box sx={{ maxWidth: 800, margin: "24px auto 0" }}>
-          <Typography variant="h6" gutterBottom>Доступні борди</Typography>
-          <Grid container spacing={3}>
-            {boards.map((board) => (
-              <Grid item xs={12} sm={6} md={4} key={board._id}>
-                <Card sx={{ borderRadius: 2, transition: "transform 0.3s ease, box-shadow 0.3s ease", "&:hover": { transform: "translateY(-4px)", boxShadow: "0 8px 16px rgba(0,0,0,0.15)" } }}>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>{board.name}</Typography>
-                    <Button variant="contained" color="primary" component={Link} to={`/board/${board._id}`}>
-                      Перейти
-                    </Button>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Box>
-      )}
+      {/* Основна сітка з 3 колонками */}
+      <Grid container spacing={3}>
+        {/* PERSONAL INFO */}
+        <Grid item xs={12} md={6.5}>
+          <Card
+            sx={{
+              borderRadius: 1.5,
+              backgroundColor: "#fff",
+              boxShadow: "none",
+            }}
+          >
+            <CardContent sx={{ m: 3 }}>
+              <Typography variant="h5" sx={{ fontWeight: 500, mb: 5 }}>
+                Personal Info
+              </Typography>
 
-      <Snackbar open={!!error} autoHideDuration={3000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
-        <Alert onClose={handleCloseSnackbar} severity="error" sx={{ width: "100%" }}>{error}</Alert>
+              {/* Розбивка на дві колонки */}
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <ProfileField
+                    label="Full Name"
+                    value={userData.username}
+                    field="username"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <ProfileField
+                    label="Anonymous Username"
+                    value={userData.anonName}
+                    field="anonName"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <ProfileField
+                    label="Email"
+                    value={userData.email}
+                    field="email"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <ProfileField
+                    label="Location"
+                    value={userData.location}
+                    field="location"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <ProfileField
+                    label="Timezone"
+                    value={userData.timezone}
+                    field="timezone"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <ProfileField
+                    label="Ethnicity"
+                    value={userData.gender}
+                    field="ethnicity"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                    select
+                    options={[
+                      "Prefer not to say",
+                      "Caucasian",
+                      "Hispanic",
+                      "African American",
+                      "Asian",
+                      "Middle Eastern",
+                      "Native American",
+                      "Pacific Islander",
+                    ]}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <ProfileField
+                    label="Gender"
+                    value={userData.gender}
+                    field="gender"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                    select
+                    options={[
+                      "Prefer not to say",
+                      "She/Her",
+                      "He/Him",
+                      "They/Them",
+                      "Other"
+                    ]}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <ProfileField
+                    label="Date of Birth"
+                    value={userData.birthday}
+                    field="birthday"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <ProfileField
+                    label="Contact Number"
+                    value={userData.birthday}
+                    field="contactNumber"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                  />
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* SOCIAL INFO */}
+        <Grid item xs={12} md={3}>
+          <Card
+            sx={{
+              borderRadius: 1.5,
+              backgroundColor: "#fff",
+              boxShadow: "none",
+            }}
+          >
+            <CardContent sx={{ m: 3 }}>
+              <Typography variant="h5" sx={{ fontWeight: 500, mb: 5 }}>
+                Social Info
+              </Typography>
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={12}>
+                  <ProfileField
+                    label="Language"
+                    value={userData.language}
+                    field="language"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                    select
+                    options={["English", "Spanish", "French", "German", "Ukranian"]}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={12}>
+                  <ProfileField
+                    label="Social Presence"
+                    value={userData.socialPresence}
+                    field="socialPresence"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                    select
+                    options={["Anonymous", "Visible"]}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={12}>
+                  <ProfileField
+                    label="Online Status"
+                    value={userData.onlineStatus}
+                    field="onlineStatus"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                    select
+                    options={["Hide", "Visible"]}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={12}>
+                  <ProfileField
+                    label="Last Seen"
+                    value={userData.onlineStatus}
+                    field="lastSeen"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                    select
+                    options={["Hide", "Visible"]}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={12}>
+                  <ProfileField
+                    label="Name Visibility"
+                    value={userData.onlineStatus}
+                    field="timezone"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                    select
+                    options={["Hide", "Visible"]}
+                  />
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* NOTIFICATIONS & PREFERENCES */}
+        <Grid item xs={12} md={2.5}>
+          {/* Notifications */}
+          <Card
+            sx={{
+              borderRadius: 1.5,
+              backgroundColor: "#fff",
+              boxShadow: "none",
+              mb: 3,
+            }}
+          >
+            <CardContent sx={{ m: 3 }}>
+              <Typography variant="h5" sx={{ fontWeight: 500, mb: 5 }}>
+                Notifications
+              </Typography>
+
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={12}>
+                  <FormControlLabel
+                    labelPlacement="start"
+                    sx={{
+                      gap: 2,
+                      "& .MuiFormControlLabel-label": { minWidth: "120px", fontWeight: 400 },
+                    }}
+                    control={
+                      <Switch
+                        checked={userData.notifications.email}
+                        onChange={handleSwitchChange("notifications", "email")}
+                        sx={customSwitchSx}
+                        disabled={true}
+                      />
+                    }
+                    label="Email"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={12}>
+                  <FormControlLabel
+                    labelPlacement="start"
+                    sx={{
+                      gap: 2,
+                      "& .MuiFormControlLabel-label": { minWidth: "120px", fontWeight: 400  },
+                    }}
+                    control={
+                      <Switch
+                        checked={userData.notifications.push}
+                        onChange={handleSwitchChange("notifications", "push")}
+                        sx={customSwitchSx}
+                        disabled={true}
+                      />
+                    }
+                    label="Push"
+                  />
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+
+          {/* Preferences */}
+          <Card
+            sx={{
+              borderRadius: 1.5,
+              backgroundColor: "#fff",
+              boxShadow: "none",
+            }}
+          >
+            <CardContent sx={{ m: 3 }}>
+              <Typography variant="h5" sx={{ fontWeight: 500, mb: 5 }}>
+                Preferences
+              </Typography>
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={12}>
+                  <ProfileField
+                    label="Theme"
+                    value={userData.theme}
+                    field="theme"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                    select
+                    options={["Light", "Dark"]}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={12}>
+                  <ProfileField
+                    label="Content Language"
+                    value={userData.contentLanguage}
+                    field="contentLanguage"
+                    isEditing={isEditing && isOwnProfile}
+                    onChange={handleChange}
+                    select
+                    options={["English", "Spanish", "French", "German", "Ukranian"]}
+                  />
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Повідомлення про помилки/успіх */}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity="error"
+          sx={{ width: "100%" }}
+        >
+          {error}
+        </Alert>
       </Snackbar>
-      <Snackbar open={!!success} autoHideDuration={3000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
-        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>{success}</Alert>
+      <Snackbar
+        open={!!success}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity="success"
+          sx={{ width: "100%" }}
+        >
+          {success}
+        </Alert>
       </Snackbar>
-    </>
+    </Box>
   );
 });
 
