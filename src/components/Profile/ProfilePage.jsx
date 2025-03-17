@@ -19,7 +19,7 @@ const ProfilePage = ({ currentUser, onLogout, token }) => {
     const fetchProfile = async () => {
       setLoading(true);
       try {
-        const ownUserId = currentUser.id;
+        const ownUserId = currentUser.anonymous_id;
         console.log("Current user:", currentUser);
         console.log("Requested userId from URL:", userId);
         console.log("Hub API URL:", config.REACT_APP_HUB_API_URL);

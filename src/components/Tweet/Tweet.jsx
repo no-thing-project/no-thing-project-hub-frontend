@@ -17,7 +17,7 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser }) => {
     }
   }, [tweet.x, tweet.y, dragging]);
 
-  const isDraggable = (tweet?.user?._id || tweet.user_id) === currentUser.id;
+  const isDraggable = (tweet?.user?._id || tweet.user_id) === currentUser.anonymous_id;
 
   return (
     <Draggable
@@ -61,6 +61,6 @@ export default memo(
     prevProps.tweet.tweet_id === nextProps.tweet.tweet_id &&
     prevProps.tweet.x === nextProps.tweet.x &&
     prevProps.tweet.y === nextProps.tweet.y &&
-    prevProps.currentUser.id === nextProps.currentUser.id &&
+    prevProps.currentUser.anonymous_id === nextProps.currentUser.anonymous_id &&
     prevProps.children === nextProps.children
 );

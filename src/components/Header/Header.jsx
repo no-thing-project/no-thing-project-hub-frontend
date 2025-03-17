@@ -85,7 +85,7 @@ const Header = ({ currentUser, token }) => {
 
   // При кліку на аватар переходимо на сторінку профілю
   const handleAvatarClick = () => {
-    navigate(`/profile/${currentUser.id}`);
+    navigate(`/profile/${currentUser.anonymous_id}`);
   };
 
   return (

@@ -1,4 +1,4 @@
-// BoardsPage.jsx
+// src/components/Profile/BoardsSection.jsx
 import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -18,37 +18,47 @@ import StatusBadge from "../Profile/StatusBadge";
 const BoardsSection = React.memo(({ currentUser, boards }) => {
   const navigate = useNavigate();
 
-  // Забезпечуємо, що boards завжди масив (якщо ні – використовуємо порожній масив)
+  // Ensure boards is always an array
   const boardsList = Array.isArray(boards) ? boards : [];
 
-  // Викликаємо хуки завжди
   const [likedBoards, setLikedBoards] = useState({});
   const [activeCategory, setActiveCategory] = useState("All");
 
+  // Initialize likedBoards only when boardsList changes
   useEffect(() => {
-    const initState = {};
+    // Use a stable reference to avoid unnecessary updates
+    const newLikedBoards = {};
     boardsList.forEach((board) => {
-      initState[board.board_id] = false;
+      // Check if the current user has liked the board (assuming liked_by from backend)
+      newLikedBoards[board.board_id] = board.liked_by?.some(
+        (like) => like.user_id === currentUser?.anonymous_id
+      ) || false;
     });
-    setLikedBoards(initState);
-  }, [boardsList]);
+    // Only update state if it differs to prevent infinite loop
+    setLikedBoards((prev) => {
+      if (JSON.stringify(prev) !== JSON.stringify(newLikedBoards)) {
+        return newLikedBoards;
+      }
+      return prev;
+    });
+  }, [boardsList, currentUser]); // Dependencies are stable
 
-  // Якщо категорія відсутня, використовуємо дефолтне значення "Nothing"
+  // Derive categories from tags (assuming tags[0] as category in your latest version)
   const derivedCategories = useMemo(() => {
-    const cats = boardsList.map((board) => board.category || "Nothing");
+    const cats = boardsList.map((board) => board.category || board.tags?.[0] || "Nothing");
     const uniqueCats = Array.from(new Set(cats));
     return ["All", ...uniqueCats];
   }, [boardsList]);
 
-  // Фільтруємо борди за активною категорією
-  const filteredBoards =
-    activeCategory === "All"
+  // Filter boards by active category
+  const filteredBoards = useMemo(() => {
+    return activeCategory === "All"
       ? boardsList
       : boardsList.filter(
-          (board) => (board.category || "Nothing") === activeCategory
+          (board) => (board.category || board.tags?.[0] || "Nothing") === activeCategory
         );
+  }, [boardsList, activeCategory]);
 
-  // Тепер можна робити умовні перевірки
   if (!currentUser) {
     return (
       <Box sx={{ textAlign: "center", mt: 5 }}>
@@ -69,10 +79,9 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
     );
   }
 
-  // Функції обробки
-  const handleBoardClick = (id) => {
+  const handleBoardClick = (board_id) => {
     try {
-      navigate(`/board/${id}`);
+      navigate(`/board/${board_id}`);
     } catch (error) {
       console.error("Навігаційна помилка:", error);
     }
@@ -85,7 +94,6 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
       <Public sx={{ fontSize: 16, mr: 0.5, color: "#3E435D" }} />
     );
 
-  // Якщо категорія відсутня, повертаємо стиль за замовчуванням
   const getCategoryStyles = (category) => {
     const cat = (category || "Nothing").toLowerCase();
     switch (cat) {
@@ -131,7 +139,6 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
       <div className="boards-page">
         <div className="boards-page__container">
           <main className="boards-page__main">
-            {/* Верхня картка з інформацією про користувача */}
             <Card
               sx={{
                 borderRadius: 2.5,
@@ -188,7 +195,6 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
               </CardContent>
             </Card>
 
-            {/* Фільтри та інформація про кількість знайдених бордів */}
             {filteredBoards.length > 0 && (
               <Box
                 className="boards-page__filters"
@@ -244,7 +250,6 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
               </Box>
             )}
 
-            {/* Список бордів (картки) */}
             {filteredBoards.length > 0 ? (
               <Box
                 sx={{
@@ -279,7 +284,6 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
                         minHeight: 200,
                       }}
                     >
-                      {/* Верхня частина картки: чіп + сердечко */}
                       <Box
                         sx={{
                           display: "flex",
@@ -290,13 +294,13 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
                         }}
                       >
                         <Chip
-                          label={`# ${board.category || "Nothing"}`}
+                          label={`# ${board.category || board.tags?.[0] || "Nothing"}`}
                           size="small"
                           sx={{
                             borderRadius: 1,
                             fontSize: 12,
                             height: 24,
-                            ...getCategoryStyles(board.category || "Nothing"),
+                            ...getCategoryStyles(board.category || board.tags?.[0] || "Nothing"),
                           }}
                         />
                         <IconButton
@@ -317,7 +321,6 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
                         </IconButton>
                       </Box>
 
-                      {/* Середня частина (заголовок) */}
                       <Box sx={{ flexGrow: 1, mb: 2, width: "100%" }}>
                         <Typography
                           variant="body2"
@@ -327,7 +330,6 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
                         </Typography>
                       </Box>
 
-                      {/* Нижня частина: автор + видимість */}
                       <Box
                         sx={{
                           display: "flex",
@@ -341,7 +343,7 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
                           color="text.secondary"
                           sx={{ fontSize: "0.95rem" }}
                         >
-                          Author: {board.author || "Someone"}
+                          Author: {board.creator?.username || board.author || "Someone"}
                         </Typography>
 
                         <Box
@@ -351,9 +353,7 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
                             color: "text.secondary",
                           }}
                         >
-                          {renderVisibilityIcon(
-                            board.is_public ? "Public" : "Private"
-                          )}
+                          {renderVisibilityIcon(board.is_public ? "Public" : "Private")}
                           <Typography
                             variant="body2"
                             color="text.secondary"
@@ -371,7 +371,6 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
                 ))}
               </Box>
             ) : (
-              // Якщо немає бордів
               <Box
                 sx={{
                   display: "flex",
