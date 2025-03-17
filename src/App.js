@@ -151,7 +151,7 @@ function App() {
       const res = await axios.get(`${config.REACT_APP_HUB_API_URL}/api/v1/boards`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setBoards(res.data.content || []);
+      setBoards(res.data.content.boards || []);
     } catch (err) {
       console.error("Error fetching boards:", err);
       if (err.response?.status !== 401) {

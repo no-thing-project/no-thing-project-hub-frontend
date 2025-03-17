@@ -46,7 +46,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
   const fetchTweets = useCallback(async () => {
     try {
       const res = await axios.get(
-        `${config.REACT_APP_HUB_API_URL}/api/v1/tweets?board_id=${boardId}`,
+        `${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${boardId}`,
         { headers: authHeaders }
       );
       const tweetsData = res.data.content.tweets.map(normalizeTweet);
@@ -67,11 +67,11 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           parent_tweet_id: parent_tweet_id || null,
         };
         const res = await axios.post(
-          `${config.REACT_APP_HUB_API_URL}/api/v1/tweets`,
+          `${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${boardId}`,
           payload,
           { headers: authHeaders }
         );
-        const createdTweet = res.data.content || res.data;
+        const createdTweet = res.data.content.tweets || res.data;
         return normalizeTweet({
           ...createdTweet,
           position: createdTweet.position || { x, y },

@@ -1,4 +1,3 @@
-// src/components/Profile/BoardsSection.jsx
 import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -15,49 +14,56 @@ import {
 import { FavoriteBorder, Favorite, Lock, Public, Add } from "@mui/icons-material";
 import StatusBadge from "../Profile/StatusBadge";
 
-const BoardsSection = React.memo(({ currentUser, boards }) => {
+const BoardsSection = React.memo(({ currentUser, boards, boardClasses }) => {
   const navigate = useNavigate();
 
   // Ensure boards is always an array
-  const boardsList = Array.isArray(boards) ? boards : [];
+  const boardsList = useMemo(() => Array.isArray(boards) ? boards : [], [boards]);
+
 
   const [likedBoards, setLikedBoards] = useState({});
   const [activeCategory, setActiveCategory] = useState("All");
 
-  // Initialize likedBoards only when boardsList changes
+  // Ініціалізуємо likedBoards лише коли boardsList змінюється
   useEffect(() => {
-    // Use a stable reference to avoid unnecessary updates
     const newLikedBoards = {};
     boardsList.forEach((board) => {
-      // Check if the current user has liked the board (assuming liked_by from backend)
-      newLikedBoards[board.board_id] = board.liked_by?.some(
-        (like) => like.user_id === currentUser?.anonymous_id
-      ) || false;
+      newLikedBoards[board.board_id] =
+        board.liked_by?.some((like) => like.user_id === currentUser?.anonymous_id) ||
+        false;
     });
-    // Only update state if it differs to prevent infinite loop
     setLikedBoards((prev) => {
       if (JSON.stringify(prev) !== JSON.stringify(newLikedBoards)) {
         return newLikedBoards;
       }
       return prev;
     });
-  }, [boardsList, currentUser]); // Dependencies are stable
+  }, [boardsList, currentUser]);
 
-  // Derive categories from tags (assuming tags[0] as category in your latest version)
+  // Функція для отримання назви категорії: якщо board.category є – використовуємо її,
+  // інакше беремо name з API, або "Nothing"
+  const getBoardCategoryName = (board) =>
+    board.category || boardClasses[board.board_id]?.name || "Nothing";
+
+  // Функція для стилізації: якщо API повернув color, використовуємо його, інакше стандартний "#3E435D"
+  const getCategoryStyles = (board) => {
+    const color = boardClasses[board.board_id]?.color;
+    return { backgroundColor: color ? color : "#3E435D", color: "#fff" };
+  };
+
+  // Derive categories for фільтрації
   const derivedCategories = useMemo(() => {
-    const cats = boardsList.map((board) => board.category || board.tags?.[0] || "Nothing");
+    const cats = boardsList.map((board) => getBoardCategoryName(board));
     const uniqueCats = Array.from(new Set(cats));
     return ["All", ...uniqueCats];
-  }, [boardsList]);
+  }, [boardsList, boardClasses]);
 
   // Filter boards by active category
   const filteredBoards = useMemo(() => {
     return activeCategory === "All"
       ? boardsList
-      : boardsList.filter(
-          (board) => (board.category || board.tags?.[0] || "Nothing") === activeCategory
-        );
-  }, [boardsList, activeCategory]);
+      : boardsList.filter((board) => getBoardCategoryName(board) === activeCategory);
+  }, [boardsList, activeCategory, boardClasses]);
 
   if (!currentUser) {
     return (
@@ -93,22 +99,6 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
     ) : (
       <Public sx={{ fontSize: 16, mr: 0.5, color: "#3E435D" }} />
     );
-
-  const getCategoryStyles = (category) => {
-    const cat = (category || "Nothing").toLowerCase();
-    switch (cat) {
-      case "nothing":
-        return { backgroundColor: "#000", color: "#fff" };
-      case "politics":
-        return { backgroundColor: "#9B2B2E", color: "#fff" };
-      case "culture":
-        return { backgroundColor: "#f2c94c", color: "#fff" };
-      case "technology":
-        return { backgroundColor: "#3d85c6", color: "#fff" };
-      default:
-        return { backgroundColor: "#3E435D", color: "#fff" };
-    }
-  };
 
   const handleLike = (e, boardId) => {
     e.stopPropagation();
@@ -160,10 +150,7 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
                   }}
                 >
                   <Box>
-                    <Typography
-                      variant="h4"
-                      sx={{ fontWeight: 400, color: "text.primary" }}
-                    >
+                    <Typography variant="h4" sx={{ fontWeight: 400, color: "text.primary" }}>
                       {currentUser.username}
                     </Typography>
                     <Typography variant="body2" sx={{ color: "text.secondary" }}>
@@ -210,41 +197,38 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
               >
                 <Stack direction="row" spacing={1}>
                   {derivedCategories.map((cat) => {
-                    const styles = getCategoryStyles(cat);
-                    const isActive = cat === activeCategory;
+                    // Знайдемо перший борд з цією категорією, щоб отримати API-колір
+                    const boardWithCat = boardsList.find(
+                      (board) => getBoardCategoryName(board) === cat
+                    );
+                    const activeColor = boardWithCat
+                      ? getCategoryStyles(boardWithCat).backgroundColor
+                      : "#3E435D";
+                    const chipStyles = {
+                      borderRadius: 1,
+                      fontSize: 12,
+                      height: 24,
+                      boxShadow: cat === activeCategory ? "0 4px 8px rgba(0,0,0,0.4)" : "none",
+                      backgroundColor: cat === activeCategory ? activeColor : "#eeeeee",
+                      color: "#fff",
+                      transition: "all 0.3s ease",
+                      ":hover": {
+                        backgroundColor: cat === activeCategory ? activeColor : "#eeeeee",
+                        transition: "all 0.3s ease",
+                        opacity: 0.8,
+                      },
+                    };
                     return (
                       <Chip
                         key={cat}
                         label={`# ${cat}`}
                         onClick={() => handleCategoryClick(cat)}
-                        sx={{
-                          ...styles,
-                          borderRadius: 1,
-                          fontSize: 12,
-                          height: 24,
-                          boxShadow: isActive
-                            ? "0 4px 8px rgba(0,0,0,0.4)"
-                            : "none",
-                          backgroundColor: isActive
-                            ? styles.backgroundColor
-                            : "#eeeeee",
-                          transition: "all 0.3s ease",
-                          ":hover": {
-                            backgroundColor: isActive
-                              ? styles.backgroundColor
-                              : "#eeeeee",
-                            transition: "all 0.3s ease",
-                            opacity: 0.8,
-                          },
-                        }}
+                        sx={chipStyles}
                       />
                     );
                   })}
                 </Stack>
-                <Typography
-                  variant="body1"
-                  sx={{ color: "text.secondary", fontSize: "1rem" }}
-                >
+                <Typography variant="body1" sx={{ color: "text.secondary", fontSize: "1rem" }}>
                   Found: {filteredBoards.length}
                 </Typography>
               </Box>
@@ -294,13 +278,13 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
                         }}
                       >
                         <Chip
-                          label={`# ${board.category || board.tags?.[0] || "Nothing"}`}
+                          label={`# ${getBoardCategoryName(board)}`}
                           size="small"
                           sx={{
                             borderRadius: 1,
                             fontSize: 12,
                             height: 24,
-                            ...getCategoryStyles(board.category || board.tags?.[0] || "Nothing"),
+                            ...getCategoryStyles(board),
                           }}
                         />
                         <IconButton
@@ -322,10 +306,7 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
                       </Box>
 
                       <Box sx={{ flexGrow: 1, mb: 2, width: "100%" }}>
-                        <Typography
-                          variant="body2"
-                          sx={{ fontWeight: 500, color: "text.primary" }}
-                        >
+                        <Typography variant="body2" sx={{ fontWeight: 500, color: "text.primary" }}>
                           {board.name}
                         </Typography>
                       </Box>
@@ -338,21 +319,11 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
                           width: "100%",
                         }}
                       >
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ fontSize: "0.95rem" }}
-                        >
+                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.95rem" }}>
                           Author: {board.creator?.username || board.author || "Someone"}
                         </Typography>
 
-                        <Box
-                          sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            color: "text.secondary",
-                          }}
-                        >
+                        <Box sx={{ display: "flex", alignItems: "center", color: "text.secondary" }}>
                           {renderVisibilityIcon(board.is_public ? "Public" : "Private")}
                           <Typography
                             variant="body2"
@@ -371,14 +342,7 @@ const BoardsSection = React.memo(({ currentUser, boards }) => {
                 ))}
               </Box>
             ) : (
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  height: "50vh",
-                }}
-              >
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "50vh" }}>
                 <Typography variant="h5" sx={{ color: "text.secondary" }}>
                   No boards found
                 </Typography>

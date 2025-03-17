@@ -280,7 +280,7 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
                 variant="body2"
                 sx={{
                   color: "#eee",
-                  fontSize: "clamp(2rem, 9vw, 15rem)",
+                  fontSize: "clamp(2rem, 8vw, 15rem)",
                   fontWeight: 700,
                 }}
               >
