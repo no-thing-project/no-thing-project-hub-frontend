@@ -1,5 +1,11 @@
 // components/Board/Board.jsx
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useLayoutEffect,
+  useEffect,
+} from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Box, Button, IconButton, Typography, Badge } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -7,31 +13,31 @@ import RemoveIcon from "@mui/icons-material/Remove";
 import PeopleIcon from "@mui/icons-material/People";
 import FavoriteIcon from "@mui/icons-material/Favorite";
 import ShareIcon from "@mui/icons-material/Share";
-import LeftDrawer from "../Drawer/LeftDrawer";
-import Header from "../Header/Header";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack"; // Імпорт кнопки назад
 import DraggableTweet from "../Tweet/Tweet";
 import TweetPopup from "../Tweet/TweetPopup";
 import TweetContent from "../Tweet/TweetContent";
 import { useTweets } from "../../hooks/useTweets";
 import { useWebSocket } from "../../hooks/useWebSocket";
-import { useBoardInteraction } from "../../hooks/useBordIteractions";
+import { BOARD_SIZE, useBoardInteraction } from "../../hooks/useBordIteractions";
 
 const Board = ({ token, boards, currentUser, onLogout }) => {
   const { id: boardId } = useParams();
   const navigate = useNavigate();
   const boardMainRef = useRef(null);
   const initialName = boards.find((b) => b.board_id === boardId)?.name || "";
-  const [boardTitle, setBoardTitle] = useState(
+  const [boardTitle] = useState(
     localStorage.getItem(`boardTitle_${boardId}`) || initialName
   );
-
+  
   useEffect(() => {
     localStorage.setItem(`boardTitle_${boardId}`, boardTitle);
   }, [boardTitle, boardId]);
 
   const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0 });
   const [tweetDraft, setTweetDraft] = useState("");
-  const [focusedTweet, setFocusedTweet] = useState(null);
+  const [replyTweet, setReplyTweet] = useState(null);
+  const [highlightedParentId, setHighlightedParentId] = useState(null);
 
   const {
     tweets,
@@ -43,18 +49,30 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
     deleteTweet,
   } = useTweets(token, boardId, currentUser, onLogout, navigate);
 
-  const socketRef = useWebSocket(token, boardId, currentUser, setTweets, onLogout, navigate);
+  const socketRef = useWebSocket(
+    token,
+    boardId,
+    currentUser,
+    setTweets,
+    onLogout,
+    navigate
+  );
 
   const handleCreateTweet = useCallback(
     async (text, x, y) => {
-      const newTweet = await createTweet(text, x, y);
+      const newTweet = await createTweet(
+        text,
+        x,
+        y,
+        replyTweet ? replyTweet.tweet_id : null
+      );
       if (newTweet && socketRef.current) {
-        // Додаємо timestamp, якщо його нема
         newTweet.timestamp = newTweet.timestamp || new Date().toISOString();
         socketRef.current.emit("newTweet", { boardId, ...newTweet });
       }
+      setReplyTweet(null);
     },
-    [createTweet, socketRef, boardId]
+    [createTweet, socketRef, boardId, replyTweet]
   );
 
   const handleUpdateTweet = useCallback(
@@ -92,6 +110,15 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
     [deleteTweet, socketRef, boardId]
   );
 
+  const handleReply = useCallback((tweet) => {
+    setReplyTweet(tweet);
+    setTweetPopup({ visible: true, x: tweet.x, y: tweet.y });
+  }, []);
+
+  const handleReplyHover = useCallback((parentTweetId) => {
+    setHighlightedParentId(parentTweetId);
+  }, []);
+
   const {
     scale,
     offset,
@@ -107,10 +134,31 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
 
   const [onlineUsers] = useState(15);
 
+  // Використовуємо useLayoutEffect для центрирування після першого рендеру
+  useLayoutEffect(() => {
+    if (boardMainRef.current) {
+      // Викликаємо центрирування після першої анімаційної рамки
+      window.requestAnimationFrame(() => {
+        centerBoard();
+      });
+    }
+  }, [centerBoard]);
+
+  // Використовуємо ResizeObserver для перерахунку позиції при зміні розмірів контейнера
+  useEffect(() => {
+    if (boardMainRef.current) {
+      const observer = new ResizeObserver(() => {
+        centerBoard();
+      });
+      observer.observe(boardMainRef.current);
+      return () => observer.disconnect();
+    }
+  }, [centerBoard]);
+
+  // Завантаження твітів після першого рендеру
   useEffect(() => {
     fetchTweets();
-    centerBoard();
-  }, [fetchTweets, centerBoard]);
+  }, [fetchTweets]);
 
   const handlePopupSubmit = useCallback(
     (text, x, y) => {
@@ -145,21 +193,22 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
     [scale, offset]
   );
 
-  const centerFocusedTweet = useCallback(() => {
-    if (focusedTweet && boardMainRef.current) {
-      const { clientWidth, clientHeight } = boardMainRef.current;
-      setOffset({
-        x: clientWidth / 2 - focusedTweet.x * scale,
-        y: clientHeight / 2 - focusedTweet.y * scale,
-      });
-    }
-  }, [focusedTweet, scale, setOffset]);
-
   return (
     <Box sx={{ display: "flex", width: "100vw", height: "100vh", overflow: "hidden" }}>
-      <LeftDrawer onLogout={onLogout} />
       <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", position: "relative" }}>
-        <Header currentUser={currentUser} token={token} />
+        {/* Кнопка "Назад" у верхньому лівому кутку */}
+        <Box
+          sx={{
+            position: "absolute",
+            top: 16,
+            left: 16,
+            zIndex: 1100,
+          }}
+        >
+          <IconButton onClick={() => navigate(-1)}>
+            <ArrowBackIcon sx={{ color: "text.primary" }} />
+          </IconButton>
+        </Box>
         <Box
           ref={boardMainRef}
           sx={{
@@ -168,8 +217,6 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
             overflow: "hidden",
             cursor: dragging ? "grabbing" : "grab",
             borderRadius: 2.5,
-            mb: 3,
-            mr: 3,
           }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
@@ -204,22 +251,19 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
           }}
           onWheel={handleWheel}
         >
-          {/* Фон дошки */}
           <Box
-            className="board-inner"
             sx={{
               position: "absolute",
-              top: offset.y,
-              left: offset.x,
-              width: 10000,
-              height: 10000,
+              top: 0,
+              left: 0,
+              width: BOARD_SIZE,
+              height: BOARD_SIZE,
               backgroundColor: "#fff",
               backgroundImage: "radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)",
               backgroundSize: "20px 20px",
               boxShadow: "inset 0 0 10px rgba(0,0,0,0.1)",
-              transform: `scale(${scale})`,
+              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
               transformOrigin: "top left",
-              zIndex: 0,
             }}
           >
             <Box
@@ -229,7 +273,6 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
                 left: "50%",
                 transform: "translate(-50%, -50%)",
                 textAlign: "center",
-                zIndex: 1,
                 pointerEvents: "none",
               }}
             >
@@ -237,27 +280,13 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
                 variant="body2"
                 sx={{
                   color: "#eee",
-                  fontSize: "clamp(2rem, 7.5vw, 15rem)",
+                  fontSize: "clamp(2rem, 9vw, 15rem)",
                   fontWeight: 700,
                 }}
               >
                 {boardTitle}
               </Typography>
             </Box>
-          </Box>
-          {/* Шар з твітами */}
-          <Box
-            sx={{
-              position: "absolute",
-              top: offset.y,
-              left: offset.x,
-              width: 10000,
-              height: 10000,
-              transform: `scale(${scale})`,
-              transformOrigin: "top left",
-              zIndex: 2,
-            }}
-          >
             {tweets.map((tweet) => (
               <DraggableTweet
                 key={tweet.tweet_id}
@@ -272,7 +301,9 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
                   currentUser={currentUser}
                   onLike={handleToggleLike}
                   onDelete={handleDeleteTweet}
-                  onFocus={setFocusedTweet}
+                  onReply={handleReply}
+                  onReplyHover={handleReplyHover}
+                  isParentHighlighted={tweet.tweet_id === highlightedParentId}
                 />
               </DraggableTweet>
             ))}
@@ -291,19 +322,6 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
               </Box>
             )}
           </Box>
-          {focusedTweet && !isTweetVisible(focusedTweet) && (
-            <Box
-              className="return-button"
-              sx={{ position: "absolute", bottom: 2, right: 2, zIndex: 1000 }}
-              onClick={(e) => {
-                e.stopPropagation();
-                centerFocusedTweet();
-              }}
-            >
-              <Button variant="contained">Повернутись до поста</Button>
-            </Box>
-          )}
-          {/* Контролери зума та верхні кнопки */}
           <Box
             className="zoom-controls"
             sx={{

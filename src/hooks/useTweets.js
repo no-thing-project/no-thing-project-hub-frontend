@@ -58,12 +58,13 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
   }, [boardId, authHeaders, normalizeTweet, handleAuthError]);
 
   const createTweet = useCallback(
-    async (content, x, y) => {
+    async (content, x, y, parent_tweet_id) => {
       try {
         const payload = {
           content: typeof content === "string" ? { type: "text", value: content } : content,
           position: { x, y },
           board_id: boardId,
+          parent_tweet_id: parent_tweet_id || null,
         };
         const res = await axios.post(
           `${config.REACT_APP_HUB_API_URL}/api/v1/tweets`,

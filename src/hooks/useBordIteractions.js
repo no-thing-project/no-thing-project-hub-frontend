@@ -1,8 +1,8 @@
 // hooks/useBoardInteraction.js
 import { useState, useCallback, useRef } from "react";
 
-const BOARD_SIZE = 10000;
-const ZOOM_MIN = 0.5;
+export const BOARD_SIZE = 10000;
+const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 2;
 const ZOOM_STEP = 0.1;
 const ZOOM_SENSITIVITY = 0.001;
@@ -113,12 +113,28 @@ export const useBoardInteraction = (boardRef) => {
 
   const handleMouseUp = useCallback(
     (e, onClick) => {
-      if (!isDragging.current && dragStart.current && onClick) {
+      if (!isDragging.current && dragStart.current && onClick && boardRef.current) {
         const boardRect = boardRef.current.getBoundingClientRect();
+  
+        // Позиція кліку відносно верхнього лівого кута дошки
         const clickX = e.clientX - boardRect.left;
         const clickY = e.clientY - boardRect.top;
+  
+        // Враховуємо, що offset вже враховує масштаб
         const tweetX = (clickX - offset.x) / scale;
         const tweetY = (clickY - offset.y) / scale;
+  
+        // Додаткове логування (для дебагу)
+        console.log({
+          clickX,
+          clickY,
+          offsetX: offset.x,
+          offsetY: offset.y,
+          scale,
+          tweetX,
+          tweetY,
+        });
+  
         onClick(tweetX, tweetY);
       }
       dragStart.current = null;
@@ -127,6 +143,7 @@ export const useBoardInteraction = (boardRef) => {
     },
     [boardRef, offset, scale]
   );
+  
 
   return {
     scale,
