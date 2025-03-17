@@ -17,7 +17,8 @@ import config from "./config";
 import theme from "./Theme";
 import HomePage from "./components/Home/HomePage";
 import BoardsPage from "./components/Boards/BoardsPage";
-import DonationPage from "./components/Donation/Donation";
+import GatesPage from "./components/Gates/GatesPage";
+import ClassesPage from "./components/Classes/ClassesPage";
 
 const decodeToken = (token) => {
   try {
@@ -41,7 +42,9 @@ const PrivateRoute = ({ element, isAuthenticated, redirectTo = "/login" }) =>
   isAuthenticated ? element : <Navigate to={redirectTo} replace />;
 
 function App() {
-  const [token, setToken] = useState(() => localStorage.getItem("token") || null);
+  const [token, setToken] = useState(
+    () => localStorage.getItem("token") || null
+  );
   const [authData, setAuthData] = useState(() => {
     const storedAuthData = localStorage.getItem("authData");
     return storedAuthData ? JSON.parse(storedAuthData) : null;
@@ -109,7 +112,7 @@ function App() {
           stats: authDataFromResponse.stats,
           timezone: authDataFromResponse.timezone,
           total_points: authDataFromResponse.total_points,
-          tweet_points: authDataFromResponse.tweet_points
+          tweet_points: authDataFromResponse.tweet_points,
         };
       } else {
         normalizedAuthData = decodeToken(token);
@@ -148,9 +151,12 @@ function App() {
       return;
     }
     try {
-      const res = await axios.get(`${config.REACT_APP_HUB_API_URL}/api/v1/boards`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await axios.get(
+        `${config.REACT_APP_HUB_API_URL}/api/v1/boards`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       setBoards(res.data.content.boards || []);
     } catch (err) {
       console.error("Error fetching boards:", err);
@@ -240,6 +246,36 @@ function App() {
                     token={token}
                     currentUser={authData}
                     boards={boards}
+                    onLogout={handleLogout}
+                  />
+                }
+              />
+            }
+          />
+          <Route
+            path="/gates"
+            element={
+              <PrivateRoute
+                isAuthenticated={isAuthenticated}
+                element={
+                  <GatesPage
+                    token={token}
+                    currentUser={authData}
+                    onLogout={handleLogout}
+                  />
+                }
+              />
+            }
+          />
+          <Route
+            path="/classes/:gateId"
+            element={
+              <PrivateRoute
+                isAuthenticated={isAuthenticated}
+                element={
+                  <ClassesPage
+                    token={token}
+                    currentUser={authData}
                     onLogout={handleLogout}
                   />
                 }

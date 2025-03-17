@@ -10,6 +10,7 @@ import {
 } from "@mui/material";
 import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import DashboardIcon from "@mui/icons-material/Dashboard";
+import StyleRoundedIcon from '@mui/icons-material/StyleRounded';
 import ExitToAppRoundedIcon from "@mui/icons-material/ExitToAppRounded";
 
 const LeftDrawer = ({ onLogout }) => {
@@ -88,6 +89,30 @@ const LeftDrawer = ({ onLogout }) => {
               }}
             >
               <DashboardIcon sx={{ fontSize: 30 }} />
+            </ListItemIcon>
+          </ListItem>
+          <ListItem
+            button
+            component={Link}
+            to="/gates"
+            sx={{
+              justifyContent: "center",
+              "&:hover .MuiListItemIcon-root": {
+                color: "var(--color-icon-hover)",
+              },
+            }}
+          >
+            <ListItemIcon
+              sx={{
+                minWidth: 0,
+                justifyContent: "center",
+                color:
+                  currentPath === "/gates"
+                    ? "var(--color-icon-hover)"
+                    : "var(--color-icon-default)",
+              }}
+            >
+              <StyleRoundedIcon sx={{ fontSize: 30 }} />
             </ListItemIcon>
           </ListItem>
         </List>
