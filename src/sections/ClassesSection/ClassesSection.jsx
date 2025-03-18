@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Button, Card, CardContent, Typography } from "@mui/material";
 import { Add } from "@mui/icons-material";
-import UserHeader from "../../components/Basic/Headers/UserHeader";
+import UserHeader from "../../components/Headers/UserHeader";
 import { containerStyles, buttonStyles, cardGridStyles, cardStyles } from "../../styles/GateSectionStyles";
 
 const ClassesSection = ({ currentUser, classes, gateId }) => {

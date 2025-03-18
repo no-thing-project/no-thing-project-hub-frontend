@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Button, Card, CardContent, Typography } from "@mui/material";
 import { Edit, Save } from "@mui/icons-material";
-import { headerStyles } from "../../../styles/ProfileStyles";
+import { headerStyles } from "../../styles/ProfileStyles";
 import StatusBage from "../Bages/StatusBage";
 
 const ProfileHeader = ({ username, accessLevel, isEditing, isOwnProfile, onEdit, onSave, onCancel }) => {

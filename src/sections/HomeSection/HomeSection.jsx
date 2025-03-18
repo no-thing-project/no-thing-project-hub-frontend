@@ -9,7 +9,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
-import UserHeader from "../../components/Basic/Headers/UserHeader";
+import UserHeader from "../../components/Headers/UserHeader";
 import StatsCard from "../../components/Cards/StatsCard/StatsCard";
 import BarChart from "../../components/Charts/BarChart";
 import { chartColors } from "../../constants/colors";

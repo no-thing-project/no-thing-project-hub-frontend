@@ -1,6 +1,6 @@
 import React from "react";
 import { FormControlLabel, Switch } from "@mui/material";
-import { toggleStyles } from "../../../styles/ProfileStyles";
+import { toggleStyles } from "../../styles/ProfileStyles";
 
 const NotificationToggle = ({ label, checked, onChange, disabled = false }) => (
   <FormControlLabel

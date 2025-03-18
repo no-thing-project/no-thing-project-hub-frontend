@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Button, Typography, Stack } from "@mui/material";
 import { Add } from "@mui/icons-material";
-import UserHeader from "../../components/Basic/Headers/UserHeader";
+import UserHeader from "../../components/Headers/UserHeader";
 import CategoryChip from "../../components/Chips/CategoryChip";
 import BoardCard from "../../components/Cards/BoardCard";
 import {
