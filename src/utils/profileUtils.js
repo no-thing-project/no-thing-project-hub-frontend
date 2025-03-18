@@ -1,25 +1,75 @@
-export const normalizeUserData = (currentUser) => ({
-    username: currentUser.username || "-",
-    anonName: currentUser.anonName || "-",
-    email: currentUser.email || "-",
-    location: currentUser.location || "-",
-    timezone: currentUser.timezone || "-",
-    gender: currentUser.gender || "-",
-    birthday: currentUser.dateOfBirth || "-",
-    bio: currentUser.bio || "",
-    language: currentUser.language || "-",
-    socialPresence: currentUser.socialPresence || "-",
-    onlineStatus: currentUser.onlineStatus || "-",
-    isPublic: currentUser.isPublic || false,
-    theme: currentUser.theme || "-",
-    contentLanguage: currentUser.contentLanguage || "-",
+export const handleApiError = (err, setError) => {
+  setError(err.response?.data?.errors?.[0] || "An error occurred");
+};
+
+export const normalizeUserData = (user) => ({
+  anonymous_id: user?.anonymous_id || "",
+  core_user_id: user?.core_user_id || null,
+  username: user?.username || `Someone_${Math.random().toString(36).substr(2, 5)}`,
+  fullName: user?.fullName || "",
+  profile_picture: user?.profile_picture || "",
+  bio: user?.bio || "",
+  email: user?.email || "",
+  phone: user?.phone || "",
+  wallet_address: user?.wallet_address || "",
+  social_links: user?.social_links || {
+    twitter: "",
+    instagram: "",
+    linkedin: "",
+  },
+  isPublic: user?.isPublic || false,
+  isActive: user?.isActive !== undefined ? user.isActive : true,
+  timezone: user?.timezone || "UTC+00:00",
+  gender: user?.gender || "Prefer not to say",
+  location: user?.location || "",
+  ethnicity: user?.ethnicity || "Prefer not to say",
+  dateOfBirth: user?.dateOfBirth || null,
+  onlineStatus: user?.onlineStatus !== undefined ? user.onlineStatus : false,
+  lastSeen: user?.lastSeen || null,
+  nameVisibility: user?.nameVisibility || "Private",
+  preferences: user?.preferences || {
+    language: "en",
+    theme: "System",
+    contentLanguage: "en",
     notifications: {
-      email: currentUser.preferences?.notifications?.email ?? true,
-      push: currentUser.preferences?.notifications?.push ?? false,
+      email: true,
+      sms: false,
+      push: true,
     },
-    access_level: currentUser.access_level || "-",
-  });
-  
-  export const handleApiError = (err, setError) => {
-    setError(err.response?.data?.errors?.[0] || "Failed to update profile");
-  };
+    favorite_boards: [],
+    muted_boards: [],
+    content_filters: {
+      show_public_only: false,
+      hide_anonymous: false,
+      preferred_tags: [],
+    },
+  },
+  total_points: user?.total_points || 0,
+  donated_points: user?.donated_points || 0,
+  likes_points: user?.likes_points || 0,
+  tweet_points: user?.tweet_points || 0,
+  board_points: user?.board_points || 0,
+  access_level: user?.access_level || "BELIEVER", // Assuming USER_LEVEL.BELIEVER
+  stats: user?.stats || {
+    tweet_count: 0,
+    board_count: 0,
+    gate_count: 0,
+    class_count: 0,
+    like_count: 0,
+    points_earned: 0,
+    points_spent: 0,
+  },
+  created_content: user?.created_content || {
+    tweets: [],
+    boards: [],
+    gates: [],
+    classes: [],
+  },
+  friends: user?.friends || [],
+  messages: user?.messages || [],
+  activity_log: user?.activity_log || [],
+  gate: user?.gate || null,
+  created_at: user?.created_at || null,
+  updated_at: user?.updated_at || null,
+  last_synced_at: user?.last_synced_at || null,
+});

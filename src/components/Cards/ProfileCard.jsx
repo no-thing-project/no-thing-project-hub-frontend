@@ -1,23 +1,39 @@
 import React, { useCallback, useState } from "react";
 import { Box, Grid, Snackbar, Alert } from "@mui/material";
-import axios from "axios";
-import config from "../../config";
 import ProfileHeader from "../Headers/ProfileHeader";
 import ProfileSection from "../../sections/ProfileSection/ProfileSection";
 import ProfileField from "../Fields/ProfileField";
 import NotificationToggle from "../Toggles/NotificationToggle";
-import { handleApiError, normalizeUserData } from "../../utils/profileUtils";
 import { containerStyles } from "../../styles/ProfileStyles";
+import { normalizeUserData } from "../../utils/profileUtils";
 
-const ProfileCard = ({ currentUser, isOwnProfile }) => {
+const ProfileCard = ({ currentUser, isOwnProfile, onUpdate }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [userData, setUserData] = useState(normalizeUserData(currentUser));
+  const [userData, setUserData] = useState(() => normalizeUserData(currentUser));
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
   const handleChange = useCallback(
-    (field) => (e) => {
-      setUserData((prev) => ({ ...prev, [field]: e.target.value }));
+    (field, subfield) => (e) => {
+      const value = e.target.value;
+      if (subfield) {
+        setUserData((prev) => ({
+          ...prev,
+          [field]: { ...prev[field], [subfield]: value },
+        }));
+      } else if (field === "onlineStatus" || field === "isPublic") {
+        setUserData((prev) => ({
+          ...prev,
+          [field]: value === "Visible" ? true : value === "Hide" || value === "Anonymous" ? false : prev[field],
+        }));
+      } else if (field === "lastSeen") {
+        setUserData((prev) => ({
+          ...prev,
+          [field]: value === "Visible" ? new Date() : null,
+        }));
+      } else {
+        setUserData((prev) => ({ ...prev, [field]: value }));
+      }
     },
     []
   );
@@ -26,30 +42,62 @@ const ProfileCard = ({ currentUser, isOwnProfile }) => {
     (section, key) => () => {
       setUserData((prev) => ({
         ...prev,
-        [section]: { ...prev[section], [key]: !prev[section][key] },
+        [section]: {
+          ...prev[section],
+          notifications: {
+            ...prev[section].notifications,
+            [key]: !prev[section].notifications[key],
+          },
+        },
       }));
     },
     []
   );
 
   const handleSave = useCallback(async () => {
-    try {
-      await axios.put(
-        `${config.REACT_APP_HUB_API_URL}/api/v1/profile/update`,
-        userData,
-        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-      );
+    const updates = {
+      username: userData.username,
+      fullName: userData.fullName,
+      bio: userData.bio,
+      email: userData.email,
+      phone: userData.phone,
+      wallet_address: userData.wallet_address,
+      profile_picture: userData.profile_picture,
+      isPublic: userData.isPublic,
+      social_links: userData.social_links,
+      timezone: userData.timezone,
+      gender: userData.gender,
+      location: userData.location,
+      ethnicity: userData.ethnicity,
+      dateOfBirth: userData.dateOfBirth,
+      nameVisibility: userData.nameVisibility,
+      preferences: userData.preferences,
+      onlineStatus: userData.onlineStatus,
+    };
+    console.log("Calling onUpdate with updates:", updates);
+    const success = await onUpdate(updates);
+    if (success) {
       setSuccess("Profile updated successfully!");
       setIsEditing(false);
-    } catch (err) {
-      handleApiError(err, setError);
+    } else {
+      setError("Failed to update profile");
     }
-  }, [userData]);
+  }, [userData, onUpdate]);
 
   const handleCloseSnackbar = useCallback(() => {
     setError("");
     setSuccess("");
   }, []);
+
+  // Validate onUpdate prop after all hooks
+  if (!onUpdate || typeof onUpdate !== "function") {
+    console.error("onUpdate prop is not a function. Received:", onUpdate, "Stack trace:", new Error().stack);
+    return (
+      <div>
+        Error: onUpdate prop is missing or invalid. Please check the parent component (ProfilePage).
+      </div>
+    );
+  }
 
   return (
     <Box sx={containerStyles}>
@@ -71,17 +119,17 @@ const ProfileCard = ({ currentUser, isOwnProfile }) => {
               <Grid item xs={12} sm={6}>
                 <ProfileField
                   label="Full Name"
-                  value={userData.username}
-                  field="username"
+                  value={userData.fullName}
+                  field="fullName"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <ProfileField
-                  label="Anonymous Username"
-                  value={userData.anonName}
-                  field="anonName"
+                  label="Username"
+                  value={userData.username}
+                  field="username"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
                 />
@@ -111,25 +159,28 @@ const ProfileCard = ({ currentUser, isOwnProfile }) => {
                   field="timezone"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
+                  select
+                  options={[
+                    'UTC-12:00', 'UTC-11:00', 'UTC-10:00', 'UTC-09:00', 'UTC-08:00',
+                    'UTC-07:00', 'UTC-06:00', 'UTC-05:00', 'UTC-04:00', 'UTC-03:00',
+                    'UTC-02:00', 'UTC-01:00', 'UTC+00:00', 'UTC+01:00', 'UTC+02:00',
+                    'UTC+03:00', 'UTC+04:00', 'UTC+05:00', 'UTC+06:00', 'UTC+07:00',
+                    'UTC+08:00', 'UTC+09:00', 'UTC+10:00', 'UTC+11:00', 'UTC+12:00',
+                    'UTC+13:00', 'UTC+14:00',
+                  ]}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <ProfileField
                   label="Ethnicity"
-                  value={userData.gender}
+                  value={userData.ethnicity}
                   field="ethnicity"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
                   select
                   options={[
-                    "Prefer not to say",
-                    "Caucasian",
-                    "Hispanic",
-                    "African American",
-                    "Asian",
-                    "Middle Eastern",
-                    "Native American",
-                    "Pacific Islander",
+                    "Asian", "Black", "Hispanic", "White", "Native American", "Pacific Islander",
+                    "Mixed", "Other", "Prefer not to say",
                   ]}
                 />
               </Grid>
@@ -141,23 +192,33 @@ const ProfileCard = ({ currentUser, isOwnProfile }) => {
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
                   select
-                  options={["Prefer not to say", "She/Her", "He/Him", "They/Them", "Other"]}
+                  options={["Male", "Female", "Non-binary", "Other", "Prefer not to say"]}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <ProfileField
                   label="Date of Birth"
-                  value={userData.birthday}
-                  field="birthday"
+                  value={userData.dateOfBirth ? new Date(userData.dateOfBirth).toISOString().split("T")[0] : ""}
+                  field="dateOfBirth"
+                  isEditing={isEditing && isOwnProfile}
+                  onChange={handleChange}
+                  type="date"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <ProfileField
+                  label="Contact Number"
+                  value={userData.phone}
+                  field="phone"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <ProfileField
-                  label="Contact Number"
-                  value={userData.birthday} // Помилка: має бути contactNumber
-                  field="contactNumber"
+                  label="Wallet Address"
+                  value={userData.wallet_address}
+                  field="wallet_address"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
                 />
@@ -173,19 +234,20 @@ const ProfileCard = ({ currentUser, isOwnProfile }) => {
               <Grid item xs={12} sm={12}>
                 <ProfileField
                   label="Language"
-                  value={userData.language}
-                  field="language"
+                  value={userData.preferences.language}
+                  field="preferences"
+                  subfield="language"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
                   select
-                  options={["English", "Spanish", "French", "German", "Ukranian"]}
+                  options={["en", "ua", "es", "fr"]}
                 />
               </Grid>
               <Grid item xs={12} sm={12}>
                 <ProfileField
-                  label="Social Presence"
-                  value={userData.socialPresence}
-                  field="socialPresence"
+                  label="Public Profile"
+                  value={userData.isPublic ? "Visible" : "Anonymous"}
+                  field="isPublic"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
                   select
@@ -195,7 +257,7 @@ const ProfileCard = ({ currentUser, isOwnProfile }) => {
               <Grid item xs={12} sm={12}>
                 <ProfileField
                   label="Online Status"
-                  value={userData.onlineStatus}
+                  value={userData.onlineStatus ? "Visible" : "Hide"}
                   field="onlineStatus"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
@@ -206,7 +268,7 @@ const ProfileCard = ({ currentUser, isOwnProfile }) => {
               <Grid item xs={12} sm={12}>
                 <ProfileField
                   label="Last Seen"
-                  value={userData.lastSeen || userData.onlineStatus} // Виправлено
+                  value={userData.lastSeen ? "Visible" : "Hide"}
                   field="lastSeen"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
@@ -217,12 +279,42 @@ const ProfileCard = ({ currentUser, isOwnProfile }) => {
               <Grid item xs={12} sm={12}>
                 <ProfileField
                   label="Name Visibility"
-                  value={userData.nameVisibility || userData.onlineStatus} // Виправлено
+                  value={userData.nameVisibility}
                   field="nameVisibility"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
                   select
-                  options={["Hide", "Visible"]}
+                  options={["Public", "Friends", "Private"]}
+                />
+              </Grid>
+              <Grid item xs={12} sm={12}>
+                <ProfileField
+                  label="Twitter"
+                  value={userData.social_links.twitter}
+                  field="social_links"
+                  subfield="twitter"
+                  isEditing={isEditing && isOwnProfile}
+                  onChange={handleChange}
+                />
+              </Grid>
+              <Grid item xs={12} sm={12}>
+                <ProfileField
+                  label="Instagram"
+                  value={userData.social_links.instagram}
+                  field="social_links"
+                  subfield="instagram"
+                  isEditing={isEditing && isOwnProfile}
+                  onChange={handleChange}
+                />
+              </Grid>
+              <Grid item xs={12} sm={12}>
+                <ProfileField
+                  label="LinkedIn"
+                  value={userData.social_links.linkedin}
+                  field="social_links"
+                  subfield="linkedin"
+                  isEditing={isEditing && isOwnProfile}
+                  onChange={handleChange}
                 />
               </Grid>
             </Grid>
@@ -236,16 +328,22 @@ const ProfileCard = ({ currentUser, isOwnProfile }) => {
               <Grid item xs={12} sm={12}>
                 <NotificationToggle
                   label="Email"
-                  checked={userData.notifications.email}
-                  onChange={handleSwitchChange("notifications", "email")}
+                  checked={userData.preferences.notifications.email}
+                  onChange={handleSwitchChange("preferences", "email")}
+                />
+              </Grid>
+              <Grid item xs={12} sm={12}>
+                <NotificationToggle
+                  label="SMS"
+                  checked={userData.preferences.notifications.sms}
+                  onChange={handleSwitchChange("preferences", "sms")}
                 />
               </Grid>
               <Grid item xs={12} sm={12}>
                 <NotificationToggle
                   label="Push"
-                  checked={userData.notifications.push}
-                  onChange={handleSwitchChange("notifications", "push")}
-                  disabled={true}
+                  checked={userData.preferences.notifications.push}
+                  onChange={handleSwitchChange("preferences", "push")}
                 />
               </Grid>
             </Grid>
@@ -256,23 +354,25 @@ const ProfileCard = ({ currentUser, isOwnProfile }) => {
               <Grid item xs={12} sm={12}>
                 <ProfileField
                   label="Theme"
-                  value={userData.theme}
-                  field="theme"
+                  value={userData.preferences.theme}
+                  field="preferences"
+                  subfield="theme"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
                   select
-                  options={["Light", "Dark"]}
+                  options={["Light", "Dark", "System"]}
                 />
               </Grid>
               <Grid item xs={12} sm={12}>
                 <ProfileField
                   label="Content Language"
-                  value={userData.contentLanguage}
-                  field="contentLanguage"
+                  value={userData.preferences.contentLanguage}
+                  field="preferences"
+                  subfield="contentLanguage"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
                   select
-                  options={["English", "Spanish", "French", "German", "Ukranian"]}
+                  options={["en", "ua", "es", "fr"]}
                 />
               </Grid>
             </Grid>

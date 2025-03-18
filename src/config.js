@@ -8,7 +8,7 @@ const config = {
   },
   development: {
     REACT_APP_HUB_API_URL: process.env.API_HUB_URL || "http://localhost:8081",
-    REACT_APP_PUBLIC_HUB_URL: process.env.PUBLIC_HUB_URL || "http://localhost:300",
+    REACT_APP_PUBLIC_HUB_URL: process.env.PUBLIC_HUB_URL || "http://localhost:3000",
     REACT_APP_WS_URL: process.env.WS_URL || "http://localhost:8081"
   },
   staging: {

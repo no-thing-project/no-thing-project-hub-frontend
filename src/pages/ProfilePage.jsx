@@ -5,6 +5,7 @@ import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import ErrorMessage from "../components/Layout/ErrorMessage";
 import ProfileCard from "../components/Cards/ProfileCard";
 import { fetchProfile } from "../utils/apiPages";
+import config from "../config";
 
 const ProfilePage = ({ currentUser, onLogout, token }) => {
   const { userId } = useParams();
@@ -12,6 +13,29 @@ const ProfilePage = ({ currentUser, onLogout, token }) => {
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const handleUpdateProfile = async (updates) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${config.REACT_APP_HUB_API_URL}/api/v1/profile/update`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updates),
+      });
+      if (!response.ok) throw new Error("Failed to update profile");
+      const { content } = await response.json();
+      setProfileData(content);
+      return true;
+    } catch (err) {
+      setError(err.message);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -40,7 +64,11 @@ const ProfilePage = ({ currentUser, onLogout, token }) => {
 
   return (
     <AppLayout currentUser={currentUser} onLogout={onLogout} token={token}>
-      <ProfileCard currentUser={profileData} isOwnProfile={isOwnProfile} />
+      <ProfileCard
+        currentUser={profileData}
+        isOwnProfile={isOwnProfile}
+        onUpdate={handleUpdateProfile}
+      />
     </AppLayout>
   );
 };
