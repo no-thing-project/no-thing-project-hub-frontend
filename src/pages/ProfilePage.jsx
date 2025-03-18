@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import ErrorMessage from "../components/Layout/ErrorMessage";
-import ProfileCard from "../components/Basic/Cards/ProfileCard";
+import ProfileCard from "../components/Cards/ProfileCard";
 import { fetchProfile } from "../utils/apiPages";
 
 const ProfilePage = ({ currentUser, onLogout, token }) => {

@@ -1,13 +1,13 @@
 import React, { useCallback, useState } from "react";
 import { Box, Grid, Snackbar, Alert } from "@mui/material";
 import axios from "axios";
-import config from "../../../config";
-import ProfileHeader from "../Headers/ProfileHeader";
-import ProfileSection from "../../../sections/ProfileSection/ProfileSection";
-import ProfileField from "../Fields/ProfileField";
-import NotificationToggle from "../Toggles/NotificationToggle";
-import { handleApiError, normalizeUserData } from "../../../utils/profileUtils";
-import { containerStyles } from "../../../styles/ProfileStyles";
+import config from "../../config";
+import ProfileHeader from "../Basic/Headers/ProfileHeader";
+import ProfileSection from "../../sections/ProfileSection/ProfileSection";
+import ProfileField from "../Basic/Fields/ProfileField";
+import NotificationToggle from "../Basic/Toggles/NotificationToggle";
+import { handleApiError, normalizeUserData } from "../../utils/profileUtils";
+import { containerStyles } from "../../styles/ProfileStyles";
 
 const ProfileCard = ({ currentUser, isOwnProfile }) => {
   const [isEditing, setIsEditing] = useState(false);
