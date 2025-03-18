@@ -1,11 +1,5 @@
 // components/Board/Board.jsx
-import React, {
-  useState,
-  useCallback,
-  useRef,
-  useLayoutEffect,
-  useEffect,
-} from "react";
+import React, { useState, useCallback, useRef, useLayoutEffect, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Box, IconButton, Typography, Badge } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -13,13 +7,13 @@ import RemoveIcon from "@mui/icons-material/Remove";
 import PeopleIcon from "@mui/icons-material/People";
 import FavoriteIcon from "@mui/icons-material/Favorite";
 import ShareIcon from "@mui/icons-material/Share";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack"; // Імпорт кнопки назад
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DraggableTweet from "../Tweet/Tweet";
 import TweetPopup from "../Tweet/TweetPopup";
 import TweetContent from "../Tweet/TweetContent";
 import { useTweets } from "../../../hooks/useTweets";
 import { useWebSocket } from "../../../hooks/useWebSocket";
-import { BOARD_SIZE, useBoardInteraction } from "../../../hooks/useBordIteractions";
+import { BOARD_SIZE, useBoardInteraction } from "../../../hooks/useBoard";
 
 const Board = ({ token, boards, currentUser, onLogout }) => {
   const { id: boardId } = useParams();
@@ -29,7 +23,7 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
   const [boardTitle] = useState(
     localStorage.getItem(`boardTitle_${boardId}`) || initialName
   );
-  
+
   useEffect(() => {
     localStorage.setItem(`boardTitle_${boardId}`, boardTitle);
   }, [boardTitle, boardId]);
@@ -58,6 +52,7 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
     navigate
   );
 
+  // Handle tweet creation
   const handleCreateTweet = useCallback(
     async (text, x, y) => {
       const newTweet = await createTweet(
@@ -75,21 +70,32 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
     [createTweet, socketRef, boardId, replyTweet]
   );
 
+  // Handle tweet update (including position)
   const handleUpdateTweet = useCallback(
     async (id, updates) => {
-      await updateTweet(id, updates);
+      const { content, position } = updates;
+      const payload = {};
+      if (content) payload.content = typeof content === "string" ? { type: "text", value: content } : content;
+      if (position && (position.x !== undefined || position.y !== undefined)) {
+        payload.position = {
+          x: position.x !== undefined ? position.x : tweets.find(t => t.tweet_id === id)?.position?.x || 0,
+          y: position.y !== undefined ? position.y : tweets.find(t => t.tweet_id === id)?.position?.y || 0,
+        };
+      }
+      await updateTweet(id, payload);
       if (socketRef.current) {
         socketRef.current.emit("tweetUpdated", {
           boardId,
           tweet_id: id,
-          ...updates,
+          ...payload,
           timestamp: new Date().toISOString(),
         });
       }
     },
-    [updateTweet, socketRef, boardId]
+    [updateTweet, socketRef, boardId, tweets]
   );
 
+  // Handle like toggle
   const handleToggleLike = useCallback(
     async (id, isLiked) => {
       const updatedTweet = await toggleLike(id, isLiked);
@@ -100,6 +106,7 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
     [toggleLike, socketRef, boardId]
   );
 
+  // Handle tweet deletion
   const handleDeleteTweet = useCallback(
     async (id) => {
       await deleteTweet(id);
@@ -110,19 +117,21 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
     [deleteTweet, socketRef, boardId]
   );
 
+  // Handle reply action
   const handleReply = useCallback((tweet) => {
     setReplyTweet(tweet);
     setTweetPopup({ visible: true, x: tweet.x, y: tweet.y });
   }, []);
 
+  // Handle reply hover
   const handleReplyHover = useCallback((parentTweetId) => {
     setHighlightedParentId(parentTweetId);
   }, []);
 
+  // Board interaction hooks
   const {
     scale,
     offset,
-    // setOffset,
     dragging,
     centerBoard,
     handleZoomButton,
@@ -134,17 +143,16 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
 
   const [onlineUsers] = useState(15);
 
-  // Використовуємо useLayoutEffect для центрирування після першого рендеру
+  // Center board on mount
   useLayoutEffect(() => {
     if (boardMainRef.current) {
-      // Викликаємо центрирування після першої анімаційної рамки
       window.requestAnimationFrame(() => {
         centerBoard();
       });
     }
   }, [centerBoard]);
 
-  // Використовуємо ResizeObserver для перерахунку позиції при зміні розмірів контейнера
+  // Handle resize
   useEffect(() => {
     if (boardMainRef.current) {
       const observer = new ResizeObserver(() => {
@@ -155,11 +163,12 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
     }
   }, [centerBoard]);
 
-  // Завантаження твітів після першого рендеру
+  // Fetch tweets on mount
   useEffect(() => {
     fetchTweets();
   }, [fetchTweets]);
 
+  // Handle popup submission
   const handlePopupSubmit = useCallback(
     (text, x, y) => {
       handleCreateTweet(text, x, y);
@@ -169,6 +178,7 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
     [handleCreateTweet]
   );
 
+  // Handle click to open popup
   const handleMouseUpWithPopup = useCallback(
     (e) =>
       handleMouseUp(e, (x, y) => {
@@ -178,21 +188,16 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
   );
 
   return (
-    <Box sx={{ display: "flex", width: "100vw", height: "100vh", overflow: "hidden"}}>
-      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", position: "relative"}}>
-        {/* Кнопка "Назад" у верхньому лівому кутку */}
-        <Box
-          sx={{
-            position: "absolute",
-            top: 16,
-            left: 16,
-            zIndex: 1100,
-          }}
-        >
+    <Box sx={{ display: "flex", width: "100vw", height: "100vh", overflow: "hidden" }}>
+      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", position: "relative" }}>
+        {/* Back Button */}
+        <Box sx={{ position: "absolute", top: 16, left: 16, zIndex: 1100 }}>
           <IconButton onClick={() => navigate(-1)}>
             <ArrowBackIcon sx={{ color: "text.primary" }} />
           </IconButton>
         </Box>
+
+        {/* Board Container */}
         <Box
           ref={boardMainRef}
           sx={{
@@ -277,7 +282,7 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
                 tweet={tweet}
                 currentUser={currentUser}
                 onStop={(e, data) =>
-                  handleUpdateTweet(tweet.tweet_id, { x: data.x, y: data.y })
+                  handleUpdateTweet(tweet.tweet_id, { position: { x: data.x, y: data.y } })
                 }
               >
                 <TweetContent
@@ -306,6 +311,8 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
               </Box>
             )}
           </Box>
+
+          {/* Zoom Controls */}
           <Box
             className="zoom-controls"
             sx={{
@@ -341,6 +348,8 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
               <AddIcon sx={{ color: "text.primary" }} />
             </IconButton>
           </Box>
+
+          {/* Top Controls */}
           <Box
             className="board-top-controls"
             sx={{
