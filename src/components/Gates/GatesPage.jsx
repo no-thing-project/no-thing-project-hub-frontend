@@ -43,7 +43,7 @@ const GatesPage = ({ currentUser, onLogout, token }) => {
 
   return (
     <Box
-      sx={{ display: "flex", minHeight: "100vh", backgroundColor: "#F8F8F8" }}
+      sx={{ display: "flex", minHeight: "100vh", backgroundColor: "background.default" }}
     >
       <LeftDrawer onLogout={onLogout} />
       <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>

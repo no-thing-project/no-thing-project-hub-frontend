@@ -132,7 +132,7 @@ const LoginForm = ({ theme, onLogin }) => {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          minHeight: "100vh",
+          minHeight: "100vh"
         }}
       >
         <Paper
@@ -140,14 +140,14 @@ const LoginForm = ({ theme, onLogin }) => {
           sx={{
             p: 5,
             borderRadius: theme.shape.borderRadiusMedium,
-            background: "linear-gradient(135deg, #ffffff 0%, #f5f7fa 100%)",
+            backgroundColor: "backgroung.paper",
             boxShadow: "0 8px 24px rgba(0, 0, 0, 0.1)",
             width: theme.custom.loginPaperWidth,
             maxWidth: theme.custom.loginPaperMaxWidth,
-            textAlign: "center",
+            textAlign: "center"
           }}
         >
-          <Box sx={{ textAlign: "center", mb: 3 }}>
+          <Box sx={{ textAlign: "center", mb: 3}}>
             <Typography
               variant="h4"
               sx={{ color: "text.primary", fontWeight: 600 }}
@@ -175,7 +175,7 @@ const LoginForm = ({ theme, onLogin }) => {
               sx={{
                 mt: 1,
                 "& .MuiFormLabel-root.MuiInputLabel-shrink": {
-                  backgroundColor: "white",
+                  backgroundColor: "background.paper",
                   padding: "0 5px"
                 },
                 "& .MuiInputLabel-root": {
@@ -187,10 +187,10 @@ const LoginForm = ({ theme, onLogin }) => {
                 "& .MuiOutlinedInput-root": {
                   borderRadius: theme.shape.borderRadiusSmall,
                   "&:hover fieldset": {
-                    borderColor: theme.palette.primary.contrastText,
+                    borderColor: "background.button",
                   },
                   "&.Mui-focused fieldset": {
-                    borderColor: theme.palette.primary.contrastText,
+                    borderColor: "background.button",
                   },
                 },
                 "& .MuiInputBase-input::placeholder": {
@@ -209,7 +209,7 @@ const LoginForm = ({ theme, onLogin }) => {
               sx={{
                 mt: 1,
                 "& .MuiFormLabel-root.MuiInputLabel-shrink": {
-                  backgroundColor: "white",
+                  backgroundColor: "background.paper",
                   padding: "0 5px"
                 },
                 "& .MuiInputLabel-root": {
@@ -221,10 +221,10 @@ const LoginForm = ({ theme, onLogin }) => {
                 "& .MuiOutlinedInput-root": {
                   borderRadius: theme.shape.borderRadiusSmall,
                   "&:hover fieldset": {
-                    borderColor: theme.palette.primary.contrastText,
+                    borderColor: "background.button",
                   },
                   "&.Mui-focused fieldset": {
-                    borderColor: theme.palette.primary.contrastText,
+                    borderColor: "background.button",
                   },
                 },
                 "& .MuiInputBase-input::placeholder": {
@@ -254,13 +254,16 @@ const LoginForm = ({ theme, onLogin }) => {
                 mt: 3,
                 minHeight: theme.custom.loginButtonHeight,
                 borderRadius: theme.shape.borderRadiusSmall,
-                backgroundColor: "text.primary",
+                backgroundColor: "background.button",
                 color: "background.default",
                 textTransform: "none",
                 fontSize: theme.custom.loginButtonFontSize,
                 boxShadow: "0 4px 12px rgba(33, 37, 41, 0.2)",
+                transition: "all 0.3s ease-in-out",
                 "&:hover": {
-                  backgroundColor: "text.primary",
+                  transition: "all 0.3s ease-in-out",
+                  backgroundColor: "background.button",
+                  opacity: 0.9,
                   boxShadow: "0 6px 16px rgba(33, 37, 41, 0.3)",
                 },
               }}
@@ -340,7 +343,7 @@ const LoginForm = ({ theme, onLogin }) => {
                 sx={{
                   mb: 2,
                   "& .MuiFormLabel-root.MuiInputLabel-shrink": {
-                  backgroundColor: "secondary.main",
+                  backgroundColor: "background.paper",
                   padding: "0 5px"
                 },
                   "& .MuiInputLabel-root": {
@@ -352,10 +355,10 @@ const LoginForm = ({ theme, onLogin }) => {
                   "& .MuiOutlinedInput-root": {
                     borderRadius: theme.shape.borderRadiusSmall,
                     "&:hover fieldset": {
-                      borderColor: theme.palette.primary.contrastText,
+                      borderColor: "background.button",
                     },
                     "&.Mui-focused fieldset": {
-                      borderColor: theme.palette.primary.contrastText,
+                      borderColor: "background.button",
                     },
                   },
                   "& .MuiInputBase-input::placeholder": {
@@ -368,15 +371,18 @@ const LoginForm = ({ theme, onLogin }) => {
                 fullWidth
                 onClick={handleForgotPassword}
                 sx={{
-                  backgroundColor: "text.primary",
+                  backgroundColor: "background.button",
                   color: "background.default",
                   borderRadius: theme.shape.borderRadiusSmall,
                   textTransform: "none",
                   fontSize: theme.custom.loginButtonFontSize,
                   minHeight: theme.custom.loginButtonHeight,
                   boxShadow: "0 4px 12px rgba(33, 37, 41, 0.2)",
+                  transition: "all 0.3s ease-in-out",
                   "&:hover": {
-                    backgroundColor: "text.primary",
+                    transition: "all 0.3s ease-in-out",
+                    backgroundColor: "background.button",
+                    opacity: 0.9,
                     boxShadow: "0 6px 16px rgba(33, 37, 41, 0.3)",
                   },
                 }}

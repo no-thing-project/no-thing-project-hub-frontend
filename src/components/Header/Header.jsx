@@ -89,13 +89,13 @@ const Header = ({ currentUser, token }) => {
   };
 
   return (
-    <AppBar position="sticky" elevation={0} className="top-bar">
+    <AppBar position="sticky" elevation={0} className="top-bar" sx={{ backgroundColor: "background.default" }}>
       <Toolbar className="top-bar-toolbar">
         <Box className="top-bar-left">
-          <Typography variant="h5" className="welcome-text">
+          <Typography variant="h5" className="welcome-text" sx={{ color: "text.primary" }}>
             Welcome, {userName}. {randomPrediction}
           </Typography>
-          <Typography variant="body1" className="date-text">
+          <Typography variant="body1" className="date-text" sx={{ color: "text.secondary" }}>
             {currentDate}
           </Typography>
         </Box>

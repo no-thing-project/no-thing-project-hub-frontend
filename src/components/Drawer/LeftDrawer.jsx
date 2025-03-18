@@ -29,6 +29,7 @@ const LeftDrawer = ({ onLogout }) => {
           flexDirection: "column",
           alignItems: "center",
           width: 72,
+          backgroundColor: "background.default",
         },
       }}
     >

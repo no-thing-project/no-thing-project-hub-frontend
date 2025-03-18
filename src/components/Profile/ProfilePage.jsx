@@ -66,7 +66,7 @@ const ProfilePage = ({ currentUser, onLogout, token }) => {
   if (error) return <div>Error: {error}</div>;
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", backgroundColor: "#F8F8F8" }}>
+    <Box sx={{ display: "flex", minHeight: "100vh", backgroundColor: "background.default" }}>
       <LeftDrawer onLogout={onLogout} />
       <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
         <Header currentUser={currentUser} token={token} />

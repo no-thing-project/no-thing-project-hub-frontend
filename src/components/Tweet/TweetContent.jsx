@@ -76,13 +76,14 @@ const TweetContent = React.memo(
         onMouseLeave={handleMouseLeave}
         sx={{
           padding: "16px",
-          backgroundColor: hovered ? "#f5f5f5" : "#fff",
+          backgroundColor: hovered ? "background.default" : "background.paper",
           borderRadius: 1,
           minWidth: "180px",
           maxWidth: "300px",
           boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-          transition: "transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease",
+          transition: "all 0.2s ease-in-out",
           "&:hover": {
+            transition: "all 0.2s ease-in-out",
             transform: "scale(1.01)",
             boxShadow: "0 6px 16px rgba(0,0,0,0.15)",
           },

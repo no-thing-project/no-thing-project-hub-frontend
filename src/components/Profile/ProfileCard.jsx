@@ -34,14 +34,14 @@ const customSwitchSx = {
       transform: "translateX(18px)",
       color: "#fff",
       "& + .MuiSwitch-track": {
-        backgroundColor: "#3E435D",
+        backgroundColor: "background.button",
         opacity: 1,
       },
     },
     "&.Mui-disabled": {
       color: "#9e9e9e",
       "& + .MuiSwitch-track": {
-        backgroundColor: "#9e9e9e",
+        backgroundColor: "background.toggleDisabled",
         opacity: 1,
       },
     },
@@ -52,19 +52,19 @@ const customSwitchSx = {
     height: 20,
     borderRadius: 10,
     transition: "all 0.2s ease",
-    backgroundColor: "#fff",
+    backgroundColor: "background.default",
     "&.Mui-disabled": {
-      backgroundColor: "#bdbdbd",
+      backgroundColor: "background.default",
       boxShadow: "none",
     },
   },
   "& .MuiSwitch-track": {
     borderRadius: 12,
-    backgroundColor: "#BEBEBE",
+    backgroundColor: "background.toggleOff",
     opacity: 1,
     transition: "all 0.2s ease",
     "&.Mui-disabled": {
-      backgroundColor: "#eeeeee",
+      backgroundColor: "background.toggleDisabled",
       opacity: 0.7,
     },
   },
@@ -100,7 +100,7 @@ const ProfileField = ({
           sx={{
             // Прибираємо рамки
             "& .MuiOutlinedInput-notchedOutline": { border: "none" },
-            backgroundColor: "#F8F8F8",
+            backgroundColor: "background.default",
             borderRadius: 0.8,
             ...editSx,
           }}
@@ -120,7 +120,7 @@ const ProfileField = ({
           onChange={onChange(field)}
           sx={{
             "& .MuiOutlinedInput-notchedOutline": { border: "none" },
-            backgroundColor: "#F8F8F8",
+            backgroundColor: "background.default",
             borderRadius: 0.8,
             ...editSx,
           }}
@@ -218,7 +218,7 @@ const ProfileCard = React.memo(({ currentUser, isOwnProfile }) => {
         sx={{
           borderRadius: 1.5,
           mb: 3,
-          backgroundColor: "#fff",
+          backgroundColor: "background.paper",
           boxShadow: "none",
         }}
       >
@@ -259,10 +259,12 @@ const ProfileCard = React.memo(({ currentUser, isOwnProfile }) => {
                       boxShadow: "none",
                       padding: "10px 20px",
                       transition: "all 0.5s ease",
+                      backgroundColor: "background.button",
+                      color: "background.paper",
                       ":hover": {
                         boxShadow: "none",
-                        backgroundColor: "#3E435D",
-                        color: "#fff",
+                        backgroundColor: "background.default",
+                        color: "text.primary",
                         transition: "all 0.5s ease",
                       },
                     }}
@@ -279,10 +281,12 @@ const ProfileCard = React.memo(({ currentUser, isOwnProfile }) => {
                       boxShadow: "none",
                       padding: "10px 20px",
                       transition: "all 0.5s ease",
+                      backgroundColor: "background.default",
+                      color: "text.primary",
                       ":hover": {
                         boxShadow: "none",
-                        backgroundColor: "#3E435D",
-                        color: "#fff",
+                        backgroundColor: "background.button",
+                        color: "background.paper",
                         transition: "all 0.5s ease",
                       },
                     }}
@@ -302,10 +306,12 @@ const ProfileCard = React.memo(({ currentUser, isOwnProfile }) => {
                     boxShadow: "none",
                     padding: "10px 20px",
                     transition: "all 0.5s ease",
+                    backgroundColor: "background.button",
+                    color: "background.paper",
                     ":hover": {
                       boxShadow: "none",
-                      backgroundColor: "#3E435D",
-                      color: "#fff",
+                      backgroundColor: "background.default",
+                      color: "text.primary",
                       transition: "all 0.5s ease",
                     },
                   }}
@@ -324,7 +330,7 @@ const ProfileCard = React.memo(({ currentUser, isOwnProfile }) => {
           <Card
             sx={{
               borderRadius: 1.5,
-              backgroundColor: "#fff",
+              backgroundColor: "background.paper",
               boxShadow: "none",
             }}
           >
@@ -445,7 +451,7 @@ const ProfileCard = React.memo(({ currentUser, isOwnProfile }) => {
           <Card
             sx={{
               borderRadius: 1.5,
-              backgroundColor: "#fff",
+              backgroundColor: "background.paper",
               boxShadow: "none",
             }}
           >
@@ -521,7 +527,7 @@ const ProfileCard = React.memo(({ currentUser, isOwnProfile }) => {
           <Card
             sx={{
               borderRadius: 1.5,
-              backgroundColor: "#fff",
+              backgroundColor: "background.paper",
               boxShadow: "none",
               mb: 3,
             }}
@@ -544,7 +550,7 @@ const ProfileCard = React.memo(({ currentUser, isOwnProfile }) => {
                         checked={userData.notifications.email}
                         onChange={handleSwitchChange("notifications", "email")}
                         sx={customSwitchSx}
-                        disabled={true}
+                        disabled={false}
                       />
                     }
                     label="Email"
@@ -576,7 +582,7 @@ const ProfileCard = React.memo(({ currentUser, isOwnProfile }) => {
           <Card
             sx={{
               borderRadius: 1.5,
-              backgroundColor: "#fff",
+              backgroundColor: "background.paper",
               boxShadow: "none",
             }}
           >

@@ -15,6 +15,7 @@
     "axios": "^1.8.1",
     "cross-env": "^7.0.3",
     "react": "^19.0.0",
+    "react-chartjs-2": "^5.3.0",
     "react-dom": "^19.0.0",
     "react-draggable": "^4.4.6",
     "react-router-dom": "^7.2.0",
@@ -28,15 +29,11 @@
     "start:development": "cross-env APP_ENV=development react-scripts start",
     "start:staging": "cross-env APP_ENV=staging react-scripts start",
     "start:production": "cross-env APP_ENV=production react-scripts start",
-
-
     "build": "react-scripts build",
     "build:local": "cross-env APP_ENV=local react-scripts build",
     "build:development": "cross-env APP_ENV=development react-scripts build",
     "build:staging": "cross-env APP_ENV=staging react-scripts build",
     "build:production": "cross-env APP_ENV=production react-scripts build",
-
-    
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "serve": "serve -s build",

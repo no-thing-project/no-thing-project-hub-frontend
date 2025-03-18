@@ -20,7 +20,7 @@ const ClassesPage = ({ currentUser, onLogout, token }) => {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => {
-        const data = res.data?.content;
+        const data = res.data?.content.classes;
         setClasses(data || []);
         setLoading(false);
       })
@@ -52,7 +52,7 @@ const ClassesPage = ({ currentUser, onLogout, token }) => {
 
   return (
     <>
-      <Box sx={{ display: "flex", minHeight: "100vh", backgroundColor: "#F8F8F8" }}>
+      <Box sx={{ display: "flex", minHeight: "100vh", backgroundColor: "background.default" }}>
         <LeftDrawer onLogout={onLogout} />
         <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
           <Header currentUser={currentUser} token={token} />

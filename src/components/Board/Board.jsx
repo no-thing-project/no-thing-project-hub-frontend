@@ -177,25 +177,9 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
     [handleMouseUp]
   );
 
-  const isTweetVisible = useCallback(
-    (tweet) => {
-      if (!boardMainRef.current) return true;
-      const { clientWidth, clientHeight } = boardMainRef.current;
-      const tweetScreenX = tweet.x * scale + offset.x;
-      const tweetScreenY = tweet.y * scale + offset.y;
-      return (
-        tweetScreenX >= 0 &&
-        tweetScreenX <= clientWidth &&
-        tweetScreenY >= 0 &&
-        tweetScreenY <= clientHeight
-      );
-    },
-    [scale, offset]
-  );
-
   return (
-    <Box sx={{ display: "flex", width: "100vw", height: "100vh", overflow: "hidden" }}>
-      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", position: "relative" }}>
+    <Box sx={{ display: "flex", width: "100vw", height: "100vh", overflow: "hidden"}}>
+      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", position: "relative"}}>
         {/* Кнопка "Назад" у верхньому лівому кутку */}
         <Box
           sx={{
@@ -258,7 +242,7 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
               left: 0,
               width: BOARD_SIZE,
               height: BOARD_SIZE,
-              backgroundColor: "#fff",
+              backgroundColor: "background.paper",
               backgroundImage: "radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)",
               backgroundSize: "20px 20px",
               boxShadow: "inset 0 0 10px rgba(0,0,0,0.1)",
@@ -332,7 +316,7 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
               display: "flex",
               alignItems: "center",
               gap: 1,
-              backgroundColor: "rgba(255,255,255,0.8)",
+              backgroundColor: "background.paper",
               borderRadius: 1,
               padding: "4px",
             }}
@@ -367,7 +351,7 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
               display: "flex",
               alignItems: "center",
               gap: 1,
-              backgroundColor: "rgba(255,255,255,0.8)",
+              backgroundColor: "background.paper",
               borderRadius: 1,
               padding: "4px",
             }}

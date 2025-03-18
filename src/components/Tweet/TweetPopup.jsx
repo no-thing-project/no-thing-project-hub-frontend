@@ -30,7 +30,7 @@ const TweetPopup = ({ x, y, draft, onDraftChange, onSubmit, onClose }) => {
         left: x,
         p: 2,
         minWidth: "200px",
-        backgroundColor: "#fff",
+        backgroundColor: "background.paper",
       }}
     >
       <TextField
@@ -47,7 +47,7 @@ const TweetPopup = ({ x, y, draft, onDraftChange, onSubmit, onClose }) => {
         sx={{
           marginBottom: 3,
           "& .MuiFormLabel-root.MuiInputLabel-shrink": {
-            backgroundColor: "white",
+            backgroundColor: "background.paper",
             padding: "0 5px",
           },
           "& .MuiInputLabel-root": {
@@ -60,10 +60,10 @@ const TweetPopup = ({ x, y, draft, onDraftChange, onSubmit, onClose }) => {
           "& .MuiOutlinedInput-root": {
             borderRadius: theme.shape.borderRadiusSmall,
             "&:hover fieldset": {
-              borderColor: theme.palette.primary.contrastText,
+              borderColor: "background.button",
             },
             "&.Mui-focused fieldset": {
-              borderColor: theme.palette.primary.contrastText,
+              borderColor: "background.button",
             },
           },
           "& .MuiInputBase-input::placeholder": {
@@ -80,7 +80,7 @@ const TweetPopup = ({ x, y, draft, onDraftChange, onSubmit, onClose }) => {
             fontWeight: 500,
             borderRadius: 0.8,
             boxShadow: "none",
-            backgroundColor: "#3E435D",
+            backgroundColor: "background.button",
             color: "#fff",
             padding: "10px 20px",
             transition: "all 0.5s ease",
@@ -106,7 +106,7 @@ const TweetPopup = ({ x, y, draft, onDraftChange, onSubmit, onClose }) => {
             transition: "all 0.5s ease",
             ":hover": {
               boxShadow: "none",
-              backgroundColor: "#3E435D",
+              backgroundColor: "background.button",
               color: "#fff",
               transition: "all 0.5s ease",
             },

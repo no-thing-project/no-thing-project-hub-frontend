@@ -30,7 +30,7 @@ const GatesSeciton = ({ currentUser, gates }) => {
         sx={{
           borderRadius: 2.5,
           mb: 3,
-          backgroundColor: "#fff",
+          backgroundColor: "background.paper",
           boxShadow: "none",
         }}
       >
@@ -68,10 +68,12 @@ const GatesSeciton = ({ currentUser, gates }) => {
                 boxShadow: "none",
                 padding: "10px 20px",
                 transition: "all 0.5s ease",
+                backgroundColor: "background.button",
+                color: "background.paper",
                 ":hover": {
                   boxShadow: "none",
-                  backgroundColor: "#3E435D",
-                  color: "#fff",
+                  backgroundColor: "background.default",
+                  color: "text.primary",
                   transition: "all 0.5s ease",
                 },
               }}
@@ -95,10 +97,13 @@ const GatesSeciton = ({ currentUser, gates }) => {
               cursor: "pointer",
               borderRadius: 2,
               p: 2,
-              transition: "transform 0.2s ease-in-out",
-              backgroundColor: "#fff",
+              transition: "all 0.3s ease-in-out",
+              backgroundColor: "background.paper",
+              boxShadow: "none",
               ":hover": {
+                backgroundColor: "background.hover",
                 transform: "translateY(-2px)",
+                transition: "all 0.3s ease-in-out",
                 boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
               },
             }}

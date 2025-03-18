@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { Box, Typography } from "@mui/material";
-import LeftDrawer from "../Drawer/LeftDrawer";
+import LeftDrawer from "../Drawer/LeftDrawer.jsx";
 import Header from "../Header/Header.jsx";
 import axios from "axios";
-import config from "../../config";
+import config from "../../config.js";
+import HomeSection from "./HomeSection.jsx";
 
 const HomePage = ({ currentUser, onLogout, token }) => {
   const { userId } = useParams();
@@ -65,22 +66,17 @@ const HomePage = ({ currentUser, onLogout, token }) => {
 
   return (
     <Box
-      sx={{ display: "flex", minHeight: "100vh", backgroundColor: "#F8F8F8" }}
+      sx={{
+        display: "flex",
+        minHeight: "100vh",
+        backgroundColor: "background.default",
+      }}
     >
       <LeftDrawer onLogout={onLogout} />
       <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
         <Header currentUser={currentUser} token={token} />
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            flexGrow: 1,
-          }}
-        >
-          <Typography variant="h4" sx={{ mt: 2, ml: 2 }}>
-            Home Page - Welcome, {currentUser?.username || "User"}
-          </Typography>
+        <Box sx={{ flex: 1, p: 3 }}>
+          <HomeSection currentUser={currentUser} />
         </Box>
       </Box>
     </Box>
