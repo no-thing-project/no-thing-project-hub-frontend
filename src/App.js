@@ -6,19 +6,21 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import LoginForm from "./components/features/forms/LoginForm/LoginForm";
-import Board from "./components/social-features/Board/Board";
-import ResetPasswordForm from "./components/features/forms/ResetPasswordForm/ResetPasswordForm";
-import ProfilePage from "./pages/ProfilePage";
+
 import "./index.css";
 import { ThemeProvider } from "@mui/material";
 import axios from "axios";
 import config from "./config";
 import theme from "./Theme";
+import ProfilePage from "./pages/ProfilePage";
 import HomePage from "./pages/HomePage";
 import BoardsPage from "./pages/BoardsPage";
 import GatesPage from "./pages/GatesPage";
 import ClassesPage from "./pages/ClassesPage";
+
+import LoginForm from "./components/forms/LoginForm/LoginForm";
+import ResetPasswordForm from "./components/forms/ResetPasswordForm/ResetPasswordForm";
+import Board from "./components/social-features/Board/Board";
 
 const decodeToken = (token) => {
   try {
@@ -91,7 +93,6 @@ function App() {
           updated_at: authDataFromResponse.updated_at,
           created_content: authDataFromResponse.created_content,
           dateOfBirth: authDataFromResponse.dateOfBirth,
-          total_points: authDataFromResponse.total_points,
           donated_points: authDataFromResponse.donated_points,
           gender: authDataFromResponse.gender,
           ethnicity: authDataFromResponse.ethnicity,

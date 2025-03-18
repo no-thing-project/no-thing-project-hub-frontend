@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import AppLayout from "../components/Layout/AppLayout";
-import ProfileCard from "../components/features/cards/ProfileCard/ProfileCard";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import ErrorMessage from "../components/Layout/ErrorMessage";
+import ProfileCard from "../components/cards/ProfileCard/ProfileCard";
 import { fetchProfile } from "../utils/apiPages";
 
 const ProfilePage = ({ currentUser, onLogout, token }) => {

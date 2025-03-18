@@ -1,7 +1,7 @@
 import React from "react";
 import { Box } from "@mui/material";
-import LeftDrawer from "../features/LeftDrawer/LeftDrawer";
-import Header from "../features/Header/Header";
+import LeftDrawer from "./LeftDrawer/LeftDrawer";
+import Header from "./Header/Header";
 
 const AppLayout = ({ currentUser, onLogout, token, children }) => {
   return (

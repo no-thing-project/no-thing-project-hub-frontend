@@ -15,7 +15,7 @@ import {
 import { Visibility, VisibilityOff } from "@mui/icons-material";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import config from "../../../../config";
+import config from "../../../config";
 
 const styles = {
   container: { minHeight: "100vh", display: "flex", alignItems: "center" },
