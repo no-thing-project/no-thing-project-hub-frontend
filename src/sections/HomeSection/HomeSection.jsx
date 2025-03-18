@@ -10,8 +10,8 @@ import {
   Legend,
 } from "chart.js";
 import UserHeader from "../../components/Layout/Header/UserHeader";
-import StatsCard from "../../components/cards/StatsCard/StatsCard";
-import BarChart from "../../components/charts/BarChart";
+import StatsCard from "../../components/Cards/StatsCard/StatsCard";
+import BarChart from "../../components/Charts/BarChart";
 import { chartColors } from "../../constants/colors";
 import { containerStyles, statsGridStyles, chartsGridStyles } from "../../styles/HomeSectionStyles";
 

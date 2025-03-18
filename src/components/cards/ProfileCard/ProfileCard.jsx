@@ -16,7 +16,7 @@ import {
 import axios from "axios";
 import React, { useCallback, useState } from "react";
 import config from "../../../config";
-import StatusBadge from "../../basic/badges/StatusBadge";
+import StatusBadge from "../../Basic/Badges/StatusBadge";
 
 /**
  * Кастомні стилі для тоглів (Switch), щоб виглядали як на скріні

@@ -18,8 +18,8 @@ import BoardsPage from "./pages/BoardsPage";
 import GatesPage from "./pages/GatesPage";
 import ClassesPage from "./pages/ClassesPage";
 
-import LoginForm from "./components/forms/LoginForm/LoginForm";
-import ResetPasswordForm from "./components/forms/ResetPasswordForm/ResetPasswordForm";
+import LoginForm from "./components/Forms/LoginForm/LoginForm";
+import ResetPasswordForm from "./components/Forms/ResetPasswordForm/ResetPasswordForm";
 import Board from "./components/social-features/Board/Board";
 
 const decodeToken = (token) => {

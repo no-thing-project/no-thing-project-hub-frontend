@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Box, Button, Card, CardActionArea, CardContent, Typography, Stack, IconButton, Chip } from "@mui/material";
 import { FavoriteBorder, Favorite, Lock, Public, Add } from "@mui/icons-material";
 import UserHeader from "../../components/Layout/Header/UserHeader";
-import CategoryChip from "../../components/chips/CategoryChip";
+import CategoryChip from "../../components/Chips/CategoryChip";
 import {
   containerStyles,
   buttonStyles,
