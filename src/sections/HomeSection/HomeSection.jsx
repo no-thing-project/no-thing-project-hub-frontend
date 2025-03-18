@@ -10,8 +10,8 @@ import {
   Tooltip,
   Legend
 } from 'chart.js';
-import StatusBadge from "../Profile/StatusBadge";
-import { options } from "./barOptions";
+import StatusBadge from "../../components/basic/badges/StatusBadge";
+import { options } from "./options/barOptions";
 
 ChartJS.register(
   CategoryScale,

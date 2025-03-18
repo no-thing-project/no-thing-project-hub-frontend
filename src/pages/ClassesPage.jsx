@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Box, CircularProgress, Snackbar, Alert } from "@mui/material";
-import LeftDrawer from "../Drawer/LeftDrawer.jsx";
-import Header from "../Header/Header.jsx";
+import LeftDrawer from "../components/features/LeftDrawer/LeftDrawer.jsx";
+import Header from "../components/features/Header/Header.jsx";
 import axios from "axios";
-import config from "../../config.js";
-import ClassesSection from "./ClassesSection.jsx";
+import config from "../config.js";
+import ClassesSection from "../sections/ClassesSection/ClassesSection.jsx";
 import { useNavigate, useParams } from "react-router-dom";
 
 const ClassesPage = ({ currentUser, onLogout, token }) => {

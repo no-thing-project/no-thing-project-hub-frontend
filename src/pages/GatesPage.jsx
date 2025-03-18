@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Box, CircularProgress } from "@mui/material";
-import LeftDrawer from "../Drawer/LeftDrawer";
-import Header from "../Header/Header.jsx";
+import LeftDrawer from "../components/features/LeftDrawer/LeftDrawer.jsx";
+import Header from "../components/features/Header/Header.jsx";
 import axios from "axios";
-import config from "../../config";
-import GatesSeciton from "./GatesSection.jsx";
+import config from "../config.js";
+import GatesSeciton from "../sections/GatesSection/GatesSection.jsx";
 
 const GatesPage = ({ currentUser, onLogout, token }) => {
   const [gates, setGates] = useState([]);

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Box, CircularProgress } from "@mui/material";
-import LeftDrawer from "../Drawer/LeftDrawer";
-import Header from "../Header/Header.jsx";
-import BoardsSection from "./BoardsSection.jsx";
+import LeftDrawer from "../components/features/LeftDrawer/LeftDrawer.jsx";
+import Header from "../components/features/Header/Header.jsx";
+import BoardsSection from "../sections/BoardsSection/BoardsSection.jsx";
 import axios from "axios";
-import config from "../../config";
+import config from "../config.js";
 
 const BoardsPage = ({ currentUser, boards, onLogout, token }) => {
   // Переконуємось, що boards – масив

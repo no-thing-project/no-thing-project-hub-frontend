@@ -9,7 +9,7 @@ import {
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { Add } from "@mui/icons-material";
-import StatusBadge from "../Profile/StatusBadge.jsx";
+import StatusBadge from "../../components/basic/badges/StatusBadge.jsx";
 
 const GatesSeciton = ({ currentUser, gates }) => {
   const navigate = useNavigate();

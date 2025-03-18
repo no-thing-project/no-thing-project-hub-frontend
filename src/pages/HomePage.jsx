@@ -1,14 +1,13 @@
-//src/components/Profile/ProfilePage.jsx
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { Box } from "@mui/material";
-import LeftDrawer from "../Drawer/LeftDrawer";
-import Header from "../Header/Header.jsx";
-import ProfileCard from "./ProfileCard";
+import { Box, Typography } from "@mui/material";
+import LeftDrawer from "../components/features/LeftDrawer/LeftDrawer.jsx";
+import Header from "../components/features/Header/Header.jsx";
 import axios from "axios";
-import config from "../../config";
+import config from "../config.js";
+import HomeSection from "../sections/HomeSection/HomeSection.jsx";
 
-const ProfilePage = ({ currentUser, onLogout, token }) => {
+const HomePage = ({ currentUser, onLogout, token }) => {
   const { userId } = useParams();
   const [profileData, setProfileData] = useState(null);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
@@ -47,7 +46,7 @@ const ProfilePage = ({ currentUser, onLogout, token }) => {
         });
         setError(
           err.response?.data?.errors?.[0] ||
-          `Failed to load profile: ${err.message}`
+            `Failed to load profile: ${err.message}`
         );
       } finally {
         setLoading(false);
@@ -66,19 +65,22 @@ const ProfilePage = ({ currentUser, onLogout, token }) => {
   if (error) return <div>Error: {error}</div>;
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", backgroundColor: "background.default" }}>
+    <Box
+      sx={{
+        display: "flex",
+        minHeight: "100vh",
+        backgroundColor: "background.default",
+      }}
+    >
       <LeftDrawer onLogout={onLogout} />
       <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
         <Header currentUser={currentUser} token={token} />
         <Box sx={{ flex: 1, p: 3 }}>
-          <ProfileCard
-            currentUser={profileData}
-            isOwnProfile={isOwnProfile}
-          />
+          <HomeSection currentUser={currentUser} />
         </Box>
       </Box>
     </Box>
   );
 };
 
-export default ProfilePage;
+export default HomePage;

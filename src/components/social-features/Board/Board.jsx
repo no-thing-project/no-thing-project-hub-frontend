@@ -7,7 +7,7 @@ import React, {
   useEffect,
 } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Box, Button, IconButton, Typography, Badge } from "@mui/material";
+import { Box, IconButton, Typography, Badge } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
 import PeopleIcon from "@mui/icons-material/People";
@@ -17,9 +17,9 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack"; // Імпорт кн�
 import DraggableTweet from "../Tweet/Tweet";
 import TweetPopup from "../Tweet/TweetPopup";
 import TweetContent from "../Tweet/TweetContent";
-import { useTweets } from "../../hooks/useTweets";
-import { useWebSocket } from "../../hooks/useWebSocket";
-import { BOARD_SIZE, useBoardInteraction } from "../../hooks/useBordIteractions";
+import { useTweets } from "../../../hooks/useTweets";
+import { useWebSocket } from "../../../hooks/useWebSocket";
+import { BOARD_SIZE, useBoardInteraction } from "../../../hooks/useBordIteractions";
 
 const Board = ({ token, boards, currentUser, onLogout }) => {
   const { id: boardId } = useParams();
@@ -122,7 +122,7 @@ const Board = ({ token, boards, currentUser, onLogout }) => {
   const {
     scale,
     offset,
-    setOffset,
+    // setOffset,
     dragging,
     centerBoard,
     handleZoomButton,

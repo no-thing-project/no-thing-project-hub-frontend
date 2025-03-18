@@ -6,19 +6,19 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import LoginForm from "./components/Login/LoginForm";
-import Board from "./components/Board/Board";
-import ResetPasswordForm from "./components/ResetPassword/ResetPasswordForm";
-import ProfilePage from "./components/Profile/ProfilePage";
+import LoginForm from "./components/features/forms/LoginForm/LoginForm";
+import Board from "./components/social-features/Board/Board";
+import ResetPasswordForm from "./components/features/forms/ResetPasswordForm/ResetPasswordForm";
+import ProfilePage from "./pages/ProfilePage";
 import "./index.css";
 import { ThemeProvider } from "@mui/material";
 import axios from "axios";
 import config from "./config";
 import theme from "./Theme";
-import HomePage from "./components/Home/HomePage";
-import BoardsPage from "./components/Boards/BoardsPage";
-import GatesPage from "./components/Gates/GatesPage";
-import ClassesPage from "./components/Classes/ClassesPage";
+import HomePage from "./pages/HomePage";
+import BoardsPage from "./pages/BoardsPage";
+import GatesPage from "./pages/GatesPage";
+import ClassesPage from "./pages/ClassesPage";
 
 const decodeToken = (token) => {
   try {

@@ -12,7 +12,7 @@ import {
   IconButton,
 } from "@mui/material";
 import { FavoriteBorder, Favorite, Lock, Public, Add } from "@mui/icons-material";
-import StatusBadge from "../Profile/StatusBadge";
+import StatusBadge from "../../components/basic/badges/StatusBadge";
 
 const BoardsSection = React.memo(({ currentUser, boards, boardClasses }) => {
   const navigate = useNavigate();

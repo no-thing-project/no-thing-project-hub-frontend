@@ -1,7 +1,7 @@
 //src/components/Tweet/TweetPopup.js
 import React, { useCallback } from "react";
 import { Paper, TextField, Button, Box } from "@mui/material";
-import theme from "../../Theme";
+import theme from "../../../Theme";
 
 const TweetPopup = ({ x, y, draft, onDraftChange, onSubmit, onClose }) => {
   const handleSubmit = useCallback(() => {
