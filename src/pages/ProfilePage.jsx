@@ -1,12 +1,10 @@
-//src/components/Profile/ProfilePage.jsx
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Box } from "@mui/material";
-import LeftDrawer from "../components/features/LeftDrawer/LeftDrawer";
-import Header from "../components/features/Header/Header";
+import AppLayout from "../components/Layout/AppLayout";
 import ProfileCard from "../components/features/cards/ProfileCard/ProfileCard";
-import axios from "axios";
-import config from "../config.js";
+import LoadingSpinner from "../components/Layout/LoadingSpinner";
+import ErrorMessage from "../components/Layout/ErrorMessage";
+import { fetchProfile } from "../utils/apiPages";
 
 const ProfilePage = ({ currentUser, onLogout, token }) => {
   const { userId } = useParams();
@@ -16,68 +14,34 @@ const ProfilePage = ({ currentUser, onLogout, token }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchProfile = async () => {
+    const loadProfile = async () => {
       setLoading(true);
       try {
-        const ownUserId = currentUser.anonymous_id;
-        console.log("Current user:", currentUser);
-        console.log("Requested userId from URL:", userId);
-        console.log("Hub API URL:", config.REACT_APP_HUB_API_URL);
-
-        if (!ownUserId) {
-          throw new Error("Current user ID is undefined");
-        }
-
-        if (!userId || userId === ownUserId) {
-          setProfileData(currentUser);
-          setIsOwnProfile(true);
-        } else {
-          const url = `${config.REACT_APP_HUB_API_URL}/api/v1/profile/${userId}`;
-          console.log("Fetching profile for userId at:", url);
-          const response = await axios.get(url);
-          setProfileData(response.data.authData);
-          setIsOwnProfile(false);
-        }
+        const { authData, isOwnProfile } = await fetchProfile(userId, currentUser, token);
+        setProfileData(authData);
+        setIsOwnProfile(isOwnProfile);
       } catch (err) {
-        console.error("Profile fetch error:", {
-          message: err.message,
-          status: err.response?.status,
-          data: err.response?.data,
-          url: err.config?.url,
-        });
-        setError(
-          err.response?.data?.errors?.[0] ||
-          `Failed to load profile: ${err.message}`
-        );
+        setError(err.message);
       } finally {
         setLoading(false);
       }
     };
 
     if (currentUser && token) {
-      fetchProfile();
+      loadProfile();
     } else {
       setError("Not authenticated");
       setLoading(false);
     }
   }, [userId, currentUser, token]);
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div>Error: {error}</div>;
+  if (loading) return <LoadingSpinner />;
+  if (error) return <ErrorMessage message={error} />;
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", backgroundColor: "background.default" }}>
-      <LeftDrawer onLogout={onLogout} />
-      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
-        <Header currentUser={currentUser} token={token} />
-        <Box sx={{ flex: 1, p: 3 }}>
-          <ProfileCard
-            currentUser={profileData}
-            isOwnProfile={isOwnProfile}
-          />
-        </Box>
-      </Box>
-    </Box>
+    <AppLayout currentUser={currentUser} onLogout={onLogout} token={token}>
+      <ProfileCard currentUser={profileData} isOwnProfile={isOwnProfile} />
+    </AppLayout>
   );
 };
 

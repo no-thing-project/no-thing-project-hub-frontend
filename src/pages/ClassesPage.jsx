@@ -1,81 +1,40 @@
-import React, { useState, useEffect } from "react";
-import { Box, CircularProgress, Snackbar, Alert } from "@mui/material";
-import LeftDrawer from "../components/features/LeftDrawer/LeftDrawer.jsx";
-import Header from "../components/features/Header/Header.jsx";
-import axios from "axios";
-import config from "../config.js";
-import ClassesSection from "../sections/ClassesSection/ClassesSection.jsx";
+import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import AppLayout from "../components/Layout/AppLayout";
+import ClassesSection from "../sections/ClassesSection/ClassesSection";
+import LoadingSpinner from "../components/Layout/LoadingSpinner";
+import { fetchClasses } from "../utils/apiPages";
 
 const ClassesPage = ({ currentUser, onLogout, token }) => {
   const navigate = useNavigate();
   const { gateId } = useParams();
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   useEffect(() => {
-    axios
-      .get(`${config.REACT_APP_HUB_API_URL}/api/v1/classes/${gateId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      .then((res) => {
-        const data = res.data?.content.classes;
-        setClasses(data || []);
-        setLoading(false);
-      })
-      .catch((error) => {
+    const loadClasses = async () => {
+      try {
+        const data = await fetchClasses(gateId, token);
+        setClasses(data);
+      } catch (error) {
         if (error.response?.status === 401) {
           onLogout();
         } else if (error.response?.status === 403) {
           navigate("/home");
-        } else {
-          setLoading(false);
         }
-      });
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadClasses();
   }, [gateId, token, onLogout, navigate]);
 
-  if (loading) {
-    return (
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: "100vh",
-        }}
-      >
-        <CircularProgress size={60} sx={{ color: "#3E435D" }} />
-      </Box>
-    );
-  }
+  if (loading) return <LoadingSpinner />;
 
   return (
-    <>
-      <Box sx={{ display: "flex", minHeight: "100vh", backgroundColor: "background.default" }}>
-        <LeftDrawer onLogout={onLogout} />
-        <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
-          <Header currentUser={currentUser} token={token} />
-          <Box sx={{ flex: 1, p: 3 }}>
-            <ClassesSection
-              currentUser={currentUser}
-              token={token}
-              gateId={gateId}
-              classes={classes}
-            />
-          </Box>
-        </Box>
-      </Box>
-      <Snackbar
-        open={Boolean(error)}
-        autoHideDuration={6000}
-        onClose={() => setError("")}
-      >
-        <Alert onClose={() => setError("")} severity="error" sx={{ width: "100%" }}>
-          {error}
-        </Alert>
-      </Snackbar>
-    </>
+    <AppLayout currentUser={currentUser} onLogout={onLogout} token={token}>
+      <ClassesSection currentUser={currentUser} token={token} gateId={gateId} classes={classes} />
+    </AppLayout>
   );
 };
 
