@@ -1,4 +1,3 @@
-// src/sections/ClassSection/ClassSection.jsx
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Button, Typography, Stack } from "@mui/material";
@@ -6,6 +5,8 @@ import { Add } from "@mui/icons-material";
 import UserHeader from "../../components/Headers/UserHeader";
 import CategoryChip from "../../components/Chips/CategoryChip";
 import BoardCard from "../../components/Cards/BoardCard";
+import { fetchBoardsByClass } from "../../utils/boardsApi";
+import { likeBoard, unlikeBoard } from "../../utils/boardsApi";
 
 const containerStyles = {
   display: "flex",
@@ -40,11 +41,31 @@ const cardGridStyles = {
 
 const ClassSection = ({ currentUser, classData, token, onCreate }) => {
   const navigate = useNavigate();
-  const boards = useMemo(() => classData?.boards || [], [classData]);
-
+  const [boards, setBoards] = useState([]);
   const [likedBoards, setLikedBoards] = useState({});
   const [activeCategory, setActiveCategory] = useState("All");
+  const [loadingBoards, setLoadingBoards] = useState(false);
+  const [errorBoards, setErrorBoards] = useState(null);
 
+  // Fetch boards for the class
+  useEffect(() => {
+    const loadBoards = async () => {
+      if (!classData?.class_id || !classData?.gate_id) return;
+      setLoadingBoards(true);
+      setErrorBoards(null);
+      try {
+        const fetchedBoards = await fetchBoardsByClass(classData.class_id, token);
+        setBoards(fetchedBoards);
+      } catch (err) {
+        setErrorBoards(err.message || "Failed to fetch boards");
+      } finally {
+        setLoadingBoards(false);
+      }
+    };
+    loadBoards();
+  }, [classData, token]);
+
+  // Initialize likedBoards state
   useEffect(() => {
     const newLikedBoards = boards.reduce(
       (acc, board) => ({
@@ -80,13 +101,53 @@ const ClassSection = ({ currentUser, classData, token, onCreate }) => {
     }
   }, [navigate]);
 
-  const handleLike = useCallback((e, board_id) => {
+  const handleLike = useCallback(async (e, board_id) => {
     e.stopPropagation();
-    setLikedBoards((prev) => ({
-      ...prev,
-      [board_id]: !prev[board_id],
-    }));
-  }, []);
+    const isLiked = likedBoards[board_id];
+    try {
+      if (isLiked) {
+        await unlikeBoard(board_id, token);
+        setLikedBoards((prev) => ({
+          ...prev,
+          [board_id]: false,
+        }));
+        setBoards((prev) =>
+          prev.map((board) =>
+            board.board_id === board_id
+              ? {
+                  ...board,
+                  liked_by: board.liked_by.filter(
+                    (like) => like.user_id !== currentUser?.anonymous_id
+                  ),
+                }
+              : board
+          )
+        );
+      } else {
+        await likeBoard(board_id, token);
+        setLikedBoards((prev) => ({
+          ...prev,
+          [board_id]: true,
+        }));
+        setBoards((prev) =>
+          prev.map((board) =>
+            board.board_id === board_id
+              ? {
+                  ...board,
+                  liked_by: [
+                    ...(board.liked_by || []),
+                    { user_id: currentUser?.anonymous_id },
+                  ],
+                }
+              : board
+          )
+        );
+      }
+    } catch (err) {
+      console.error(`Error ${isLiked ? "unliking" : "liking"} board:`, err);
+      // Optionally revert the UI change if the API call fails
+    }
+  }, [likedBoards, token, currentUser]);
 
   const handleCategoryClick = useCallback((cat) => {
     setActiveCategory(cat);
@@ -98,6 +159,22 @@ const ClassSection = ({ currentUser, classData, token, onCreate }) => {
         <Typography variant="h6" color="error">
           Error: User or class data is missing. Please try again.
         </Typography>
+      </Box>
+    );
+  }
+
+  if (loadingBoards) {
+    return (
+      <Box sx={{ textAlign: "center", mt: 5 }}>
+        <Typography>Loading boards...</Typography>
+      </Box>
+    );
+  }
+
+  if (errorBoards) {
+    return (
+      <Box sx={{ textAlign: "center", mt: 5 }}>
+        <Typography color="error">{errorBoards}</Typography>
       </Box>
     );
   }

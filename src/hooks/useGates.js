@@ -1,6 +1,6 @@
 // src/hooks/useGates.js
 import { useState, useCallback } from "react";
-import { fetchGates, fetchGateById } from "../utils/apiPages";
+import { fetchGates, fetchGateById } from "../utils/gatesApi";
 
 export const useGates = (token) => {
   const [gates, setGates] = useState([]);

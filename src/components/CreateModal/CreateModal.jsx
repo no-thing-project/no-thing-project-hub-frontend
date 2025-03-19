@@ -12,12 +12,12 @@ import {
   InputLabel,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { createGate, fetchGates } from "../../utils/apiPages";
+import { createGate, fetchGates } from "../../utils/gatesApi";
 import { createClassInGate, fetchClassesByGate } from "../../utils/classesApi";
-import { createBoardInClass, createBoardInGate, fetchBoardByIdClass, fetchBoardByIdGate } from "../../utils/boardsApi";
+import { createBoardInClass, createBoardInGate } from "../../utils/boardsApi";
 
 
-const CreateModal = ({gate_id, open, onClose, entityType, token, onSuccess }) => {
+const CreateModal = ({ open, onClose, entityType, token, onSuccess }) => {
   const theme = useTheme();
   const [formData, setFormData] = useState({});
   const [gates, setGates] = useState([]);
@@ -31,7 +31,7 @@ const CreateModal = ({gate_id, open, onClose, entityType, token, onSuccess }) =>
         const fetchedGates = await fetchGates(token);
         setGates(fetchedGates);
         if (entityType === "board") {
-          const allClasses = await fetchClassesByGate(gate_id, token);
+          const allClasses = await fetchClassesByGate(token);
           setClasses(allClasses);
         }
       } catch (err) {
