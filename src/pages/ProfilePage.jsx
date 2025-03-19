@@ -8,7 +8,7 @@ import { fetchProfile } from "../utils/apiPages";
 import config from "../config";
 
 const ProfilePage = ({ currentUser, onLogout, token }) => {
-  const { userId } = useParams();
+  const { anonymous_id } = useParams();
   const [profileData, setProfileData] = useState(null);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -41,7 +41,7 @@ const ProfilePage = ({ currentUser, onLogout, token }) => {
     const loadProfile = async () => {
       setLoading(true);
       try {
-        const { authData, isOwnProfile } = await fetchProfile(userId, currentUser, token);
+        const { authData, isOwnProfile } = await fetchProfile(anonymous_id, currentUser, token);
         setProfileData(authData);
         setIsOwnProfile(isOwnProfile);
       } catch (err) {
@@ -57,7 +57,7 @@ const ProfilePage = ({ currentUser, onLogout, token }) => {
       setError("Not authenticated");
       setLoading(false);
     }
-  }, [userId, currentUser, token]);
+  }, [anonymous_id, currentUser, token]);
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} />;

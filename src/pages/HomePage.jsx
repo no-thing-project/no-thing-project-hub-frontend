@@ -1,3 +1,4 @@
+// src/pages/HomePage.jsx
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import AppLayout from "../components/Layout/AppLayout";
@@ -7,7 +8,7 @@ import ErrorMessage from "../components/Layout/ErrorMessage";
 import { fetchProfile } from "../utils/apiPages";
 
 const HomePage = ({ currentUser, onLogout, token }) => {
-  const { userId } = useParams();
+  const { anonymous_id } = useParams();
   const [profileData, setProfileData] = useState(null);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -17,11 +18,19 @@ const HomePage = ({ currentUser, onLogout, token }) => {
     const loadProfile = async () => {
       setLoading(true);
       try {
-        const { authData, isOwnProfile } = await fetchProfile(userId, currentUser, token);
-        setProfileData(authData);
-        setIsOwnProfile(isOwnProfile);
+        if (anonymous_id) {
+          if (!currentUser) {
+            throw new Error("Current user is not authenticated");
+          }
+          const { authData, isOwnProfile } = await fetchProfile(anonymous_id, currentUser, token);
+          setProfileData(authData);
+          setIsOwnProfile(isOwnProfile);
+        } else {
+          setProfileData(currentUser);
+          setIsOwnProfile(true);
+        }
       } catch (err) {
-        setError(err.message);
+        setError(err.message || "Failed to load profile");
       } finally {
         setLoading(false);
       }
@@ -33,14 +42,14 @@ const HomePage = ({ currentUser, onLogout, token }) => {
       setError("Not authenticated");
       setLoading(false);
     }
-  }, [userId, currentUser, token]);
+  }, [anonymous_id, currentUser, token]);
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} />;
 
   return (
     <AppLayout currentUser={currentUser} onLogout={onLogout} token={token}>
-      <HomeSection currentUser={currentUser} />
+      <HomeSection currentUser={currentUser} profileData={profileData} isOwnProfile={isOwnProfile} />
     </AppLayout>
   );
 };

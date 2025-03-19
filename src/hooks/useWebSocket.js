@@ -3,17 +3,17 @@ import { useEffect, useRef } from "react";
 import io from "socket.io-client";
 import config from "../config";
 
-export const useWebSocket = (token, boardId, currentUser, setTweets, onLogout, navigate) => {
+export const useWebSocket = (token, board_id, currentUser, setTweets, onLogout, navigate) => {
   const socketRef = useRef(null);
 
   useEffect(() => {
     const socket = io(`${config.REACT_APP_WS_URL}/boards`, {
-      query: { token, boardId },
+      query: { token, board_id },
     });
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      socket.emit("joinBoard", boardId);
+      socket.emit("joinBoard", board_id);
     });
 
     socket.on("tweetAdded", (newTweet) => {
@@ -48,7 +48,7 @@ export const useWebSocket = (token, boardId, currentUser, setTweets, onLogout, n
     return () => {
       socket.disconnect();
     };
-  }, [token, boardId, currentUser, setTweets, onLogout, navigate]);
+  }, [token, board_id, currentUser, setTweets, onLogout, navigate]);
 
   return socketRef;
 };

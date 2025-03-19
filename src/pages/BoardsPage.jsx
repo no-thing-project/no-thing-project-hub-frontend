@@ -1,42 +1,41 @@
+// src/pages/BoardsPage.jsx
 import React, { useEffect, useState } from "react";
 import AppLayout from "../components/Layout/AppLayout";
 import BoardsSection from "../sections/BoardsSection/BoardsSection";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
-import { fetchBoardClasses } from "../utils/apiPages";
+import { Typography } from "@mui/material";
+import CreateModal from "../components/CreateModal/CreateModal";
+import { useBoards } from "../hooks/useBoards";
 
-const BoardsPage = ({ currentUser, boards, onLogout, token }) => {
-  const boardsList = Array.isArray(boards) ? boards : [];
-  const [boardClasses, setBoardClasses] = useState({});
+const BoardsPage = ({ currentUser, onLogout, token }) => {
+  const { boards, loading, error, fetchBoardsList } = useBoards(token);
+  const [openModal, setOpenModal] = useState(false);
 
   useEffect(() => {
-    boardsList.forEach((board) => {
-      if (board.gate_id && board.class_id && !boardClasses[board.board_id]) {
-        fetchBoardClasses(board.gate_id, board.class_id, token)
-          .then((classData) => {
-            if (classData) {
-              setBoardClasses((prev) => ({ ...prev, [board.board_id]: classData }));
-            }
-          })
-          .catch((error) => {
-            console.error("Помилка при отриманні класу для борду", board.board_id, error);
-          });
-      }
-    });
-  }, [boardsList, token]);
+    fetchBoardsList();
+  }, [fetchBoardsList]);
 
-  const isLoading = boardsList.some(
-    (board) => board.gate_id && board.class_id && !boardClasses[board.board_id]
-  );
+  const handleCreateSuccess = () => {
+    fetchBoardsList();
+  };
 
-  if (isLoading) return <LoadingSpinner />;
+  if (loading) return <LoadingSpinner />;
+  if (error) return <Typography color="error">{error}</Typography>;
 
   return (
     <AppLayout currentUser={currentUser} onLogout={onLogout} token={token}>
       <BoardsSection
         currentUser={currentUser}
         boards={boards}
-        boardClasses={boardClasses}
+        boardClasses={{}}
+        onCreate={() => setOpenModal(true)}
+      />
+      <CreateModal
+        open={openModal}
+        onClose={() => setOpenModal(false)}
+        entityType="board"
         token={token}
+        onSuccess={handleCreateSuccess}
       />
     </AppLayout>
   );

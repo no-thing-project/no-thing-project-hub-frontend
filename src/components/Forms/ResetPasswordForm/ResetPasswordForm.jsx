@@ -1,3 +1,4 @@
+// src/components/Forms/ResetPasswordForm/ResetPasswordForm.js
 import React, { useState, useEffect } from "react";
 import {
   Container,
@@ -44,7 +45,7 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
       setToken(tokenFromUrl);
       console.log("Token extracted from URL:", tokenFromUrl);
     } else {
-      setError("Токен відсутній у URL");
+      setError("Token is missing in URL");
       console.error("No token found in URL");
     }
   }, []);
@@ -52,13 +53,13 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
   const validateInputs = () => {
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
 
-    if (!newPassword) return "Новий пароль є обов'язковим";
+    if (!newPassword) return "New password is required";
     if (!passwordRegex.test(newPassword))
-      return "Пароль має містити мінімум 8 символів, великі та малі літери, цифру";
-    if (newPassword.length > 128) return "Пароль не може перевищувати 128 символів";
-    if (newPassword !== confirmPassword) return "Паролі не співпадають";
-    if (!token) return "Токен не знайдено";
-    if (token.length < 32) return "Токен має бути щонайменше 32 символи";
+      return "Password must contain at least 8 characters, uppercase, lowercase, and a number";
+    if (newPassword.length > 128) return "Password cannot exceed 128 characters";
+    if (newPassword !== confirmPassword) return "Passwords do not match";
+    if (!token) return "Token not found";
+    if (token.length < 32) return "Token must be at least 32 characters";
     return null;
   };
 
@@ -81,17 +82,19 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
       });
       console.log("Response from server:", response.data);
 
-      const { token: jwtToken, authData } = response.data;
+      const { token: jwtToken, profile } = response.data; // Adjust based on actual API response
+      if (!jwtToken || !profile) throw new Error("Invalid reset password response");
 
-      setSuccess("Пароль успішно змінено! Ви увійшли в систему.");
+      setSuccess("Password successfully changed! Logging you in...");
       localStorage.setItem("token", jwtToken);
-      onLogin(jwtToken, authData);
-
+      onLogin(jwtToken, profile);
       setTimeout(() => navigate("/profile", { replace: true }), 2000);
     } catch (err) {
-      console.error("Error during reset password:", err);
+      console.error("Error during reset password:", err.response?.data || err);
       setError(
-        err.response?.data?.errors?.[0] || "Помилка мережі, спробуйте ще раз"
+        err.response?.data?.errors?.[0] ||
+        err.response?.data?.message ||
+        "Network error, please try again"
       );
     }
   };
@@ -107,11 +110,11 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
       <Container maxWidth="sm" sx={styles.container}>
         <Paper elevation={3} sx={styles.paper}>
           <Typography variant="h5" sx={styles.title}>
-            Створити пароль
+            Create Password
           </Typography>
           <form onSubmit={handleSubmit}>
             <TextField
-              label="Новий пароль"
+              label="New Password"
               type={showNewPassword ? "text" : "password"}
               fullWidth
               margin="normal"
@@ -131,7 +134,7 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
               }}
             />
             <TextField
-              label="Підтвердіть пароль"
+              label="Confirm Password"
               type={showConfirmPassword ? "text" : "password"}
               fullWidth
               margin="normal"
@@ -151,7 +154,7 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
               }}
             />
             <Button type="submit" variant="contained" fullWidth sx={styles.button}>
-              Змінити пароль
+              Change Password
             </Button>
           </form>
           <Box sx={{ mt: 2, textAlign: "center" }}>
@@ -161,7 +164,7 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
               onClick={handleBackToLogin}
               sx={styles.backButton}
             >
-              Повернутися до входу
+              Back to Login
             </Button>
           </Box>
         </Paper>

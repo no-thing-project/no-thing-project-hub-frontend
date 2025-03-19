@@ -1,4 +1,4 @@
-// src/components/Login/LoginForm.js (HUB)
+// src/components/Login/LoginForm.js
 import React, { useState } from "react";
 import {
   Container,
@@ -67,22 +67,22 @@ const LoginForm = ({ theme, onLogin }) => {
     }
 
     try {
-      const res = await axios.post(
-        `${config.REACT_APP_HUB_API_URL}/api/v1/auth/login`,
-        {
-          email,
-          password,
-        }
-      );
-      const token = res.data.token;
-      const authData = res.data.profile;
-
+      const res = await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/auth/login`, {
+        email,
+        password,
+      });
+      const { token, profile } = res.data; // Adjust based on actual API response
+      if (!token || !profile) throw new Error("Invalid login response");
       localStorage.setItem("token", token);
-      onLogin(token, authData);
+      onLogin(token, profile);
+      setSuccess("Login successful! Redirecting...");
+      setTimeout(() => navigate("/home"), 1000); // Redirect after success
     } catch (err) {
-      console.error("Login error:", err);
+      console.error("Login error:", err.response?.data || err);
       setError(
-        err.response?.data?.errors?.[0] || "Network error, please try again"
+        err.response?.data?.errors?.[0] ||
+        err.response?.data?.message ||
+        "Network error, please try again"
       );
     }
   };
@@ -104,9 +104,11 @@ const LoginForm = ({ theme, onLogin }) => {
       setSuccess("An email with a password reset link has been sent!");
       setTimeout(() => handleCloseModal(), 2000);
     } catch (err) {
-      console.error("Forgot password error:", err);
+      console.error("Forgot password error:", err.response?.data || err);
       setError(
-        err.response?.data?.errors?.[0] || "Network error, please try again"
+        err.response?.data?.errors?.[0] ||
+        err.response?.data?.message ||
+        "Network error, please try again"
       );
     }
   };
@@ -132,7 +134,7 @@ const LoginForm = ({ theme, onLogin }) => {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          minHeight: "100vh"
+          minHeight: "100vh",
         }}
       >
         <Paper
@@ -140,14 +142,14 @@ const LoginForm = ({ theme, onLogin }) => {
           sx={{
             p: 5,
             borderRadius: theme.shape.borderRadiusMedium,
-            backgroundColor: "backgroung.paper",
+            backgroundColor: "background.paper",
             boxShadow: "0 8px 24px rgba(0, 0, 0, 0.1)",
             width: theme.custom.loginPaperWidth,
             maxWidth: theme.custom.loginPaperMaxWidth,
-            textAlign: "center"
+            textAlign: "center",
           }}
         >
-          <Box sx={{ textAlign: "center", mb: 3}}>
+          <Box sx={{ textAlign: "center", mb: 3 }}>
             <Typography
               variant="h4"
               sx={{ color: "text.primary", fontWeight: 600 }}
@@ -176,7 +178,7 @@ const LoginForm = ({ theme, onLogin }) => {
                 mt: 1,
                 "& .MuiFormLabel-root.MuiInputLabel-shrink": {
                   backgroundColor: "background.paper",
-                  padding: "0 5px"
+                  padding: "0 5px",
                 },
                 "& .MuiInputLabel-root": {
                   color: "text.secondary",
@@ -194,7 +196,7 @@ const LoginForm = ({ theme, onLogin }) => {
                   },
                 },
                 "& .MuiInputBase-input::placeholder": {
-                  color: theme.palette.text.secondary
+                  color: theme.palette.text.secondary,
                 },
               }}
             />
@@ -210,7 +212,7 @@ const LoginForm = ({ theme, onLogin }) => {
                 mt: 1,
                 "& .MuiFormLabel-root.MuiInputLabel-shrink": {
                   backgroundColor: "background.paper",
-                  padding: "0 5px"
+                  padding: "0 5px",
                 },
                 "& .MuiInputLabel-root": {
                   color: "text.secondary",
@@ -343,9 +345,9 @@ const LoginForm = ({ theme, onLogin }) => {
                 sx={{
                   mb: 2,
                   "& .MuiFormLabel-root.MuiInputLabel-shrink": {
-                  backgroundColor: "background.paper",
-                  padding: "0 5px"
-                },
+                    backgroundColor: "background.paper",
+                    padding: "0 5px",
+                  },
                   "& .MuiInputLabel-root": {
                     color: "text.secondary",
                   },

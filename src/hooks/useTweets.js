@@ -2,8 +2,10 @@ import { useCallback, useState, useMemo } from "react";
 import axios from "axios";
 import config from "../config.js";
 
-export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
+export const useTweets = (token, board_id, currentUser, onLogout, navigate) => {
   const [tweets, setTweets] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
   const handleAuthError = useCallback(
@@ -12,6 +14,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         onLogout();
         navigate("/login");
       }
+      setError(err.message || "Authentication error");
     },
     [onLogout, navigate]
   );
@@ -20,7 +23,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
     (tweet) => ({
       ...tweet,
       user: tweet.user || {
-        _id: tweet.user_id,
+        _id: tweet.user_id || tweet.user?.anonymous_id,
         username: tweet.username || (tweet.is_anonymous ? "Anonymous" : ""),
       },
       content: tweet.content || { type: "text", value: "" },
@@ -30,18 +33,20 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       x: tweet.position?.x || 0,
       y: tweet.position?.y || 0,
       timestamp: tweet.timestamp || new Date().toISOString(),
-      status: tweet.status || "approved", // Додаємо статус для модерації
-      editable_until: tweet.editable_until || new Date(Date.now() + 15 * 60 * 1000), // 15 хвилин для редагування
+      status: tweet.status || "approved",
+      editable_until: tweet.editable_until || new Date(Date.now() + 15 * 60 * 1000), // 15 minutes edit window
     }),
     [currentUser?.anonymous_id]
   );
 
-  // Отримати всі твіти
+  // Fetch all tweets for a board
   const fetchTweets = useCallback(
     async (options = { status: "approved", page: 1, limit: 20, sort: "created_at:-1" }) => {
+      setLoading(true);
+      setError(null);
       try {
         const { status, page, limit, sort } = options;
-        const res = await axios.get(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${boardId}`, {
+        const res = await axios.get(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${board_id}/`, {
           headers: authHeaders,
           params: { status, page, limit, sort },
         });
@@ -50,39 +55,48 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       } catch (err) {
         console.error("Error fetching tweets:", err);
         handleAuthError(err);
+      } finally {
+        setLoading(false);
       }
     },
-    [boardId, authHeaders, normalizeTweet, handleAuthError]
+    [board_id, authHeaders, normalizeTweet, handleAuthError]
   );
 
-  // Отримати один твіт за ID
+  // Fetch a single tweet by ID
   const fetchTweetById = useCallback(
-    async (tweetId) => {
+    async (tweet_id) => {
+      setLoading(true);
+      setError(null);
       try {
-        const res = await axios.get(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${boardId}/${tweetId}`, {
+        const res = await axios.get(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${board_id}/${tweet_id}`, {
           headers: authHeaders,
         });
         return normalizeTweet(res.data.content);
       } catch (err) {
         console.error("Error fetching tweet by ID:", err);
         handleAuthError(err);
+        return null;
+      } finally {
+        setLoading(false);
       }
     },
-    [boardId, authHeaders, normalizeTweet, handleAuthError]
+    [board_id, authHeaders, normalizeTweet, handleAuthError]
   );
 
-  // Створити твіт
+  // Create a tweet
   const createTweet = useCallback(
     async (content, x, y, parent_tweet_id, is_anonymous = false) => {
+      setLoading(true);
+      setError(null);
       try {
         const payload = {
           content: typeof content === "string" ? { type: "text", value: content } : content,
           position: { x, y },
-          board_id: boardId,
+          board_id: board_id,
           parent_tweet_id: parent_tweet_id || null,
           is_anonymous,
         };
-        const res = await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${boardId}`, payload, {
+        const res = await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${board_id}/`, payload, {
           headers: authHeaders,
         });
         const createdTweet = res.data.content || res.data;
@@ -90,46 +104,57 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           ...createdTweet,
           position: createdTweet.position || { x, y },
         });
-        setTweets((prev) => [normalizedTweet, ...prev]); // Оновлюємо локальний стан
+        setTweets((prev) => [normalizedTweet, ...prev]);
         return normalizedTweet;
       } catch (err) {
         console.error("Error creating tweet:", err);
         handleAuthError(err);
+        return null;
+      } finally {
+        setLoading(false);
       }
     },
-    [boardId, authHeaders, normalizeTweet, handleAuthError]
+    [board_id, authHeaders, normalizeTweet, handleAuthError]
   );
 
-  // Оновити твіт
+  // Update a tweet
   const updateTweet = useCallback(
     async (id, updates) => {
+      setLoading(true);
+      setError(null);
       try {
         const { content, position } = updates;
         const payload = {};
         if (content) payload.content = typeof content === "string" ? { type: "text", value: content } : content;
         if (position) payload.position = position;
 
-        await axios.put(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${boardId}/${id}`, payload, {
+        await axios.put(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${board_id}/${id}`, payload, {
           headers: authHeaders,
         });
-        const updatedTweet = await fetchTweetById(id); // Оновлюємо дані з сервера
-        setTweets((prev) =>
-          prev.map((tweet) => (tweet.tweet_id === id ? { ...tweet, ...updatedTweet } : tweet))
-        );
+        const updatedTweet = await fetchTweetById(id);
+        if (updatedTweet) {
+          setTweets((prev) =>
+            prev.map((tweet) => (tweet.tweet_id === id ? { ...tweet, ...updatedTweet } : tweet))
+          );
+        }
       } catch (err) {
         console.error("Error updating tweet:", err);
         handleAuthError(err);
+      } finally {
+        setLoading(false);
       }
     },
-    [boardId, authHeaders, fetchTweetById, handleAuthError]
+    [board_id, authHeaders, fetchTweetById, handleAuthError]
   );
 
-  // Переключити лайк
+  // Toggle like
   const toggleLike = useCallback(
     async (id, isLiked) => {
+      setLoading(true);
+      setError(null);
       try {
         const endpoint = isLiked ? "unlike" : "like";
-        const res = await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${id}/${endpoint}`, {}, {
+        const res = await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${board_id}/${id}/${endpoint}`, {}, {
           headers: authHeaders,
         });
         const updatedTweet = normalizeTweet(res.data.content || res.data);
@@ -140,33 +165,42 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       } catch (err) {
         console.error("Error toggling like:", err);
         handleAuthError(err);
+        return null;
+      } finally {
+        setLoading(false);
       }
     },
-    [authHeaders, normalizeTweet, handleAuthError]
+    [board_id, authHeaders, normalizeTweet, handleAuthError]
   );
 
-  // Видалити твіт
+  // Delete a tweet
   const deleteTweet = useCallback(
     async (id) => {
+      setLoading(true);
+      setError(null);
       try {
-        await axios.delete(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${boardId}/${id}`, {
+        await axios.delete(`${config.REACT_APP_HUB_API_URL}/api/v1/boards/${board_id}/tweets/${id}`, {
           headers: authHeaders,
         });
         setTweets((prev) => prev.filter((tweet) => tweet.tweet_id !== id));
       } catch (err) {
         console.error("Error deleting tweet:", err);
         handleAuthError(err);
+      } finally {
+        setLoading(false);
       }
     },
-    [boardId, authHeaders, handleAuthError]
+    [board_id, authHeaders, handleAuthError]
   );
 
-  // Отримати коментарі до твіту
+  // Get tweet comments
   const getTweetComments = useCallback(
-    async (tweetId, options = { page: 1, limit: 20 }) => {
+    async (tweet_id, options = { page: 1, limit: 20 }) => {
+      setLoading(true);
+      setError(null);
       try {
         const { page, limit } = options;
-        const res = await axios.get(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${tweetId}/comments`, {
+        const res = await axios.get(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${board_id}/${tweet_id}/comments`, {
           headers: authHeaders,
           params: { page, limit },
         });
@@ -174,34 +208,45 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       } catch (err) {
         console.error("Error fetching comments:", err);
         handleAuthError(err);
+        return [];
+      } finally {
+        setLoading(false);
       }
     },
-    [authHeaders, normalizeTweet, handleAuthError]
+    [board_id, authHeaders, normalizeTweet, handleAuthError]
   );
 
-  // Оновити статус твіту
+  // Update tweet status
   const updateTweetStatus = useCallback(
-    async (tweetId, status) => {
+    async (tweet_id, status) => {
+      setLoading(true);
+      setError(null);
       try {
         const payload = { status };
-        await axios.put(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${boardId}/${tweetId}/status`, payload, {
+        await axios.put(`${config.REACT_APP_HUB_API_URL}/api/v1/tweets/${board_id}/${tweet_id}/status`, payload, {
           headers: authHeaders,
         });
-        const updatedTweet = await fetchTweetById(tweetId);
-        setTweets((prev) =>
-          prev.map((tweet) => (tweet.tweet_id === tweetId ? { ...tweet, ...updatedTweet } : tweet))
-        );
+        const updatedTweet = await fetchTweetById(tweet_id);
+        if (updatedTweet) {
+          setTweets((prev) =>
+            prev.map((tweet) => (tweet.tweet_id === tweet_id ? { ...tweet, ...updatedTweet } : tweet))
+          );
+        }
       } catch (err) {
         console.error("Error updating tweet status:", err);
         handleAuthError(err);
+      } finally {
+        setLoading(false);
       }
     },
-    [boardId, authHeaders, fetchTweetById, handleAuthError]
+    [board_id, authHeaders, fetchTweetById, handleAuthError]
   );
 
   return {
     tweets,
     setTweets,
+    loading,
+    error,
     fetchTweets,
     fetchTweetById,
     createTweet,

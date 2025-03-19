@@ -1,4 +1,4 @@
-// src/sections/BoardsSection/BoardsSection.jsx
+// src/sections/ClassSection/ClassSection.jsx
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Button, Typography, Stack } from "@mui/material";
@@ -38,15 +38,15 @@ const cardGridStyles = {
   gap: 2,
 };
 
-const BoardsSection = React.memo(({ currentUser, boards, boardClasses, onCreate }) => {
+const ClassSection = ({ currentUser, classData, token, onCreate }) => {
   const navigate = useNavigate();
-  const boardsList = useMemo(() => (Array.isArray(boards) ? boards : []), [boards]);
+  const boards = useMemo(() => classData?.boards || [], [classData]);
 
   const [likedBoards, setLikedBoards] = useState({});
   const [activeCategory, setActiveCategory] = useState("All");
 
   useEffect(() => {
-    const newLikedBoards = boardsList.reduce(
+    const newLikedBoards = boards.reduce(
       (acc, board) => ({
         ...acc,
         [board.board_id]:
@@ -57,26 +57,20 @@ const BoardsSection = React.memo(({ currentUser, boards, boardClasses, onCreate 
       {}
     );
     setLikedBoards(newLikedBoards);
-  }, [boardsList, currentUser]);
+  }, [boards, currentUser]);
 
   const derivedCategories = useMemo(() => {
-    const cats = boardsList.map((board) => {
-      const classData = board.class_id ? boardClasses[board.board_id] : null;
-      return classData ? classData.name : board.category || "Uncategorized";
-    });
+    const cats = boards.map((board) => board.category || "Uncategorized");
     return ["All", ...new Set(cats)];
-  }, [boardsList, boardClasses]);
+  }, [boards]);
 
   const filteredBoards = useMemo(() => {
-    if (activeCategory === "All") return boardsList;
-    return boardsList.filter((board) => {
-      const classData = board.class_id ? boardClasses[board.board_id] : null;
-      const category = classData
-        ? classData.name
-        : board.category || "Uncategorized";
-      return category === activeCategory;
-    });
-  }, [boardsList, activeCategory, boardClasses]);
+    return activeCategory === "All"
+      ? boards
+      : boards.filter(
+          (board) => (board.category || "Uncategorized") === activeCategory
+        );
+  }, [boards, activeCategory]);
 
   const handleBoardClick = useCallback((board_id) => {
     if (board_id) {
@@ -88,10 +82,6 @@ const BoardsSection = React.memo(({ currentUser, boards, boardClasses, onCreate 
 
   const handleLike = useCallback((e, board_id) => {
     e.stopPropagation();
-    if (!board_id) {
-      console.error("Invalid board ID for like");
-      return;
-    }
     setLikedBoards((prev) => ({
       ...prev,
       [board_id]: !prev[board_id],
@@ -102,21 +92,11 @@ const BoardsSection = React.memo(({ currentUser, boards, boardClasses, onCreate 
     setActiveCategory(cat);
   }, []);
 
-  if (!currentUser) {
+  if (!currentUser || !classData) {
     return (
       <Box sx={{ textAlign: "center", mt: 5 }}>
         <Typography variant="h6" color="error">
-          Error: User data is missing. Please log in.
-        </Typography>
-      </Box>
-    );
-  }
-
-  if (!Array.isArray(boards)) {
-    return (
-      <Box sx={{ textAlign: "center", mt: 5 }}>
-        <Typography variant="h6" color="error">
-          Error: Unable to load boards. Please try again later.
+          Error: User or class data is missing. Please try again.
         </Typography>
       </Box>
     );
@@ -138,6 +118,13 @@ const BoardsSection = React.memo(({ currentUser, boards, boardClasses, onCreate 
           </Button>
         }
       />
+      <Typography variant="h5" sx={{ mb: 2 }}>
+        {classData.name}
+      </Typography>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+        {classData.description || "No description provided."}
+      </Typography>
+
       {filteredBoards.length > 0 && (
         <Box sx={filtersStyles}>
           <Stack direction="row" spacing={1}>
@@ -159,6 +146,7 @@ const BoardsSection = React.memo(({ currentUser, boards, boardClasses, onCreate 
           </Typography>
         </Box>
       )}
+
       {filteredBoards.length > 0 ? (
         <Box sx={cardGridStyles}>
           {filteredBoards.map((board) => (
@@ -168,7 +156,7 @@ const BoardsSection = React.memo(({ currentUser, boards, boardClasses, onCreate 
               liked={likedBoards[board.board_id] || false}
               onClick={() => handleBoardClick(board.board_id)}
               onLike={(e) => handleLike(e, board.board_id)}
-              boardClasses={boardClasses}
+              boardClasses={{}}
             />
           ))}
         </Box>
@@ -182,14 +170,12 @@ const BoardsSection = React.memo(({ currentUser, boards, boardClasses, onCreate 
           }}
         >
           <Typography variant="h5" sx={{ color: "text.secondary" }}>
-            No boards found
+            No boards found in this class
           </Typography>
         </Box>
       )}
     </Box>
   );
-});
+};
 
-BoardsSection.displayName = "BoardsSection";
-
-export default BoardsSection;
+export default ClassSection;
