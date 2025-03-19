@@ -1,4 +1,4 @@
-// hooks/useBoardInteraction.js
+// hooks/useBoard.js
 import { useState, useCallback, useRef } from "react";
 
 export const BOARD_SIZE = 10000;

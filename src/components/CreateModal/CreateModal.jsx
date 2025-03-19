@@ -12,18 +12,12 @@ import {
   InputLabel,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import {
-  createGate,
-  createClass,
-  createClassInGate,
-  createBoard,
-  createBoardInGate,
-  createBoardInClass,
-  fetchGates,
-  fetchClasses,
-} from "../../utils/apiPages";
+import { createGate, fetchGates } from "../../utils/apiPages";
+import { createClassInGate, fetchClassesByGate } from "../../utils/classesApi";
+import { createBoardInClass, createBoardInGate, fetchBoardByIdClass, fetchBoardByIdGate } from "../../utils/boardsApi";
 
-const CreateModal = ({ open, onClose, entityType, token, onSuccess }) => {
+
+const CreateModal = ({gate_id, open, onClose, entityType, token, onSuccess }) => {
   const theme = useTheme();
   const [formData, setFormData] = useState({});
   const [gates, setGates] = useState([]);
@@ -37,7 +31,7 @@ const CreateModal = ({ open, onClose, entityType, token, onSuccess }) => {
         const fetchedGates = await fetchGates(token);
         setGates(fetchedGates);
         if (entityType === "board") {
-          const allClasses = await fetchClasses(token);
+          const allClasses = await fetchClassesByGate(gate_id, token);
           setClasses(allClasses);
         }
       } catch (err) {
@@ -65,8 +59,7 @@ const CreateModal = ({ open, onClose, entityType, token, onSuccess }) => {
           break;
         case "class":
           result = formData.gate_id
-            ? await createClassInGate(formData.gate_id, { name: formData.name }, token)
-            : await createClass({ name: formData.name }, token);
+            await createClassInGate(formData.gate_id, { name: formData.name }, token)
           break;
         case "board":
           if (formData.gatgate_ideId) {
@@ -74,7 +67,7 @@ const CreateModal = ({ open, onClose, entityType, token, onSuccess }) => {
           } else if (formData.class_id) {
             result = await createBoardInClass(formData.class_id, { name: formData.name }, token);
           } else {
-            result = await createBoard({ name: formData.name }, token);
+            result = await createBoardInGate({ name: formData.name }, token);
           }
           break;
         default:

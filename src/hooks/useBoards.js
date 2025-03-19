@@ -1,53 +1,95 @@
 import { useState, useCallback, useEffect } from "react";
-import { fetchBoardsByGate } from "../utils/apiPages";
-import config from "../config";
+import { fetchBoards, fetchBoardById, fetchBoardsByGate, fetchBoardByIdGate } from "../utils/boardsApi";
 
-export const useBoards = (token, initialBoardId = null) => {
+export const useBoards = (token, gate_id, initialBoardId = null, onLogout, navigate) => {
   const [boards, setBoards] = useState([]);
   const [board, setBoard] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const handleAuthError = useCallback(
+    (err) => {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        onLogout();
+        navigate("/login");
+      }
+      setError(err.message || "Authentication error");
+    },
+    [onLogout, navigate]
+  );
+
+  // Fetch all boards (not tied to a specific gate)
   const fetchBoardsList = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${config.REACT_APP_HUB_API_URL}/api/v1/boards`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json();
-      console.log("Fetched boards list:", data);
-      setBoards(data?.content?.boards || []);
+      const fetchedBoards = await fetchBoards(token);
+      console.log("Fetched boards list:", fetchedBoards);
+      setBoards(fetchedBoards);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch boards");
       console.error("Error fetching boards list:", err);
+      handleAuthError(err);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, handleAuthError]);
 
-  const fetchBoard = useCallback(async (gate_id) => {
+  // Fetch boards by gate
+  const fetchBoardsByGateId = useCallback(async () => {
+    if (!gate_id) {
+      setError("Gate ID is required to fetch boards");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchBoardsByGate(gate_id, token);
-      console.log("Fetched board:", data);
-      if (data) setBoard(data);
-      return data;
+      const fetchedBoards = await fetchBoardsByGate(gate_id, token);
+      console.log("Fetched boards by gate:", fetchedBoards);
+      setBoards(fetchedBoards);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch board");
+      console.error("Error fetching boards by gate:", err);
+      handleAuthError(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [gate_id, token, handleAuthError]);
+
+  // Fetch a single board by ID
+  const fetchBoard = useCallback(async (board_id) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const fetchedBoard = await fetchBoardById(board_id, token);
+      console.log("Fetched board:", fetchedBoard);
+      if (fetchedBoard) {
+        setBoard(fetchedBoard);
+      } else {
+        throw new Error("Board not found");
+      }
+      return fetchedBoard;
+    } catch (err) {
       console.error("Error fetching board:", err);
+      handleAuthError(err);
       throw err;
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [ token, handleAuthError]);
 
+  // Fetch the initial board if initialBoardId is provided
   useEffect(() => {
     if (initialBoardId) {
       fetchBoard(initialBoardId);
     }
   }, [initialBoardId, fetchBoard]);
 
-  return { boards, board, loading, error, fetchBoardsList, fetchBoard };
+  return {
+    boards,
+    board,
+    loading,
+    error,
+    fetchBoardsList, // Fetch all boards
+    fetchBoardsByGate: fetchBoardsByGateId, // Fetch boards by gate
+    fetchBoard, // Fetch a single board
+  };
 };

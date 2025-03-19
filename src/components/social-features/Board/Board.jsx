@@ -10,20 +10,26 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DraggableTweet from "../Tweet/Tweet";
 import TweetPopup from "../Tweet/TweetPopup";
 import TweetContent from "../Tweet/TweetContent";
+import { useBoards } from "../../../hooks/useBoards";
 import { useTweets } from "../../../hooks/useTweets";
 import { useWebSocket } from "../../../hooks/useWebSocket";
-import { useBoards } from "../../../hooks/useBoards";
 import { BOARD_SIZE, useBoardInteraction } from "../../../hooks/useBoard";
 import LoadingSpinner from "../../Layout/LoadingSpinner";
 import ErrorMessage from "../../Layout/ErrorMessage";
 
 const Board = ({ token, currentUser, onLogout }) => {
-  const { board_Id } = useParams();
+  const { gate_Id, board_id } = useParams(); // Extract gateId and boardId from the URL
   const navigate = useNavigate();
   const boardMainRef = useRef(null);
 
-  // Fetch board data
-  const { board, loading: boardLoading, error: boardError, fetchBoard } = useBoards(token, board_Id);
+  // Fetch board data using useBoards hook
+  const { board, loading: boardLoading, error: boardError, fetchBoard } = useBoards(
+    token,
+    gate_Id,
+    board_id,
+    onLogout,
+    navigate
+  );
 
   // Fetch tweets
   const {
@@ -36,12 +42,12 @@ const Board = ({ token, currentUser, onLogout }) => {
     updateTweet,
     toggleLike,
     deleteTweet,
-  } = useTweets(token, board_Id, currentUser, onLogout, navigate);
+  } = useTweets(token, board_id, currentUser, onLogout, navigate);
 
   // WebSocket for real-time updates
   const socketRef = useWebSocket(
     token,
-    board_Id,
+    board_id,
     currentUser,
     setTweets,
     onLogout,
@@ -57,18 +63,18 @@ const Board = ({ token, currentUser, onLogout }) => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        await fetchBoard(board_Id);
-        await fetchTweets();
+        await fetchBoard(board_id); // Fetch the board
+        await fetchTweets(); // Fetch the tweets after the board is loaded
       } catch (err) {
         console.error("Failed to load board or tweets:", err);
       }
     };
     loadData();
-  }, [board_Id, fetchBoard, fetchTweets]);
+  }, [board_id, fetchBoard, fetchTweets]);
 
   // Handle tweet creation
   const handleCreateTweet = useCallback(
-    async (text, x, y) => {
+    async (board_id, text, x, y) => {
       const newTweet = await createTweet(
         text,
         x,
@@ -77,16 +83,16 @@ const Board = ({ token, currentUser, onLogout }) => {
       );
       if (newTweet && socketRef.current) {
         newTweet.timestamp = newTweet.timestamp || new Date().toISOString();
-        socketRef.current.emit("newTweet", { board_Id, ...newTweet });
+        socketRef.current.emit("newTweet", { board_id, ...newTweet });
       }
       setReplyTweet(null);
     },
-    [createTweet, socketRef, board_Id, replyTweet]
+    [createTweet, socketRef, board_id, replyTweet]
   );
 
   // Handle tweet update (including position)
   const handleUpdateTweet = useCallback(
-    async (id, updates) => {
+    async (tweet_id, updates) => {
       const { content, position } = updates;
       const payload = {};
       if (content)
@@ -97,46 +103,46 @@ const Board = ({ token, currentUser, onLogout }) => {
           x:
             position.x !== undefined
               ? position.x
-              : tweets.find((t) => t.tweet_id === id)?.position?.x || 0,
+              : tweets.find((t) => t.tweet_id === tweet_id)?.position?.x || 0,
           y:
             position.y !== undefined
               ? position.y
-              : tweets.find((t) => t.tweet_id === id)?.position?.y || 0,
+              : tweets.find((t) => t.tweet_id === tweet_id)?.position?.y || 0,
         };
       }
-      await updateTweet(id, payload);
+      await updateTweet(tweet_id, payload);
       if (socketRef.current) {
         socketRef.current.emit("tweetUpdated", {
-          board_Id,
-          tweet_id: id,
+          board_id,
+          tweet_id: tweet_id,
           ...payload,
           timestamp: new Date().toISOString(),
         });
       }
     },
-    [updateTweet, socketRef, board_Id, tweets]
+    [updateTweet, socketRef, board_id, tweets]
   );
 
   // Handle like toggle
   const handleToggleLike = useCallback(
-    async (id, isLiked) => {
-      const updatedTweet = await toggleLike(id, isLiked);
+    async (tweet_id, isLiked) => {
+      const updatedTweet = await toggleLike(tweet_id, isLiked);
       if (updatedTweet && socketRef.current) {
-        socketRef.current.emit("tweetUpdated", { board_Id, ...updatedTweet });
+        socketRef.current.emit("tweetUpdated", { board_id, ...updatedTweet });
       }
     },
-    [toggleLike, socketRef, board_Id]
+    [toggleLike, socketRef, board_id]
   );
 
   // Handle tweet deletion
   const handleDeleteTweet = useCallback(
-    async (id) => {
-      await deleteTweet(id);
+    async (tweet_id) => {
+      await deleteTweet(tweet_id);
       if (socketRef.current) {
-        socketRef.current.emit("tweetDeleted", { board_Id, tweet_id: id });
+        socketRef.current.emit("tweetDeleted", { board_id, tweet_id: tweet_id });
       }
     },
-    [deleteTweet, socketRef, board_Id]
+    [deleteTweet, socketRef, board_id]
   );
 
   // Handle reply action
@@ -204,7 +210,7 @@ const Board = ({ token, currentUser, onLogout }) => {
     [handleMouseUp]
   );
 
-  // Loading and error states
+  // Loading and error states for both board and tweets
   if (boardLoading || tweetsLoading) return <LoadingSpinner />;
   if (boardError) return <ErrorMessage message={boardError} />;
   if (tweetsError) return <ErrorMessage message={tweetsError} />;

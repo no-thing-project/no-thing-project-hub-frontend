@@ -4,8 +4,8 @@ import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import ErrorMessage from "../components/Layout/ErrorMessage";
 import ProfileCard from "../components/Cards/ProfileCard";
-import { fetchProfile } from "../utils/apiPages";
 import config from "../config";
+import { fetchProfileById } from "../utils/profileApi";
 
 const ProfilePage = ({ currentUser, onLogout, token }) => {
   const { anonymous_id } = useParams();
@@ -41,7 +41,7 @@ const ProfilePage = ({ currentUser, onLogout, token }) => {
     const loadProfile = async () => {
       setLoading(true);
       try {
-        const { authData, isOwnProfile } = await fetchProfile(anonymous_id, currentUser, token);
+        const { authData, isOwnProfile } = await fetchProfileById(anonymous_id, currentUser, token);
         setProfileData(authData);
         setIsOwnProfile(isOwnProfile);
       } catch (err) {

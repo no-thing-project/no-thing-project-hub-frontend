@@ -5,7 +5,7 @@ import AppLayout from "../components/Layout/AppLayout";
 import HomeSection from "../sections/HomeSection/HomeSection";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import ErrorMessage from "../components/Layout/ErrorMessage";
-import { fetchProfile } from "../utils/apiPages";
+import { fetchProfileById } from "../utils/profileApi";
 
 const HomePage = ({ currentUser, onLogout, token }) => {
   const { anonymous_id } = useParams();
@@ -22,7 +22,7 @@ const HomePage = ({ currentUser, onLogout, token }) => {
           if (!currentUser) {
             throw new Error("Current user is not authenticated");
           }
-          const { authData, isOwnProfile } = await fetchProfile(anonymous_id, currentUser, token);
+          const { authData, isOwnProfile } = await fetchProfileById(anonymous_id, currentUser, token);
           setProfileData(authData);
           setIsOwnProfile(isOwnProfile);
         } else {

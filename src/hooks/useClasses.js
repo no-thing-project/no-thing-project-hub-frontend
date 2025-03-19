@@ -1,24 +1,19 @@
 // src/hooks/useClasses.js
 import { useState, useCallback } from "react";
-import {
-  fetchClasses,
-  fetchClassById,
-  createClass,
-  createClassInGate,
-  updateClass,
-  deleteClass,
-} from "../utils/apiPages";
+import { createClass, createClassInGate, deleteClass, fetchClassById, fetchClasses, fetchClassesByGate, updateClass } from "../utils/classesApi";
+import { deleteBoardClass } from "../utils/boardsApi";
+
 
 export const useClasses = (token) => {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const fetchAllClasses = useCallback(async () => {
+  const fetchClasses = useCallback(async (gate_id) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchClasses(token);
+      const data = await fetchClassesByGate(token, gate_id);
       setClasses(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch classes");
@@ -41,13 +36,12 @@ export const useClasses = (token) => {
     }
   }, [token]);
 
-  const createNewClass = useCallback(async (classData, gate_id) => {
+  const createNewClass = useCallback(async (gate_id, classData) => {
     setLoading(true);
     setError(null);
     try {
-      const newClass = gate_id
-        ? await createClassInGate(gate_id, classData, token)
-        : await createClass(classData, token);
+      const newClass = gate_id;
+        await createClassInGate(gate_id, classData, token);
       setClasses((prev) => [...prev, newClass]);
       return newClass;
     } catch (err) {
@@ -93,7 +87,6 @@ export const useClasses = (token) => {
     classes,
     loading,
     error,
-    fetchAllClasses,
     fetchClass,
     createNewClass,
     updateExistingClass,
