@@ -1,63 +1,40 @@
-import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+// src/pages/ProfilePage.jsx
+import React, { useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import ErrorMessage from "../components/Layout/ErrorMessage";
 import ProfileCard from "../components/Cards/ProfileCard";
-import config from "../config";
-import { fetchProfileById } from "../utils/profileApi";
+import useProfile  from "../hooks/useProfile";
 
 const ProfilePage = ({ currentUser, onLogout, token }) => {
   const { anonymous_id } = useParams();
-  const [profileData, setProfileData] = useState(null);
-  const [isOwnProfile, setIsOwnProfile] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const handleUpdateProfile = async (updates) => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${config.REACT_APP_HUB_API_URL}/api/v1/profile/update`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(updates),
-      });
-      if (!response.ok) throw new Error("Failed to update profile");
-      const { content } = await response.json();
-      setProfileData(content);
-      return true;
-    } catch (err) {
-      setError(err.message);
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
+  const navigate = useNavigate();
+  const {
+    profileData,
+    isOwnProfile,
+    pointsHistory,
+    messages,
+    loading,
+    error,
+    fetchProfile,
+    updateProfile,
+    fetchPointsHistory,
+    getMessages,
+    sendMessage,
+    markMessageAsRead,
+    deleteMessage,
+  } = useProfile(token, currentUser, onLogout, navigate);
 
   useEffect(() => {
-    const loadProfile = async () => {
-      setLoading(true);
-      try {
-        const { authData, isOwnProfile } = await fetchProfileById(anonymous_id, currentUser, token);
-        setProfileData(authData);
-        setIsOwnProfile(isOwnProfile);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+    // Fetch the profile data
+    fetchProfile(anonymous_id);
 
-    if (currentUser && token) {
-      loadProfile();
-    } else {
-      setError("Not authenticated");
-      setLoading(false);
+    // Fetch points history if it's the user's own profile
+    if (currentUser?.anonymous_id === anonymous_id) {
+      fetchPointsHistory();
     }
-  }, [anonymous_id, currentUser, token]);
+  }, [anonymous_id, currentUser, fetchProfile, fetchPointsHistory]);
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} />;
@@ -65,9 +42,15 @@ const ProfilePage = ({ currentUser, onLogout, token }) => {
   return (
     <AppLayout currentUser={currentUser} onLogout={onLogout} token={token}>
       <ProfileCard
-        currentUser={profileData}
+        profileData={profileData}
         isOwnProfile={isOwnProfile}
-        onUpdate={handleUpdateProfile}
+        onUpdate={updateProfile}
+        pointsHistory={pointsHistory}
+        messages={messages}
+        onSendMessage={sendMessage}
+        onMarkMessageAsRead={markMessageAsRead}
+        onDeleteMessage={deleteMessage}
+        onGetMessages={() => getMessages(anonymous_id)} // Call when needed
       />
     </AppLayout>
   );

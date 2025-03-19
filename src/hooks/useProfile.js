@@ -1,222 +1,235 @@
-import { useState, useCallback, useRef, useEffect } from "react";
-import axios from "axios";
-import config from "../config";
-import { normalizeUserData } from "../utils/profileUtils";
+// src/hooks/useProfile.js
+import { useState, useCallback } from "react";
+import { debounce } from "lodash";
+import {
+  fetchProfile,
+  updateProfile,
+  deleteProfile,
+  fetchPointsHistory,
+  sendMessage,
+  getMessages,
+  markMessageAsRead,
+  deleteMessage,
+} from "../utils/profileApi";
+import { useEventCallback } from "@mui/material";
 
 const useProfile = (token, currentUser, onLogout, navigate) => {
   const [profileData, setProfileData] = useState(null);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [pointsHistory, setPointsHistory] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const cancelTokenSource = useRef(null);
 
-  // Cleanup function to cancel ongoing requests on unmount or token/currentUser change
-  useEffect(() => {
-    return () => {
-      if (cancelTokenSource.current) {
-        cancelTokenSource.current.cancel("Request canceled on cleanup");
+  const handleAuthError = useCallback(
+    (err) => {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        onLogout();
+        navigate("/login");
       }
-    };
-  }, [token, currentUser]);
-
-  // Fetch profile data by anonymous_id
-  const fetchProfile = useCallback(
-    async (anonymous_id) => {
-      if (cancelTokenSource.current) {
-        cancelTokenSource.current.cancel("Previous request canceled");
-      }
-
-      cancelTokenSource.current = axios.CancelToken.source();
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await axios.get(`${config.REACT_APP_HUB_API_URL}/api/v1/profile/${anonymous_id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-          cancelToken: cancelTokenSource.current.token,
-        });
-        const { content } = response.data;
-        setProfileData(content);
-        setIsOwnProfile(currentUser?.anonymous_id === anonymous_id);
-      } catch (err) {
-        if (axios.isCancel(err)) {
-          console.log("Request canceled:", err.message);
-        } else if (err.response?.status === 401 || err.response?.status === 403) {
-          onLogout();
-          navigate("/login");
-        } else {
-          setError(err.response?.data?.errors?.[0] || "Failed to fetch profile");
-        }
-      } finally {
-        setLoading(false);
-        cancelTokenSource.current = null;
-      }
+      setError(err.message || "Authentication error");
     },
-    [token, currentUser, onLogout, navigate]
+    [onLogout, navigate]
   );
 
-  // Update profile
-  const updateProfile = useCallback(
-    async (updates) => {
+  // Fetch profile by anonymous_id
+  const fetchProfileData = useCallback(
+    async (anonymous_id, signal) => {
+      if (!anonymous_id) {
+        setError("Anonymous ID is required to fetch profile");
+        return;
+      }
+      if (!currentUser || !token) {
+        setError("Not authenticated");
+        return;
+      }
       setLoading(true);
       setError(null);
       try {
-        const response = await axios.put(`${config.REACT_APP_HUB_API_URL}/api/v1/profile/update`, updates, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const { content } = response.data;
-        setProfileData(content);
+        const { authData, isOwnProfile } = await fetchProfile(
+          anonymous_id,
+          currentUser,
+          token,
+          signal
+        );
+        setProfileData(authData);
+        setIsOwnProfile(isOwnProfile);
+        // If it's the user's own profile, messages are included in the response
+        if (isOwnProfile && authData.messages) {
+          setMessages(authData.messages);
+        }
+      } catch (err) {
+        console.error("Error fetching profile:", err);
+        handleAuthError(err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [currentUser, token, handleAuthError]
+  );
+
+  // Update profile (debounced)
+  const updateProfileData = useEventCallback(
+    debounce(async (updates, signal) => {
+      if (!profileData) {
+        setError("No profile data to update");
+        return false;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const updatedProfile = await updateProfile(updates, token, signal);
+        setProfileData(updatedProfile);
         return true;
       } catch (err) {
-        setError(err.response?.data?.errors?.[0] || "Failed to update profile");
+        console.error("Error updating profile:", err);
+        handleAuthError(err);
         return false;
       } finally {
         setLoading(false);
       }
-    },
-    [token]
+    }, 500),
+    [profileData, token, handleAuthError]
   );
 
   // Delete profile
-  const deleteProfile = useCallback(
-    async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        await axios.delete(`${config.REACT_APP_HUB_API_URL}/api/v1/profile/delete`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        onLogout();
-        navigate("/");
-        return true;
-      } catch (err) {
-        setError(err.response?.data?.errors?.[0] || "Failed to delete profile");
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, onLogout, navigate]
-  );
+  const deleteProfileData = useCallback(async (signal) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await deleteProfile(token, signal);
+      onLogout();
+      navigate("/");
+      return true;
+    } catch (err) {
+      console.error("Error deleting profile:", err);
+      handleAuthError(err);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [token, onLogout, navigate, handleAuthError]);
 
   // Fetch points history
-  const fetchPointsHistory = useCallback(
-    async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await axios.get(`${config.REACT_APP_HUB_API_URL}/api/v1/profile/points/history`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        return response.data.content;
-      } catch (err) {
-        setError(err.response?.data?.errors?.[0] || "Failed to fetch points history");
-        return null;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token]
-  );
+  const fetchProfilePointsHistory = useCallback(async (signal) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const history = await fetchPointsHistory(token, signal);
+      setPointsHistory(history);
+      return history;
+    } catch (err) {
+      console.error("Error fetching points history:", err);
+      handleAuthError(err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleAuthError]);
 
   // Send message
-  const sendMessage = useCallback(
-    async (recipient_anonymous_id, content) => {
+  const sendProfileMessage = useCallback(
+    async (recipientId, content, signal) => {
       setLoading(true);
       setError(null);
       try {
-        const response = await axios.post(
-          `${config.REACT_APP_HUB_API_URL}/api/v1/profile/messages/send`,
-          { recipient_anonymous_id, content },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        return response.data.content;
+        const message = await sendMessage(recipientId, content, token, signal);
+        setMessages((prev) => [...prev, message]);
+        return message;
       } catch (err) {
-        setError(err.response?.data?.errors?.[0] || "Failed to send message");
+        console.error("Error sending message:", err);
+        handleAuthError(err);
         return null;
       } finally {
         setLoading(false);
       }
     },
-    [token]
+    [token, handleAuthError]
   );
 
   // Get messages
-  const getMessages = useCallback(
-    async (withUserId, limit = 50, offset = 0) => {
+  const getProfileMessages = useCallback(
+    async (withUserId, limit = 50, offset = 0, signal) => {
       setLoading(true);
       setError(null);
       try {
-        const response = await axios.get(`${config.REACT_APP_HUB_API_URL}/api/v1/profile/messages`, {
-          headers: { Authorization: `Bearer ${token}` },
-          params: { withUserId, limit, offset },
-        });
-        return response.data.content;
+        const fetchedMessages = await getMessages(withUserId, limit, offset, token, signal);
+        setMessages(fetchedMessages);
+        return fetchedMessages;
       } catch (err) {
-        setError(err.response?.data?.errors?.[0] || "Failed to fetch messages");
+        console.error("Error fetching messages:", err);
+        handleAuthError(err);
         return null;
       } finally {
         setLoading(false);
       }
     },
-    [token]
+    [token, handleAuthError]
   );
 
   // Mark message as read
-  const markMessageAsRead = useCallback(
-    async (messageId) => {
+  const markProfileMessageAsRead = useCallback(
+    async (messageId, signal) => {
       setLoading(true);
       setError(null);
       try {
-        await axios.put(
-          `${config.REACT_APP_HUB_API_URL}/api/v1/profile/messages/${messageId}/read`,
-          {},
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        return true;
+        const success = await markMessageAsRead(messageId, token, signal);
+        if (success) {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.message_id === messageId ? { ...msg, is_read: true } : msg
+            )
+          );
+        }
+        return success;
       } catch (err) {
-        setError(err.response?.data?.errors?.[0] || "Failed to mark message as read");
+        console.error("Error marking message as read:", err);
+        handleAuthError(err);
         return false;
       } finally {
         setLoading(false);
       }
     },
-    [token]
+    [token, handleAuthError]
   );
 
   // Delete message
-  const deleteMessage = useCallback(
-    async (messageId) => {
+  const deleteProfileMessage = useCallback(
+    async (messageId, signal) => {
       setLoading(true);
       setError(null);
       try {
-        await axios.delete(`${config.REACT_APP_HUB_API_URL}/api/v1/profile/messages/${messageId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        return true;
+        const success = await deleteMessage(messageId, token, signal);
+        if (success) {
+          setMessages((prev) => prev.filter((msg) => msg.message_id !== messageId));
+        }
+        return success;
       } catch (err) {
-        setError(err.response?.data?.errors?.[0] || "Failed to delete message");
+        console.error("Error deleting message:", err);
+        handleAuthError(err);
         return false;
       } finally {
         setLoading(false);
       }
     },
-    [token]
+    [token, handleAuthError]
   );
-  
 
   return {
     profileData,
     isOwnProfile,
+    pointsHistory,
+    messages,
     loading,
     error,
-    fetchProfile,
-    updateProfile,
-    deleteProfile,
-    fetchPointsHistory,
-    sendMessage,
-    getMessages,
-    markMessageAsRead,
-    deleteMessage,
+    fetchProfile: fetchProfileData,
+    updateProfile: updateProfileData,
+    deleteProfile: deleteProfileData,
+    fetchPointsHistory: fetchProfilePointsHistory,
+    sendMessage: sendProfileMessage,
+    getMessages: getProfileMessages,
+    markMessageAsRead: markProfileMessageAsRead,
+    deleteMessage: deleteProfileMessage,
   };
 };
 
