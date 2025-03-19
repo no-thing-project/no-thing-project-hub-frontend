@@ -62,7 +62,7 @@ const CreateModal = ({ open, onClose, entityType, token, onSuccess }) => {
             await createClassInGate(formData.gate_id, { name: formData.name }, token)
           break;
         case "board":
-          if (formData.gatgate_ideId) {
+          if (formData.gate_id) {
             result = await createBoardInGate(formData.gate_id, { name: formData.name }, token);
           } else if (formData.class_id) {
             result = await createBoardInClass(formData.class_id, { name: formData.name }, token);

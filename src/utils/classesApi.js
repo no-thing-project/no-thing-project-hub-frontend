@@ -17,7 +17,7 @@ export const fetchClasses = async (token) => {
 // Fetch classes by gate
 export const fetchClassesByGate = async (gate_id, token) => {
   try {
-    const response = await api.get(`/api/v1/classes/gate/${gate_id}`, {
+    const response = await api.get(`/api/v1/classes/${gate_id}/`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data?.content?.classes || [];
@@ -69,7 +69,7 @@ export const updateClass = async (class_id, classData, token) => {
 // Update class status
 export const updateClassStatus = async (gate_id, class_id, statusData, token) => {
   try {
-    const response = await api.put(`/api/v1/classes/gate/${gate_id}/${class_id}/status`, statusData, {
+    const response = await api.put(`/api/v1/classes/${gate_id}/${class_id}/status`, statusData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data?.content || null;

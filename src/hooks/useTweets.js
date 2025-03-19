@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 
 import { normalizeTweet } from "../utils/tweetUtils";
-import { createTweetApi, deleteTweetApi, fetchTweetByIdApi, fetchTweetsApi, getTweetCommentsApi, toggleLikeApi, updateTweetApi, updateTweetStatusApi } from "../utils/tweetsApi";
+import { createTweetApi, deleteTweetApi, fetchTweetById, fetchTweetsApi, getTweetCommentsApi, toggleLikeApi, updateTweetApi, updateTweetStatusApi } from "../utils/tweetsApi";
 
 export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
   const [tweets, setTweets] = useState([]);
@@ -38,12 +38,12 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
   );
 
   // Fetch a single tweet by ID
-  const fetchTweetById = useCallback(
-    async (tweetId) => {
+  const fetchTweet = useCallback(
+    async (tweet_id) => {
       setLoading(true);
       setError(null);
       try {
-        const tweetData = await fetchTweetByIdApi(boardId, tweetId, token);
+        const tweetData = await fetchTweetById(tweet_id, token);
         if (!tweetData) {
           throw new Error("Tweet not found");
         }
@@ -56,16 +56,16 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         setLoading(false);
       }
     },
-    [boardId, token, currentUser, handleAuthError]
+    [ token, currentUser, handleAuthError]
   );
 
   // Create a tweet
   const createTweet = useCallback(
-    async (content, x, y, parentTweetId, isAnonymous = false) => {
+    async (board_id, content, x, y, parentTweetId, isAnonymous = false) => {
       setLoading(true);
       setError(null);
       try {
-        const createdTweet = await createTweetApi(boardId, content, x, y, parentTweetId, isAnonymous, token);
+        const createdTweet = await createTweetApi( content, x, y, parentTweetId, isAnonymous, token);
         const normalizedTweet = normalizeTweet(
           {
             ...createdTweet,
@@ -83,7 +83,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         setLoading(false);
       }
     },
-    [boardId, token, currentUser, handleAuthError]
+    [ token, currentUser, handleAuthError]
   );
 
   // Update a tweet
@@ -93,7 +93,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       setError(null);
       try {
         await updateTweetApi(boardId, tweetId, updates, token);
-        const updatedTweet = await fetchTweetById(tweetId);
+        const updatedTweet = await fetchTweet(tweetId);
         if (updatedTweet) {
           setTweets((prev) =>
             prev.map((tweet) => (tweet.tweet_id === tweetId ? { ...tweet, ...updatedTweet } : tweet))
@@ -106,7 +106,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         setLoading(false);
       }
     },
-    [boardId, token, fetchTweetById, handleAuthError]
+    [boardId, token, fetchTweet, handleAuthError]
   );
 
   // Toggle like
@@ -176,7 +176,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       setError(null);
       try {
         await updateTweetStatusApi(boardId, tweetId, status, token);
-        const updatedTweet = await fetchTweetById(tweetId);
+        const updatedTweet = await fetchTweet(tweetId);
         if (updatedTweet) {
           setTweets((prev) =>
             prev.map((tweet) => (tweet.tweet_id === tweetId ? { ...tweet, ...updatedTweet } : tweet))
@@ -189,7 +189,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         setLoading(false);
       }
     },
-    [boardId, token, fetchTweetById, handleAuthError]
+    [boardId, token, fetchTweet, handleAuthError]
   );
 
   return {
@@ -198,7 +198,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
     loading,
     error,
     fetchTweets,
-    fetchTweetById,
+    fetchTweet,
     createTweet,
     updateTweet,
     toggleLike,
