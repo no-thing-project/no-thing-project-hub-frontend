@@ -51,6 +51,7 @@ const cardStyles = {
 };
 
 const GatesSection = React.memo(({ currentUser, gates, onCreate, onUpdate, onDelete, onLike }) => {
+
   const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [gateToDelete, setGateToDelete] = useState(null);
@@ -82,7 +83,7 @@ const GatesSection = React.memo(({ currentUser, gates, onCreate, onUpdate, onDel
       <Box sx={cardGridStyles}>
         {gates.map((gate) => (
           <Card
-            key={gate._id}
+            key={gate.gate_id}
             sx={cardStyles}
             onClick={() => handleGateClick(gate.gate_id)}
             onKeyDown={(e) => {

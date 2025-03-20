@@ -1,4 +1,3 @@
-// src/hooks/useGates.js
 import { useState, useCallback } from "react";
 import {
   fetchGates,
@@ -12,51 +11,43 @@ import {
   fetchGateMembers,
   likeGate,
   unlikeGate,
-} from "../utils/gatesApi";
+} from "../api/gatesApi";
 
-/**
- * Custom hook for managing gates-related operations.
- * @param {string} token - Authentication token
- * @param {() => void} [onLogout] - Optional callback to handle logout on auth errors
- * @param {import("react-router-dom").NavigateFunction} [navigate] - Optional navigation function for redirects
- * @returns {Object} - Gates state and operations
- */
 export const useGates = (token, onLogout, navigate) => {
   const [gates, setGates] = useState([]);
   const [gate, setGate] = useState(null);
   const [members, setMembers] = useState([]);
+  const [pagination, setPagination] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Handle authentication errors (401/403)
   const handleAuthError = useCallback(
     (err) => {
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        if (onLogout && navigate) {
-          onLogout("Session expired. Please log in again.");
-          navigate("/login");
-        }
+      if (err.status === 401 || err.status === 403) {
+        onLogout("Your session has expired. Please log in again.");
+        navigate("/login");
       }
-      setError(err.message || "Authentication error");
+      setError(err.message || "An error occurred.");
     },
     [onLogout, navigate]
   );
 
-  // Fetch all gates
   const fetchGatesList = useCallback(
-    async (signal) => {
+    async (filters = {}, signal) => {
+      if (!token) {
+        setError("Authentication required.");
+        return [];
+      }
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchGates(token, signal);
-        setGates(data);
-        return data;
+        const data = await fetchGates(token, filters, signal);
+        setGates(data.gates);
+        setPagination(data.pagination);
+        return data.gates;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Error fetching gates:", err);
-          handleAuthError(err);
-        }
-        throw err;
+        if (err.name !== "AbortError") handleAuthError(err);
+        return [];
       } finally {
         setLoading(false);
       }
@@ -64,28 +55,21 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Fetch a single gate by ID
   const fetchGate = useCallback(
-    async (gate_id, signal) => {
-      if (!gate_id) {
-        setError("Gate ID is required to fetch gate");
-        throw new Error("Gate ID is required");
+    async (gateId, signal) => {
+      if (!token || !gateId) {
+        setError("Authentication or gate ID missing.");
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchGateById(gate_id, token, signal);
-        if (!data) {
-          throw new Error("Gate not found");
-        }
+        const data = await fetchGateById(gateId, token, signal);
         setGate(data);
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Error fetching gate:", err);
-          handleAuthError(err);
-        }
-        throw err;
+        if (err.name !== "AbortError") handleAuthError(err);
+        return null;
       } finally {
         setLoading(false);
       }
@@ -93,22 +77,21 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Create a new gate
   const createNewGate = useCallback(
     async (gateData) => {
+      if (!token || !gateData) {
+        setError("Authentication or gate data missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
         const newGate = await createGate(gateData, token);
-        if (!newGate) {
-          throw new Error("Failed to create gate");
-        }
         setGates((prev) => [...prev, newGate]);
         return newGate;
       } catch (err) {
-        console.error("Error creating gate:", err);
         handleAuthError(err);
-        throw err;
+        return null;
       } finally {
         setLoading(false);
       }
@@ -116,29 +99,22 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Update an existing gate
   const updateExistingGate = useCallback(
-    async (gate_id, gateData) => {
-      if (!gate_id) {
-        setError("Gate ID is required to update gate");
-        throw new Error("Gate ID is required");
+    async (gateId, gateData) => {
+      if (!token || !gateId || !gateData) {
+        setError("Authentication, gate ID, or data missing.");
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
-        const updatedGate = await updateGate(gate_id, gateData, token);
-        if (!updatedGate) {
-          throw new Error("Failed to update gate");
-        }
-        setGates((prev) =>
-          prev.map((g) => (g._id === gate_id ? updatedGate : g))
-        );
+        const updatedGate = await updateGate(gateId, gateData, token);
+        setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         setGate(updatedGate);
         return updatedGate;
       } catch (err) {
-        console.error("Error updating gate:", err);
         handleAuthError(err);
-        throw err;
+        return null;
       } finally {
         setLoading(false);
       }
@@ -146,29 +122,22 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Update gate status
   const updateGateStatusById = useCallback(
-    async (gate_id, statusData) => {
-      if (!gate_id) {
-        setError("Gate ID is required to update gate status");
-        throw new Error("Gate ID is required");
+    async (gateId, statusData) => {
+      if (!token || !gateId || !statusData) {
+        setError("Authentication, gate ID, or status data missing.");
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
-        const updatedGate = await updateGateStatus(gate_id, statusData, token);
-        if (!updatedGate) {
-          throw new Error("Failed to update gate status");
-        }
-        setGates((prev) =>
-          prev.map((g) => (g._id === gate_id ? updatedGate : g))
-        );
+        const updatedGate = await updateGateStatus(gateId, statusData, token);
+        setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         setGate(updatedGate);
         return updatedGate;
       } catch (err) {
-        console.error("Error updating gate status:", err);
         handleAuthError(err);
-        throw err;
+        return null;
       } finally {
         setLoading(false);
       }
@@ -176,23 +145,20 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Delete a gate
   const deleteExistingGate = useCallback(
-    async (gate_id) => {
-      if (!gate_id) {
-        setError("Gate ID is required to delete gate");
-        throw new Error("Gate ID is required");
+    async (gateId) => {
+      if (!token || !gateId) {
+        setError("Authentication or gate ID missing.");
+        return;
       }
       setLoading(true);
       setError(null);
       try {
-        await deleteGate(gate_id, token);
-        setGates((prev) => prev.filter((g) => g._id !== gate_id));
+        await deleteGate(gateId, token);
+        setGates((prev) => prev.filter((g) => g.gate_id !== gateId));
         setGate(null);
       } catch (err) {
-        console.error("Error deleting gate:", err);
         handleAuthError(err);
-        throw err;
       } finally {
         setLoading(false);
       }
@@ -200,30 +166,21 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Add a member to a gate
   const addMemberToGate = useCallback(
-    async (gate_id, memberData) => {
-      if (!gate_id) {
-        setError("Gate ID is required to add member");
-        throw new Error("Gate ID is required");
+    async (gateId, memberData) => {
+      if (!token || !gateId || !memberData) {
+        setError("Authentication, gate ID, or member data missing.");
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
-        const updatedGate = await addGateMember(gate_id, memberData, token);
-        if (!updatedGate) {
-          throw new Error("Failed to add member to gate");
-        }
-        setGates((prev) =>
-          prev.map((g) => (g._id === gate_id ? updatedGate : g))
-        );
+        const updatedGate = await addGateMember(gateId, memberData, token);
         setGate(updatedGate);
-        setMembers((prev) => [...prev, memberData]);
         return updatedGate;
       } catch (err) {
-        console.error("Error adding member to gate:", err);
         handleAuthError(err);
-        throw err;
+        return null;
       } finally {
         setLoading(false);
       }
@@ -231,30 +188,21 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Remove a member from a gate
   const removeMemberFromGate = useCallback(
-    async (gate_id, memberId) => {
-      if (!gate_id || !memberId) {
-        setError("Gate ID and Member ID are required to remove member");
-        throw new Error("Gate ID and Member ID are required");
+    async (gateId, memberId) => {
+      if (!token || !gateId || !memberId) {
+        setError("Authentication, gate ID, or member ID missing.");
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
-        const updatedGate = await removeGateMember(gate_id, memberId, token);
-        if (!updatedGate) {
-          throw new Error("Failed to remove member from gate");
-        }
-        setGates((prev) =>
-          prev.map((g) => (g._id === gate_id ? updatedGate : g))
-        );
+        const updatedGate = await removeGateMember(gateId, memberId, token);
         setGate(updatedGate);
-        setMembers((prev) => prev.filter((m) => m.user_id !== memberId));
         return updatedGate;
       } catch (err) {
-        console.error("Error removing member from gate:", err);
         handleAuthError(err);
-        throw err;
+        return null;
       } finally {
         setLoading(false);
       }
@@ -262,23 +210,21 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Fetch gate members
-  const fetchMembersForGate = useCallback(
-    async (gate_id) => {
-      if (!gate_id) {
-        setError("Gate ID is required to fetch members");
-        throw new Error("Gate ID is required");
+  const fetchGateMembersList = useCallback(
+    async (gateId) => {
+      if (!token || !gateId) {
+        setError("Authentication or gate ID missing.");
+        return [];
       }
       setLoading(true);
       setError(null);
       try {
-        const fetchedMembers = await fetchGateMembers(gate_id, token);
-        setMembers(fetchedMembers);
-        return fetchedMembers;
+        const membersData = await fetchGateMembers(gateId, token);
+        setMembers(membersData);
+        return membersData;
       } catch (err) {
-        console.error("Error fetching gate members:", err);
         handleAuthError(err);
-        throw err;
+        return [];
       } finally {
         setLoading(false);
       }
@@ -286,29 +232,22 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Like a gate
   const likeGateById = useCallback(
-    async (gate_id) => {
-      if (!gate_id) {
-        setError("Gate ID is required to like gate");
-        throw new Error("Gate ID is required");
+    async (gateId) => {
+      if (!token || !gateId) {
+        setError("Authentication or gate ID missing.");
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
-        const updatedGate = await likeGate(gate_id, token);
-        if (!updatedGate) {
-          throw new Error("Failed to like gate");
-        }
-        setGates((prev) =>
-          prev.map((g) => (g._id === gate_id ? updatedGate : g))
-        );
+        const updatedGate = await likeGate(gateId, token);
         setGate(updatedGate);
+        setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         return updatedGate;
       } catch (err) {
-        console.error("Error liking gate:", err);
         handleAuthError(err);
-        throw err;
+        return null;
       } finally {
         setLoading(false);
       }
@@ -316,29 +255,22 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Unlike a gate
   const unlikeGateById = useCallback(
-    async (gate_id) => {
-      if (!gate_id) {
-        setError("Gate ID is required to unlike gate");
-        throw new Error("Gate ID is required");
+    async (gateId) => {
+      if (!token || !gateId) {
+        setError("Authentication or gate ID missing.");
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
-        const updatedGate = await unlikeGate(gate_id, token);
-        if (!updatedGate) {
-          throw new Error("Failed to unlike gate");
-        }
-        setGates((prev) =>
-          prev.map((g) => (g._id === gate_id ? updatedGate : g))
-        );
+        const updatedGate = await unlikeGate(gateId, token);
         setGate(updatedGate);
+        setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         return updatedGate;
       } catch (err) {
-        console.error("Error unliking gate:", err);
         handleAuthError(err);
-        throw err;
+        return null;
       } finally {
         setLoading(false);
       }
@@ -347,21 +279,24 @@ export const useGates = (token, onLogout, navigate) => {
   );
 
   return {
-    gates, // List of all gates
-    gate, // Single gate data
-    members, // List of members for a gate
+    gates,
+    gate,
+    members,
+    pagination,
     loading,
     error,
-    fetchGatesList, // Fetch all gates
-    fetchGate, // Fetch a single gate by ID
-    createNewGate, // Create a new gate
-    updateExistingGate, // Update a gate
-    updateGateStatus: updateGateStatusById, // Update gate status
-    deleteExistingGate, // Delete a gate
-    addMemberToGate, // Add a member to a gate
-    removeMemberFromGate, // Remove a member from a gate
-    fetchMembersForGate, // Fetch members of a gate
-    likeGate: likeGateById, // Like a gate
-    unlikeGate: unlikeGateById, // Unlike a gate
+    fetchGatesList,
+    fetchGate,
+    createNewGate,
+    updateExistingGate,
+    updateGateStatusById,
+    deleteExistingGate,
+    addMemberToGate,
+    removeMemberFromGate,
+    fetchGateMembersList,
+    likeGateById,
+    unlikeGateById,
   };
 };
+
+export default useGates;

@@ -1,211 +1,193 @@
 // src/hooks/useAuth.js
-import { useState, useCallback, useEffect, useRef } from "react";
-import axios from "axios";
-import config from "../config";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import api from "../api/apiClient";
+import { handleApiError } from "../api/apiClient";
 
-const api = axios.create({
-  baseURL: config.REACT_APP_HUB_API_URL,
-  timeout: 10000,
-});
+// Винести decodeToken за межі хука, бо вона не залежить від стану
+const decodeToken = (token) => {
+  try {
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const payload = JSON.parse(jsonPayload);
+    const currentTime = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp < currentTime) {
+      console.warn("Token is expired:", payload.exp, "vs", currentTime);
+      return null;
+    }
+    return payload.user ? payload.user : payload;
+  } catch (e) {
+    console.error("Invalid token:", e);
+    return null;
+  }
+};
 
-export const useAuth = () => {
+const useAuth = (navigate) => {
   const [token, setToken] = useState(() => localStorage.getItem("token") || null);
+  const [refreshToken, setRefreshToken] = useState(() => localStorage.getItem("refreshToken") || null);
   const [authData, setAuthData] = useState(() => {
-    const storedAuthData = localStorage.getItem("authData");
-    return storedAuthData ? JSON.parse(storedAuthData) : null;
+    try {
+      const storedAuthData = localStorage.getItem("authData");
+      return storedAuthData ? JSON.parse(storedAuthData) : null;
+    } catch (e) {
+      console.error("Failed to parse authData from localStorage:", e);
+      return null;
+    }
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const isInitialValidationComplete = useRef(false);
-
-  const decodeToken = (token) => {
-    try {
-      const base64Url = token.split(".")[1];
-      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split("")
-          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-          .join("")
-      );
-      const payload = JSON.parse(jsonPayload);
-      const currentTime = Math.floor(Date.now() / 1000);
-      if (payload.exp && payload.exp < currentTime) {
-        console.warn("Token is expired:", payload.exp, "vs", currentTime);
-        return null;
-      }
-      return payload || null;
-    } catch (e) {
-      console.error("Invalid token:", e);
-      return null;
-    }
-  };
+  const refreshInProgress = useRef(false); // Додано для уникнення одночасних оновлень токена
 
   const handleLogout = useCallback((message) => {
     setToken(null);
+    setRefreshToken(null);
     setAuthData(null);
-    setError(null);
     localStorage.clear();
-    console.log(message || "Logged out successfully.");
-    window.location.href = "/login";
-  }, []);
+    setError(message || "Logged out successfully.");
+    if (navigate) navigate("/login");
+  }, [navigate]);
+
+  const refreshAccessToken = useCallback(async () => {
+    if (!refreshToken || refreshInProgress.current) {
+      return false;
+    }
+
+    refreshInProgress.current = true;
+    try {
+      const response = await api.post("/api/v1/auth/refresh", { refreshToken });
+      const { accessToken: newToken, refreshToken: newRefreshToken } = response.data.content || response.data;
+      setToken(newToken);
+      setRefreshToken(newRefreshToken);
+      localStorage.setItem("token", newToken);
+      localStorage.setItem("refreshToken", newRefreshToken);
+      return true;
+    } catch (err) {
+      handleApiError(err, setError);
+      handleLogout("Failed to refresh token. Please log in again.");
+      return false;
+    } finally {
+      refreshInProgress.current = false;
+    }
+  }, [refreshToken, handleLogout]);
 
   const handleLogin = useCallback(
-    (newToken, authDataFromResponse) => {
+    async (newToken, newRefreshToken, authDataFromResponse) => {
       setLoading(true);
       setError(null);
 
-      const normalizedAuthData = authDataFromResponse || decodeToken(newToken);
-      if (!normalizedAuthData) {
-        handleLogout("Invalid or missing authentication data.");
+      const decodedData = decodeToken(newToken);
+      const normalizedAuthData = authDataFromResponse || decodedData;
+      if (!normalizedAuthData?.anonymous_id) {
+        setError("Invalid or missing authentication data.");
+        setLoading(false);
         return;
       }
 
-      const finalAuthData = {
-        anonymous_id: normalizedAuthData.anonymous_id || "",
-        email: normalizedAuthData.email || "",
-        username: normalizedAuthData.username || "",
-        access_level: normalizedAuthData.access_level || 0,
-        created_at: normalizedAuthData.created_at || "",
-        updated_at: normalizedAuthData.updated_at || "",
-        created_content: normalizedAuthData.created_content || {},
-        dateOfBirth: normalizedAuthData.dateOfBirth || null,
-        donated_points: normalizedAuthData.donated_points || 0,
-        gender: normalizedAuthData.gender || "",
-        ethnicity: normalizedAuthData.ethnicity || "",
-        fullName: normalizedAuthData.fullName || "",
-        gate: normalizedAuthData.gate || null,
-        isActive: normalizedAuthData.isActive || false,
-        isPublic: normalizedAuthData.isPublic || false,
-        lastSeen: normalizedAuthData.lastSeen || "",
-        last_synced_at: normalizedAuthData.last_synced_at || "",
-        likes_points: normalizedAuthData.likes_points || 0,
-        location: normalizedAuthData.location || "",
-        messages: normalizedAuthData.messages || [],
-        nameVisibility: normalizedAuthData.nameVisibility || "Hide",
-        onlineStatus: normalizedAuthData.onlineStatus || "offline",
-        preferences: normalizedAuthData.preferences || {},
-        profile_picture: normalizedAuthData.profile_picture || "",
-        social_links: normalizedAuthData.social_links || {},
-        stats: normalizedAuthData.stats || {},
-        timezone: normalizedAuthData.timezone || "",
-        total_points: normalizedAuthData.total_points || 0,
-        tweet_points: normalizedAuthData.tweet_points || 0,
-      };
-
-      if (token !== newToken || JSON.stringify(authData) !== JSON.stringify(finalAuthData)) {
-        console.log("Updating token and authData:", { newToken, finalAuthData });
-        setToken(newToken);
-        setAuthData(finalAuthData);
-        localStorage.setItem("token", newToken);
-        localStorage.setItem("authData", JSON.stringify(finalAuthData));
-      }
-      setLoading(false);
+      setToken(newToken);
+      setRefreshToken(newRefreshToken);
+      setAuthData(normalizedAuthData);
+      localStorage.setItem("token", newToken);
+      localStorage.setItem("refreshToken", newRefreshToken);
+      localStorage.setItem("authData", JSON.stringify(normalizedAuthData));
       isInitialValidationComplete.current = true;
+      setLoading(false);
+
+      if (navigate) navigate("/home");
     },
-    [handleLogout, token, authData] // Added token and authData to dependencies
+    [navigate]
   );
 
-  const refreshToken = useCallback(async () => {
-    const refreshToken = localStorage.getItem("refreshToken");
-    if (!refreshToken) {
-      console.error("No refresh token available.");
-      return null;
+  const updateAuthData = useCallback((newAuthData) => {
+    if (!newAuthData?.anonymous_id) {
+      console.error("Invalid authData provided for update:", newAuthData);
+      return;
     }
-
-    try {
-      const response = await api.post("/api/v1/auth/refresh", { refreshToken }, {
-        headers: { "Content-Type": "application/json" },
-      });
-      const { token: newToken, authData: newAuthData } = response.data;
-      return { newToken, newAuthData };
-    } catch (err) {
-      console.error("Token refresh failed:", err);
-      handleLogout("Failed to refresh token. Please log in again.");
-      return null;
-    }
-  }, [handleLogout]);
+    setAuthData(newAuthData);
+    localStorage.setItem("authData", JSON.stringify(newAuthData));
+  }, []);
 
   useEffect(() => {
     const requestInterceptor = api.interceptors.request.use(
       (config) => {
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
+        if (token) config.headers.Authorization = `Bearer ${token}`;
         return config;
       },
       (error) => Promise.reject(error)
     );
 
-    return () => api.interceptors.request.eject(requestInterceptor);
-  }, [token]);
-
-  useEffect(() => {
     const responseInterceptor = api.interceptors.response.use(
       (response) => response,
       async (error) => {
-        const originalRequest = error.config;
-        if (error.response) {
-          if (error.response.status === 401 && !originalRequest._retry) {
-            originalRequest._retry = true;
-            const result = await refreshToken();
-            if (result && result.newToken) {
-              originalRequest.headers.Authorization = `Bearer ${result.newToken}`;
-              handleLogin(result.newToken, result.newAuthData);
-              return api(originalRequest);
-            }
-          } else if (error.response.status === 403) {
-            handleLogout("Access denied. Invalid token. Please log in again.");
+        if (error.response?.status === 401 && !refreshInProgress.current) {
+          const refreshed = await refreshAccessToken();
+          if (refreshed) {
+            error.config.headers.Authorization = `Bearer ${token}`;
+            return api.request(error.config);
           }
+        } else if (error.response?.status === 403) {
+          handleLogout("Access denied. Please log in again.");
         }
-        setError(error.response?.data?.errors?.[0] || error.message || "An error occurred");
+        handleApiError(error, setError);
         return Promise.reject(error);
       }
     );
 
-    return () => api.interceptors.response.eject(responseInterceptor);
-  }, [handleLogout, refreshToken, handleLogin]);
+    return () => {
+      api.interceptors.request.eject(requestInterceptor);
+      api.interceptors.response.eject(responseInterceptor);
+    };
+  }, [token, refreshAccessToken, handleLogout]);
 
   useEffect(() => {
     const validateAuth = async () => {
-      if (isInitialValidationComplete.current || (!token && !authData)) {
+      if (isInitialValidationComplete.current) {
         setLoading(false);
         return;
       }
 
       setLoading(true);
-      setError(null);
-      console.log("Validating auth:", { token, authData });
+      try {
+        if (!token && !refreshToken) return;
 
-      if (token) {
         const payload = decodeToken(token);
         if (!payload) {
-          const result = await refreshToken();
-          if (result && result.newToken) {
-            handleLogin(result.newToken, result.newAuthData);
-          } else {
-            handleLogout("Token validation failed and refresh failed.");
-            return;
-          }
-        } else if (!authData || authData.anonymous_id === "") {
-          handleLogin(token, payload);
-        } else {
-          setLoading(false);
+          await refreshAccessToken();
+        } else if (!authData?.anonymous_id) {
+          await handleLogin(token, refreshToken, payload);
         }
-      } else if (authData) {
-        handleLogout("No token found, clearing auth data.");
-      } else {
+      } finally {
         setLoading(false);
+        isInitialValidationComplete.current = true;
       }
     };
 
     validateAuth();
-  }, [token, authData, handleLogin, handleLogout, refreshToken]);
+  }, [token, refreshToken, authData, handleLogin, refreshAccessToken]);
 
-  const isAuthenticated = !!token && !!authData;
+  const isAuthenticated = useMemo(
+    () => !!token && !!authData?.anonymous_id && !!refreshToken,
+    [token, authData, refreshToken]
+  );
 
-  return { token, authData, isAuthenticated, handleLogin, handleLogout, loading, error };
+  return {
+    token,
+    refreshToken,
+    authData,
+    isAuthenticated,
+    handleLogin,
+    handleLogout,
+    updateAuthData,
+    loading,
+    error,
+    clearError: () => setError(null), // Спрощено
+  };
 };
 
-export default api;
+export default useAuth;

@@ -18,22 +18,8 @@ import { containerStyles, statsGridStyles, chartsGridStyles } from "../../styles
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-const HomeSection = ({ currentUser, profileData, isOwnProfile }) => {
-  // Use profileData if available, otherwise fall back to currentUser
-  const userData = profileData || currentUser;
-
-  // Guard against missing userData or stats
-  if (!userData) {
-    return (
-      <Box sx={containerStyles}>
-        <Typography variant="h6" color="error">
-          User data not available.
-        </Typography>
-      </Box>
-    );
-  }
-
-  const { stats = {}, total_points = 0, donated_points = 0 } = userData;
+const HomeSection = ({ profileData, isOwnProfile }) => {
+  const { stats = {}, total_points = 0, donated_points = 0 } = profileData || {};
 
   const statsData = [
     { label: "Posts", value: stats.tweet_count || 0 },
@@ -50,7 +36,7 @@ const HomeSection = ({ currentUser, profileData, isOwnProfile }) => {
       title: "Points",
       data: {
         labels: ["Total Points", "Donated Points"],
-        values: [total_points, donated_points],
+        values: [total_points || 0, donated_points || 0],
       },
       colors: chartColors.points,
     },
@@ -81,27 +67,33 @@ const HomeSection = ({ currentUser, profileData, isOwnProfile }) => {
   ];
 
   return (
-    <Box sx={containerStyles}>
+    <Box sx={containerStyles} role="main">
       <UserHeader
-        username={userData.username || "Unknown User"}
-        accessLevel={userData.access_level || 0}
+        username={profileData.username || "Unknown User"}
+        accessLevel={profileData.access_level || 0}
       />
       {isOwnProfile ? (
         <>
-          <Box sx={statsGridStyles}>
+          <Box sx={statsGridStyles} role="region" aria-label="User Statistics">
             {statsData.map((stat) => (
               <StatsCard key={stat.label} label={stat.label} value={stat.value} />
             ))}
           </Box>
-          <Box sx={chartsGridStyles}>
+          <Box sx={chartsGridStyles} role="region" aria-label="User Charts">
             {chartsData.map((chart) => (
-              <BarChart key={chart.title} title={chart.title} data={chart.data} colors={chart.colors} />
+              <BarChart
+                key={chart.title}
+                title={chart.title}
+                data={chart.data}
+                colors={chart.colors}
+                aria-label={`Chart showing ${chart.title}`}
+              />
             ))}
           </Box>
         </>
       ) : (
-        <Typography variant="body1" sx={{ mt: 2 }}>
-          Viewing {userData.username}'s profile. Detailed stats are only available for your own profile.
+        <Typography variant="body1" sx={{ mt: 2 }} role="alert">
+          Viewing {profileData.username || "Unknown User"}'s profile. Detailed stats are only available for your own profile.
         </Typography>
       )}
     </Box>

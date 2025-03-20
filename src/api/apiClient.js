@@ -1,12 +1,12 @@
+// src/api/apiClient.js
 import axios from "axios";
 import config from "../config";
 
 const api = axios.create({
   baseURL: config.REACT_APP_HUB_API_URL,
-  timeout: 10000, // Optional: Add a timeout to prevent hanging requests
+  timeout: 10000,
 });
 
-// Generic error handler
 export const handleApiError = (err, setError) => {
   const errorMessage =
     err.response?.data?.errors?.[0] || err.message || "An error occurred";

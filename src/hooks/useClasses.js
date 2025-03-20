@@ -1,57 +1,52 @@
-// src/hooks/useClasses.js
 import { useState, useCallback } from "react";
 import {
   fetchClasses,
-  fetchClassesByGate,
+  fetchClassesByGateId,
   fetchClassById,
+  createClass,
   createClassInGate,
   updateClass,
   updateClassStatus,
   deleteClass,
   fetchClassMembers,
-} from "../utils/classesApi";
+} from "../api/classesApi";
 
-/**
- * Custom hook for managing classes-related operations.
- * @param {string} token - Authentication token
- * @param {() => void} onLogout - Callback to handle logout on auth errors
- * @param {import("react-router-dom").NavigateFunction} navigate - Navigation function for redirects
- * @returns {Object} - Classes state and operations
- */
 export const useClasses = (token, onLogout, navigate) => {
   const [classes, setClasses] = useState([]);
   const [classData, setClassData] = useState(null);
   const [members, setMembers] = useState([]);
+  const [pagination, setPagination] = useState({});
+  const [gateInfo, setGateInfo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Handle authentication errors (401/403)
   const handleAuthError = useCallback(
     (err) => {
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        onLogout("Session expired. Please log in again.");
+      if (err.status === 401 || err.status === 403) {
+        onLogout("Your session has expired. Please log in again.");
         navigate("/login");
       }
-      setError(err.message || "Authentication error");
+      setError(err.message || "An error occurred.");
     },
     [onLogout, navigate]
   );
 
-  // Fetch all classes (not tied to a specific gate)
-  const fetchAllClasses = useCallback(
-    async (signal) => {
+  const fetchClassesList = useCallback(
+    async (filters = {}, signal) => {
+      if (!token) {
+        setError("Authentication required.");
+        return [];
+      }
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchClasses(token, signal);
-        setClasses(data);
-        return data;
+        const data = await fetchClasses(token, filters, signal);
+        setClasses(data.classes);
+        setPagination(data.pagination);
+        return data.classes;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Error fetching all classes:", err);
-          handleAuthError(err);
-        }
-        throw err;
+        if (err.name !== "AbortError") handleAuthError(err);
+        return [];
       } finally {
         setLoading(false);
       }
@@ -59,25 +54,23 @@ export const useClasses = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Fetch classes by gate
-  const fetchClassesByGateId = useCallback(
-    async (gate_id, signal) => {
-      if (!gate_id) {
-        setError("Gate ID is required to fetch classes");
-        throw new Error("Gate ID is required");
+  const fetchClassesByGate = useCallback(
+    async (gateId, filters = {}, signal) => {
+      if (!token || !gateId) {
+        setError("Authentication or gate ID missing.");
+        return [];
       }
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchClassesByGate(gate_id, token, signal);
-        setClasses(data);
-        return data;
+        const data = await fetchClassesByGateId(gateId, token, filters, signal);
+        setClasses(data.classes);
+        setGateInfo(data.gate);
+        setPagination(data.pagination);
+        return data.classes;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Error fetching classes by gate:", err);
-          handleAuthError(err);
-        }
-        throw err;
+        if (err.name !== "AbortError") handleAuthError(err);
+        return [];
       } finally {
         setLoading(false);
       }
@@ -85,28 +78,21 @@ export const useClasses = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Fetch a single class by ID
   const fetchClass = useCallback(
-    async (class_id, signal) => {
-      if (!class_id) {
-        setError("Class ID is required to fetch class");
-        throw new Error("Class ID is required");
+    async (classId, signal) => {
+      if (!token || !classId) {
+        setError("Authentication or class ID missing.");
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchClassById(class_id, token, signal);
-        if (!data) {
-          throw new Error("Class not found");
-        }
+        const data = await fetchClassById(classId, token, signal);
         setClassData(data);
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Error fetching class:", err);
-          handleAuthError(err);
-        }
-        throw err;
+        if (err.name !== "AbortError") handleAuthError(err);
+        return null;
       } finally {
         setLoading(false);
       }
@@ -114,26 +100,21 @@ export const useClasses = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Create a new class in a gate
   const createNewClass = useCallback(
-    async (gate_id, classData) => {
-      if (!gate_id) {
-        setError("Gate ID is required to create a class");
-        throw new Error("Gate ID is required");
+    async (classData) => {
+      if (!token || !classData) {
+        setError("Authentication or class data missing.");
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
-        const newClass = await createClassInGate(gate_id, classData, token);
-        if (!newClass) {
-          throw new Error("Failed to create class");
-        }
+        const newClass = await createClass(classData, token);
         setClasses((prev) => [...prev, newClass]);
         return newClass;
       } catch (err) {
-        console.error("Error creating class:", err);
         handleAuthError(err);
-        throw err;
+        return null;
       } finally {
         setLoading(false);
       }
@@ -141,29 +122,44 @@ export const useClasses = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Update an existing class
+  const createNewClassInGate = useCallback(
+    async (gateId, classData) => {
+      if (!token || !gateId || !classData) {
+        setError("Authentication, gate ID, or class data missing.");
+        return null;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const newClass = await createClassInGate(gateId, classData, token);
+        setClasses((prev) => [...prev, newClass]);
+        return newClass;
+      } catch (err) {
+        handleAuthError(err);
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, handleAuthError]
+  );
+
   const updateExistingClass = useCallback(
-    async (class_id, classData) => {
-      if (!class_id) {
-        setError("Class ID is required to update class");
-        throw new Error("Class ID is required");
+    async (classId, classData) => {
+      if (!token || !classId || !classData) {
+        setError("Authentication, class ID, or data missing.");
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
-        const updatedClass = await updateClass(class_id, classData, token);
-        if (!updatedClass) {
-          throw new Error("Failed to update class");
-        }
-        setClasses((prev) =>
-          prev.map((c) => (c._id === class_id ? updatedClass : c))
-        );
+        const updatedClass = await updateClass(classId, classData, token);
+        setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
         setClassData(updatedClass);
         return updatedClass;
       } catch (err) {
-        console.error("Error updating class:", err);
         handleAuthError(err);
-        throw err;
+        return null;
       } finally {
         setLoading(false);
       }
@@ -171,29 +167,22 @@ export const useClasses = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Update class status
   const updateClassStatusById = useCallback(
-    async (gate_id, class_id, statusData) => {
-      if (!gate_id || !class_id) {
-        setError("Gate ID and Class ID are required to update class status");
-        throw new Error("Gate ID and Class ID are required");
+    async (gateId, classId, statusData) => {
+      if (!token || !gateId || !classId || !statusData) {
+        setError("Authentication, gate ID, class ID, or status data missing.");
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
-        const updatedClass = await updateClassStatus(gate_id, class_id, statusData, token);
-        if (!updatedClass) {
-          throw new Error("Failed to update class status");
-        }
-        setClasses((prev) =>
-          prev.map((c) => (c._id === class_id ? updatedClass : c))
-        );
+        const updatedClass = await updateClassStatus(gateId, classId, statusData, token);
+        setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
         setClassData(updatedClass);
         return updatedClass;
       } catch (err) {
-        console.error("Error updating class status:", err);
         handleAuthError(err);
-        throw err;
+        return null;
       } finally {
         setLoading(false);
       }
@@ -201,23 +190,20 @@ export const useClasses = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Delete an existing class
   const deleteExistingClass = useCallback(
-    async (class_id) => {
-      if (!class_id) {
-        setError("Class ID is required to delete class");
-        throw new Error("Class ID is required");
+    async (classId) => {
+      if (!token || !classId) {
+        setError("Authentication or class ID missing.");
+        return;
       }
       setLoading(true);
       setError(null);
       try {
-        await deleteClass(class_id, token);
-        setClasses((prev) => prev.filter((c) => c._id !== class_id));
+        await deleteClass(classId, token);
+        setClasses((prev) => prev.filter((c) => c.class_id !== classId));
         setClassData(null);
       } catch (err) {
-        console.error("Error deleting class:", err);
         handleAuthError(err);
-        throw err;
       } finally {
         setLoading(false);
       }
@@ -225,23 +211,21 @@ export const useClasses = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Fetch class members
-  const fetchMembersForClass = useCallback(
-    async (class_id) => {
-      if (!class_id) {
-        setError("Class ID is required to fetch members");
-        throw new Error("Class ID is required");
+  const fetchClassMembersList = useCallback(
+    async (classId) => {
+      if (!token || !classId) {
+        setError("Authentication or class ID missing.");
+        return [];
       }
       setLoading(true);
       setError(null);
       try {
-        const fetchedMembers = await fetchClassMembers(class_id, token);
-        setMembers(fetchedMembers);
-        return fetchedMembers;
+        const membersData = await fetchClassMembers(classId, token);
+        setMembers(membersData);
+        return membersData;
       } catch (err) {
-        console.error("Error fetching class members:", err);
         handleAuthError(err);
-        throw err;
+        return [];
       } finally {
         setLoading(false);
       }
@@ -250,18 +234,23 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   return {
-    classes, // List of all classes
-    classData, // Single class data
-    members, // List of members for a class
+    classes,
+    classData,
+    members,
+    pagination,
+    gateInfo,
     loading,
     error,
-    fetchAllClasses, // Fetch all classes
-    fetchClassesByGateId, // Fetch classes by gate
-    fetchClass, // Fetch a single class
-    createNewClass, // Create a new class
-    updateExistingClass, // Update a class
-    updateClassStatus: updateClassStatusById, // Update class status
-    deleteExistingClass, // Delete a class
-    fetchMembersForClass, // Fetch members of a class
+    fetchClassesList,
+    fetchClassesByGate,
+    fetchClass,
+    createNewClass,
+    createNewClassInGate,
+    updateExistingClass,
+    updateClassStatusById,
+    deleteExistingClass,
+    fetchClassMembersList,
   };
 };
+
+export default useClasses;

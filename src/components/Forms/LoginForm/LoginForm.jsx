@@ -1,5 +1,5 @@
 // src/components/Login/LoginForm.js
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Container,
   Typography,
@@ -29,6 +29,7 @@ const LoginForm = ({ theme, onLogin }) => {
   const [forgotEmail, setForgotEmail] = useState("");
   const [openModal, setOpenModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const registrationLink = "https://secure.wayforpay.com/donate/NoThingProject";
@@ -59,10 +60,12 @@ const LoginForm = ({ theme, onLogin }) => {
     e.preventDefault();
     setError("");
     setSuccess("");
+    setIsSubmitting(true);
 
     const validationError = validateInputs();
     if (validationError) {
       setError(validationError);
+      setIsSubmitting(false);
       return;
     }
 
@@ -71,19 +74,23 @@ const LoginForm = ({ theme, onLogin }) => {
         email,
         password,
       });
-      const { token, profile } = res.data; // Adjust based on actual API response
-      if (!token || !profile) throw new Error("Invalid login response");
+      const { token, profile } = res.data; // Adjusted to expect refreshToken
+      if (!token || !profile) {
+        throw new Error("Invalid login response: Missing token, refresh token, or profile");
+      }
       localStorage.setItem("token", token);
-      onLogin(token, profile);
+      onLogin(token, profile); // Pass refreshToken to onLogin
       setSuccess("Login successful! Redirecting...");
-      setTimeout(() => navigate("/home"), 1000); // Redirect after success
     } catch (err) {
       console.error("Login error:", err.response?.data || err);
-      setError(
-        err.response?.data?.errors?.[0] ||
-        err.response?.data?.message ||
-        "Network error, please try again"
-      );
+      const errorMessage =
+        err.response?.status === 401
+          ? "Invalid email or password. Please try again."
+          : err.response?.data?.errors?.[0] ||
+            err.response?.data?.message ||
+            "Network error, please try again";
+      setError(errorMessage);
+      setIsSubmitting(false);
     }
   };
 
@@ -105,11 +112,11 @@ const LoginForm = ({ theme, onLogin }) => {
       setTimeout(() => handleCloseModal(), 2000);
     } catch (err) {
       console.error("Forgot password error:", err.response?.data || err);
-      setError(
+      const errorMessage =
         err.response?.data?.errors?.[0] ||
         err.response?.data?.message ||
-        "Network error, please try again"
-      );
+        "Network error, please try again";
+      setError(errorMessage);
     }
   };
 
@@ -124,6 +131,14 @@ const LoginForm = ({ theme, onLogin }) => {
     setError("");
     setSuccess("");
   };
+
+  // Redirect after successful login
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => navigate("/home"), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [success, navigate]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -165,6 +180,8 @@ const LoginForm = ({ theme, onLogin }) => {
             component="form"
             onSubmit={handleSubmit}
             sx={{ mt: 2, textAlign: "left" }}
+            noValidate
+            aria-label="Login form"
           >
             <TextField
               label="Email"
@@ -199,6 +216,10 @@ const LoginForm = ({ theme, onLogin }) => {
                   color: theme.palette.text.secondary,
                 },
               }}
+              required
+              error={!!error && error.includes("Email")}
+              helperText={error && error.includes("Email") ? error : ""}
+              aria-describedby={error && error.includes("Email") ? "email-error" : undefined}
             />
             <TextField
               label="Password"
@@ -240,18 +261,24 @@ const LoginForm = ({ theme, onLogin }) => {
                     <IconButton
                       onClick={() => setShowPassword(!showPassword)}
                       edge="end"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
                     >
                       {showPassword ? <VisibilityOff /> : <Visibility />}
                     </IconButton>
                   </InputAdornment>
                 ),
               }}
+              required
+              error={!!error && error.includes("Password")}
+              helperText={error && error.includes("Password") ? error : ""}
+              aria-describedby={error && error.includes("Password") ? "password-error" : undefined}
             />
 
             <Button
               type="submit"
               variant="contained"
               fullWidth
+              disabled={isSubmitting}
               sx={{
                 mt: 3,
                 minHeight: theme.custom.loginButtonHeight,
@@ -268,9 +295,14 @@ const LoginForm = ({ theme, onLogin }) => {
                   opacity: 0.9,
                   boxShadow: "0 6px 16px rgba(33, 37, 41, 0.3)",
                 },
+                "&:disabled": {
+                  opacity: 0.6,
+                  cursor: "not-allowed",
+                },
               }}
+              aria-label="Sign in"
             >
-              Sign In
+              {isSubmitting ? "Signing In..." : "Sign In"}
             </Button>
           </Box>
 
@@ -283,6 +315,7 @@ const LoginForm = ({ theme, onLogin }) => {
                 fontSize: "16px",
               }}
               onClick={handleOpenModal}
+              aria-label="Forgot password"
             >
               Forgot password?
             </Button>
@@ -301,6 +334,7 @@ const LoginForm = ({ theme, onLogin }) => {
                   fontWeight: 500,
                   "&:hover": { textDecoration: "underline" },
                 }}
+                aria-label="Sign up"
               >
                 Sign Up
               </Link>
@@ -328,8 +362,11 @@ const LoginForm = ({ theme, onLogin }) => {
                 width: "100%",
                 maxWidth: theme.custom.loginPaperMaxWidth,
               }}
+              role="dialog"
+              aria-labelledby="password-recovery-title"
             >
               <Typography
+                id="password-recovery-title"
                 variant="h6"
                 sx={{ mb: 2, fontWeight: theme.typography.fontWeightMedium }}
               >
@@ -367,6 +404,10 @@ const LoginForm = ({ theme, onLogin }) => {
                     color: theme.palette.text.secondary,
                   },
                 }}
+                required
+                error={!!error && error.includes("Email")}
+                helperText={error && error.includes("Email") ? error : ""}
+                aria-describedby={error && error.includes("Email") ? "forgot-email-error" : undefined}
               />
               <Button
                 variant="contained"
@@ -388,6 +429,7 @@ const LoginForm = ({ theme, onLogin }) => {
                     boxShadow: "0 6px 16px rgba(33, 37, 41, 0.3)",
                   },
                 }}
+                aria-label="Send password recovery email"
               >
                 Send Email
               </Button>
@@ -405,6 +447,7 @@ const LoginForm = ({ theme, onLogin }) => {
             onClose={handleCloseSnackbar}
             severity="error"
             sx={{ width: "100%" }}
+            role="alert"
           >
             {error}
           </Alert>
@@ -419,6 +462,7 @@ const LoginForm = ({ theme, onLogin }) => {
             onClose={handleCloseSnackbar}
             severity="success"
             sx={{ width: "100%" }}
+            role="alert"
           >
             {success}
           </Alert>

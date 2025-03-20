@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useMemo,
 } from "react";
+import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
 import {
   Box,
@@ -35,6 +36,7 @@ import { useTweets } from "../../../hooks/useTweets";
 import { useBoards } from "../../../hooks/useBoards";
 import { useWebSocket } from "../../../hooks/useWebSocket";
 import { BOARD_SIZE, useBoardInteraction } from "../../../hooks/useBoard";
+import LoadingSpinner from "../../Layout/LoadingSpinner";
 import ErrorMessage from "../../Layout/ErrorMessage";
 import ErrorBoundary from "../../Layout/ErrorBoudary";
 
@@ -79,23 +81,37 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
     currentUser,
     setTweets,
     onLogout,
-    navigate
+    navigate,
+    setOnlineUsers // Pass setOnlineUsers to update online users via WebSocket
   );
 
   useEffect(() => {
     if (boardId) {
       const controller = new AbortController();
-      fetchTweets({ signal: controller.signal });
-      fetchBoard(boardId, controller.signal);
-      fetchMembersForBoard(boardId);
+      const signal = controller.signal;
+      const loadData = async () => {
+        try {
+          await Promise.all([
+            fetchTweets({ signal }),
+            fetchBoard(boardId, signal),
+            fetchMembersForBoard(boardId),
+          ]);
+        } catch (err) {
+          if (err.name !== "AbortError") {
+            console.error("Error loading board data:", err);
+          }
+        }
+      };
+      loadData();
       return () => controller.abort();
     }
   }, [boardId, fetchTweets, fetchBoard, fetchMembersForBoard]);
 
   useEffect(() => {
+    const socket = socketRef.current; // Copy socketRef.current to a variable
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
+      if (socket) {
+        socket.disconnect();
       }
     };
   }, [socketRef]);
@@ -256,8 +272,16 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
     [handleMouseUp]
   );
 
+  if (tweetsLoading || boardsLoading) {
+    return <LoadingSpinner />;
+  }
+
   if (tweetsError || boardsError) {
     return <ErrorMessage message={tweetsError || boardsError} />;
+  }
+
+  if (!board) {
+    return <ErrorMessage message="Board not found" />;
   }
 
   return (
@@ -287,7 +311,11 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
               zIndex: 1100,
             }}
           >
-            <IconButton onClick={() => navigate(-1)} className="return-button">
+            <IconButton
+              onClick={() => navigate(-1)}
+              className="return-button"
+              aria-label="Go back"
+            >
               <ArrowBackIcon sx={{ color: "text.primary" }} />
             </IconButton>
           </Box>
@@ -334,6 +362,8 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
               }
             }}
             onWheel={handleWheel}
+            role="region"
+            aria-label="Interactive board canvas"
           >
             <Box
               sx={{
@@ -413,6 +443,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
                   handleZoomButton("out");
                 }}
                 size="small"
+                aria-label="Zoom out"
               >
                 <RemoveIcon sx={{ color: "text.primary" }} />
               </IconButton>
@@ -425,6 +456,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
                   handleZoomButton("in");
                 }}
                 size="small"
+                aria-label="Zoom in"
               >
                 <AddIcon sx={{ color: "text.primary" }} />
               </IconButton>
@@ -447,7 +479,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
               }}
             >
               <Tooltip title="Board Visibility">
-                <IconButton>
+                <IconButton aria-label="Board visibility">
                   {board?.is_public ? (
                     <PublicIcon sx={{ color: "#3E435D" }} />
                   ) : (
@@ -458,6 +490,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
               <Tooltip title="Members">
                 <IconButton
                   onClick={(e) => setMembersAnchorEl(e.currentTarget)}
+                  aria-label="View members"
                 >
                   <Badge badgeContent={onlineUsers} color="primary">
                     <PeopleIcon sx={{ color: "text.primary" }} />
@@ -465,7 +498,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
                 </IconButton>
               </Tooltip>
               <Tooltip title={board?.is_liked ? "Unlike Board" : "Like Board"}>
-                <IconButton onClick={onLike}>
+                <IconButton onClick={onLike} aria-label="Like or unlike board">
                   {board?.is_liked ? (
                     <FavoriteIcon sx={{ color: "red" }} />
                   ) : (
@@ -474,7 +507,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
                 </IconButton>
               </Tooltip>
               <Tooltip title="Share Board">
-                <IconButton>
+                <IconButton aria-label="Share board">
                   <ShareIcon sx={{ color: "text.primary" }} />
                 </IconButton>
               </Tooltip>
@@ -501,7 +534,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
                 {members.length > 0 ? (
                   <List dense>
                     {members.map((member) => (
-                      <ListItem key={member._id}>
+                      <ListItem key={member.anonymous_id}>
                         <ListItemText
                           primary={member.username || "Anonymous"}
                           secondary={member.role || "Member"}
@@ -519,6 +552,16 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
       </Box>
     </ErrorBoundary>
   );
+};
+
+Board.propTypes = {
+  token: PropTypes.string.isRequired,
+  currentUser: PropTypes.object.isRequired,
+  onLogout: PropTypes.func.isRequired,
+  boardId: PropTypes.string.isRequired,
+  boardTitle: PropTypes.string.isRequired,
+  onLike: PropTypes.func.isRequired,
+  onStatusUpdate: PropTypes.func.isRequired,
 };
 
 export default Board;

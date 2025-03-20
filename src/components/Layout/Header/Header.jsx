@@ -1,26 +1,10 @@
-// Header.jsx
-import React, { useMemo } from "react";
+// src/components/Layout/Header/Header.jsx
+import React from "react";
 import { AppBar, Toolbar, Typography, Box, Avatar } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import { useUserExtras } from "../../../hooks/useUserExtras";
 
-const predictions = [
-  "A pleasant surprise is waiting for you",
-  "Your creativity will lead you to success",
-  "Expect positive changes soon",
-  "You will conquer new challenges today",
-  "Good fortune will follow you",
-];
-
-function generateRandomColor() {
-  const letters = "0123456789ABCDEF";
-  let color = "#";
-  for (let i = 0; i < 6; i++) {
-    color += letters[Math.floor(Math.random() * 16)];
-  }
-  return color;
-}
-
-// Функція форматування балів
+// Function to format points
 const formatPoints = (points) => {
   if (points < 1000) return points.toString();
   if (points < 1000000) return (points / 1000).toFixed(1).replace(/\.0$/, "") + "K";
@@ -30,10 +14,11 @@ const formatPoints = (points) => {
 
 const Header = ({ currentUser, token }) => {
   const navigate = useNavigate();
-  
+  const { randomPrediction, sessionAvatarBg } = useUserExtras(token);
+
   const userName = currentUser?.username || "Someone";
   const userAvatar = currentUser?.profile_picture || "";
-  const userStatus = currentUser?.status || "online";
+  const userStatus = currentUser?.onlineStatus || "offline"; // Fixed to use onlineStatus
   const userPoints = currentUser?.total_points || 0;
   const statusColor = { online: "green", offline: "red", anonymous: "grey" }[userStatus];
 
@@ -44,19 +29,6 @@ const Header = ({ currentUser, token }) => {
       ? name.charAt(0).toUpperCase()
       : (names[0].charAt(0) + names[1].charAt(0)).toUpperCase();
   };
-
-  const randomPrediction = useMemo(() => {
-    if (!token) {
-      return "Welcome to GATE";
-    }
-    const predictionKey = `prediction_${token}`;
-    let savedPrediction = localStorage.getItem(predictionKey);
-    if (!savedPrediction) {
-      savedPrediction = predictions[Math.floor(Math.random() * predictions.length)];
-      localStorage.setItem(predictionKey, savedPrediction);
-    }
-    return savedPrediction;
-  }, [token]);
 
   const formatDate = () => {
     const date = new Date();
@@ -70,26 +42,20 @@ const Header = ({ currentUser, token }) => {
 
   const currentDate = formatDate();
 
-  const sessionAvatarBg = useMemo(() => {
-    if (!token) {
-      return "#888888";
-    }
-    const colorKey = `avatarBgColor_${token}`;
-    let savedColor = localStorage.getItem(colorKey);
-    if (!savedColor) {
-      savedColor = generateRandomColor();
-      localStorage.setItem(colorKey, savedColor);
-    }
-    return savedColor;
-  }, [token]);
-
-  // При кліку на аватар переходимо на сторінку профілю
   const handleAvatarClick = () => {
-    navigate(`/profile/${currentUser.anonymous_id}`);
+    if (currentUser?.anonymous_id) {
+      navigate(`/profile/${currentUser.anonymous_id}`);
+    }
   };
 
   return (
-    <AppBar position="sticky" elevation={0} className="top-bar" sx={{ backgroundColor: "background.default" }}>
+    <AppBar
+      position="sticky"
+      elevation={0}
+      className="top-bar"
+      sx={{ backgroundColor: "background.default" }}
+      role="banner"
+    >
       <Toolbar className="top-bar-toolbar">
         <Box className="top-bar-left">
           <Typography variant="h5" className="welcome-text" sx={{ color: "text.primary" }}>
@@ -99,15 +65,16 @@ const Header = ({ currentUser, token }) => {
             {currentDate}
           </Typography>
         </Box>
-        <Box className="top-bar-right">
+        <Box className="top-bar-right" sx={{ display: "flex", alignItems: "center" }}>
           <Typography
             variant="body1"
             color="text.secondary"
             className="points-text"
+            sx={{ mr: 2 }}
           >
             Points: {formatPoints(userPoints)}
           </Typography>
-          <div className="avatar-wrapper">
+          <Box className="avatar-wrapper" sx={{ position: "relative" }}>
             <Avatar
               src={userAvatar || undefined}
               alt={userName}
@@ -122,14 +89,25 @@ const Header = ({ currentUser, token }) => {
                 lineHeight: 1,
                 cursor: "pointer",
               }}
+              aria-label={`Profile of ${userName}`}
             >
               {!userAvatar && getInitials(userName)}
             </Avatar>
             <span
               className="status-indicator"
-              style={{ backgroundColor: statusColor }}
+              style={{
+                backgroundColor: statusColor,
+                position: "absolute",
+                bottom: 0,
+                right: 0,
+                width: 14,
+                height: 14,
+                borderRadius: "50%",
+                border: "2px solid white",
+              }}
+              aria-label={`User status: ${userStatus}`}
             />
-          </div>
+          </Box>
         </Box>
       </Toolbar>
     </AppBar>

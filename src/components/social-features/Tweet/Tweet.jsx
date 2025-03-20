@@ -18,7 +18,7 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser }) => {
     }
   }, [tweet.x, tweet.y, dragging]);
 
-  const isDraggable = (tweet?.user?._id || tweet.user_id) === currentUser.anonymous_id;
+  const isDraggable = (tweet?.user?.anonymous_id || tweet.user_id) === currentUser.anonymous_id;
 
   return (
     <Draggable

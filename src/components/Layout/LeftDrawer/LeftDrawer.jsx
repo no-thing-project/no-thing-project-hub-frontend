@@ -1,3 +1,4 @@
+// src/components/Layout/LeftDrawer/LeftDrawer.jsx
 import React from "react";
 import { useLocation, Link } from "react-router-dom";
 import {
@@ -7,11 +8,12 @@ import {
   ListItemIcon,
   IconButton,
   Box,
+  Tooltip,
 } from "@mui/material";
 import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import DashboardIcon from "@mui/icons-material/Dashboard";
-import StyleRoundedIcon from '@mui/icons-material/StyleRounded';
-import ClassRoundedIcon from '@mui/icons-material/ClassRounded'; // Icon for Classes
+import StyleRoundedIcon from "@mui/icons-material/StyleRounded";
+import ClassRoundedIcon from "@mui/icons-material/ClassRounded";
 import ExitToAppRoundedIcon from "@mui/icons-material/ExitToAppRounded";
 
 const LeftDrawer = ({ onLogout }) => {
@@ -33,6 +35,8 @@ const LeftDrawer = ({ onLogout }) => {
           backgroundColor: "background.default",
         },
       }}
+      role="navigation"
+      aria-label="Main navigation"
     >
       <Box
         sx={{
@@ -55,18 +59,20 @@ const LeftDrawer = ({ onLogout }) => {
               },
             }}
           >
-            <ListItemIcon
-              sx={{
-                minWidth: 0,
-                justifyContent: "center",
-                color:
-                  currentPath === "/home"
-                    ? "var(--color-icon-hover)"
-                    : "var(--color-icon-default)",
-              }}
-            >
-              <HomeRoundedIcon sx={{ fontSize: 30 }} />
-            </ListItemIcon>
+            <Tooltip title="Home" placement="right">
+              <ListItemIcon
+                sx={{
+                  minWidth: 0,
+                  justifyContent: "center",
+                  color:
+                    currentPath === "/home"
+                      ? "var(--color-icon-hover)"
+                      : "var(--color-icon-default)",
+                }}
+              >
+                <HomeRoundedIcon sx={{ fontSize: 30 }} aria-label="Home" />
+              </ListItemIcon>
+            </Tooltip>
           </ListItem>
 
           <ListItem
@@ -80,18 +86,20 @@ const LeftDrawer = ({ onLogout }) => {
               },
             }}
           >
-            <ListItemIcon
-              sx={{
-                minWidth: 0,
-                justifyContent: "center",
-                color:
-                  currentPath === "/boards"
-                    ? "var(--color-icon-hover)"
-                    : "var(--color-icon-default)",
-              }}
-            >
-              <DashboardIcon sx={{ fontSize: 30 }} />
-            </ListItemIcon>
+            <Tooltip title="Boards" placement="right">
+              <ListItemIcon
+                sx={{
+                  minWidth: 0,
+                  justifyContent: "center",
+                  color:
+                    currentPath === "/boards"
+                      ? "var(--color-icon-hover)"
+                      : "var(--color-icon-default)",
+                }}
+              >
+                <DashboardIcon sx={{ fontSize: 30 }} aria-label="Boards" />
+              </ListItemIcon>
+            </Tooltip>
           </ListItem>
 
           <ListItem
@@ -105,18 +113,20 @@ const LeftDrawer = ({ onLogout }) => {
               },
             }}
           >
-            <ListItemIcon
-              sx={{
-                minWidth: 0,
-                justifyContent: "center",
-                color:
-                  currentPath === "/gates"
-                    ? "var(--color-icon-hover)"
-                    : "var(--color-icon-default)",
-              }}
-            >
-              <StyleRoundedIcon sx={{ fontSize: 30 }} />
-            </ListItemIcon>
+            <Tooltip title="Gates" placement="right">
+              <ListItemIcon
+                sx={{
+                  minWidth: 0,
+                  justifyContent: "center",
+                  color:
+                    currentPath === "/gates"
+                      ? "var(--color-icon-hover)"
+                      : "var(--color-icon-default)",
+                }}
+              >
+                <StyleRoundedIcon sx={{ fontSize: 30 }} aria-label="Gates" />
+              </ListItemIcon>
+            </Tooltip>
           </ListItem>
 
           <ListItem
@@ -130,35 +140,39 @@ const LeftDrawer = ({ onLogout }) => {
               },
             }}
           >
-            <ListItemIcon
-              sx={{
-                minWidth: 0,
-                justifyContent: "center",
-                color:
-                  currentPath === "/classes"
-                    ? "var(--color-icon-hover)"
-                    : "var(--color-icon-default)",
-              }}
-            >
-              <ClassRoundedIcon sx={{ fontSize: 30 }} />
-            </ListItemIcon>
+            <Tooltip title="Classes" placement="right">
+              <ListItemIcon
+                sx={{
+                  minWidth: 0,
+                  justifyContent: "center",
+                  color:
+                    currentPath === "/classes"
+                      ? "var(--color-icon-hover)"
+                      : "var(--color-icon-default)",
+                }}
+              >
+                <ClassRoundedIcon sx={{ fontSize: 30 }} aria-label="Classes" />
+              </ListItemIcon>
+            </Tooltip>
           </ListItem>
         </List>
       </Box>
 
-      <IconButton
-        onClick={onLogout}
-        title="Logout"
-        sx={{
-          alignSelf: "flex-start",
-          ml: 1,
-          mb: 2,
-          color: "var(--color-icon-default)",
-          "&:hover": { color: "var(--color-icon-hover)" },
-        }}
-      >
-        <ExitToAppRoundedIcon sx={{ fontSize: 30 }} />
-      </IconButton>
+      <Tooltip title="Logout" placement="right">
+        <IconButton
+          onClick={onLogout}
+          sx={{
+            alignSelf: "flex-start",
+            ml: 1,
+            mb: 2,
+            color: "var(--color-icon-default)",
+            "&:hover": { color: "var(--color-icon-hover)" },
+          }}
+          aria-label="Logout"
+        >
+          <ExitToAppRoundedIcon sx={{ fontSize: 30 }} />
+        </IconButton>
+      </Tooltip>
     </Drawer>
   );
 };

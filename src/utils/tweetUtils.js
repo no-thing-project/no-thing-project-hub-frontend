@@ -1,7 +1,7 @@
 export const normalizeTweet = (tweet, currentUser) => ({
     ...tweet,
     user: tweet.user || {
-      _id: tweet.user_id || tweet.user?.anonymous_id,
+      anonymous_id: tweet.user_id || tweet.user?.anonymous_id,
       username: tweet.username || (tweet.is_anonymous ? "Anonymous" : ""),
     },
     content: tweet.content || { type: "text", value: "" },
