@@ -1,5 +1,5 @@
 // src/sections/GatesSection/GatesSection.jsx
-import React from "react";
+import React, { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Button, Card, CardContent, Typography } from "@mui/material";
 import { Add } from "@mui/icons-material";
@@ -34,12 +34,30 @@ const cardStyles = {
   "&:hover": { transform: "scale(1.02)", boxShadow: 3 },
 };
 
-const GatesSection = ({ currentUser, gates, onCreate }) => {
+/**
+ * @typedef {Object} Gate
+ * @property {string} _id
+ * @property {string} gate_id
+ * @property {string} name
+ * @property {string} [description]
+ */
+
+/**
+ * @param {Object} props
+ * @param {Object} props.currentUser
+ * @param {Gate[]} props.gates
+ * @param {() => void} props.onCreate
+ */
+const GatesSection = React.memo(({ currentUser, gates, onCreate }) => {
   const navigate = useNavigate();
 
-  const handleGateClick = (gate_id) => {
-    navigate(`/classes/${gate_id}`);
-  };
+  const handleGateClick = useCallback((gate_id) => {
+    if (gate_id) {
+      navigate(`/gate/${gate_id}`);
+    } else {
+      console.error("Invalid gate ID for navigation");
+    }
+  }, [navigate]);
 
   return (
     <Box sx={containerStyles}>
@@ -54,11 +72,23 @@ const GatesSection = ({ currentUser, gates, onCreate }) => {
       />
       <Box sx={cardGridStyles}>
         {gates.map((gate) => (
-          <Card key={gate._id} sx={cardStyles} onClick={() => handleGateClick(gate.gate_id)}>
+          <Card
+            key={gate._id}
+            sx={cardStyles}
+            onClick={() => handleGateClick(gate.gate_id)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                handleGateClick(gate.gate_id);
+              }
+            }}
+            tabIndex={0}
+            role="button"
+            aria-label={`Open gate ${gate.name}`}
+          >
             <CardContent>
               <Typography variant="h6">{gate.name}</Typography>
               <Typography variant="body2" color="text.secondary">
-                {gate.description || ""}
+                {gate.description || "No description"}
               </Typography>
             </CardContent>
           </Card>
@@ -66,6 +96,8 @@ const GatesSection = ({ currentUser, gates, onCreate }) => {
       </Box>
     </Box>
   );
-};
+});
+
+GatesSection.displayName = "GatesSection";
 
 export default GatesSection;

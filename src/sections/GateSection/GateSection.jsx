@@ -1,6 +1,6 @@
 // src/sections/GateSection/GateSection.jsx
 import React, { useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Box, Button, Card, CardContent, Typography } from "@mui/material";
 import { Add } from "@mui/icons-material";
 import UserHeader from "../../components/Headers/UserHeader";
@@ -34,12 +34,39 @@ const cardStyles = {
   "&:hover": { transform: "scale(1.02)", boxShadow: 3 },
 };
 
-const GateSection = ({ currentUser, gateData, classes, onCreate }) => {
+/**
+ * @typedef {Object} Class
+ * @property {string} class_id
+ * @property {string} name
+ * @property {string} [description]
+ */
+
+/**
+ * @typedef {Object} GateData
+ * @property {string} gate_id
+ * @property {string} name
+ * @property {string} [description]
+ * @property {string} [creator_id]
+ */
+
+/**
+ * @param {Object} props
+ * @param {Object} props.currentUser
+ * @param {GateData} props.gateData
+ * @param {Class[]} props.classes
+ * @param {() => void} props.onCreate
+ */
+const GateSection = React.memo(({ currentUser, gateData, classes, onCreate }) => {
   const navigate = useNavigate();
+  const { gate_id } = useParams();
 
   const handleClassClick = useCallback((class_id) => {
-    navigate(`/class/${class_id}`);
-  }, [navigate]);
+    if (gate_id && class_id) {
+      navigate(`/class/${class_id}`);
+    } else {
+      console.error("Invalid gate ID or class ID for navigation");
+    }
+  }, [navigate, gate_id]);
 
   if (!currentUser || !gateData) {
     return (
@@ -84,11 +111,19 @@ const GateSection = ({ currentUser, gateData, classes, onCreate }) => {
               key={classItem.class_id}
               sx={cardStyles}
               onClick={() => handleClassClick(classItem.class_id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  handleClassClick(classItem.class_id);
+                }
+              }}
+              tabIndex={0}
+              role="button"
+              aria-label={`Open class ${classItem.name}`}
             >
               <CardContent>
                 <Typography variant="h6">{classItem.name}</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {classItem.description || ""}
+                  {classItem.description || "No description"}
                 </Typography>
               </CardContent>
             </Card>
@@ -110,6 +145,8 @@ const GateSection = ({ currentUser, gateData, classes, onCreate }) => {
       )}
     </Box>
   );
-};
+});
+
+GateSection.displayName = "GateSection";
 
 export default GateSection;

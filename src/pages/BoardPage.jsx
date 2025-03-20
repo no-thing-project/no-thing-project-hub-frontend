@@ -16,8 +16,8 @@ const BoardPage = ({ currentUser, onLogout, token }) => {
   const navigate = useNavigate();
   const { fetchBoard, board, loading, error } = useBoards(
     token,
-    null, // No gate_id for this context
-    board_id, // Initial board ID to fetch
+    null, 
+    board_id,
     onLogout,
     navigate
   );
@@ -45,7 +45,7 @@ const BoardPage = ({ currentUser, onLogout, token }) => {
           currentUser={currentUser}
           onLogout={onLogout}
           boardId={board_id}
-          boardTitle={board.name || "Untitled Board"} // Pass the board title
+          boardTitle={board.name || "Untitled Board"} 
         />
       </AppLayout>
     </ErrorBoundary>
