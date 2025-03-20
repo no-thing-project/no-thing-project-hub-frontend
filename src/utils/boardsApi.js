@@ -1,26 +1,29 @@
+// src/api/boardsApi.js
 import api from "./apiClient";
 import { handleApiError } from "./apiClient";
 
 // Fetch all boards
-export const fetchBoards = async (token) => {
+export const fetchBoards = async (token, signal) => {
   try {
     const response = await api.get(`/api/v1/boards`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal,
     });
     return response.data?.content?.boards || [];
   } catch (err) {
     handleApiError(err);
-    throw err;
+    throw err; // Throw the error so useBoards can handle 401/403
   }
 };
 
-// Fetch a board by ID
-export const fetchBoardById = async (board_id, token) => {
+// Fetch boards by gate
+export const fetchBoardsByGate = async (gate_id, token, signal) => {
   try {
-    const response = await api.get(`/api/v1/boards/${board_id}`, {
+    const response = await api.get(`/api/v1/boards/gates/${gate_id}`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal,
     });
-    return response.data?.content || null;
+    return response.data?.content?.boards || [];
   } catch (err) {
     handleApiError(err);
     throw err;
@@ -28,10 +31,11 @@ export const fetchBoardById = async (board_id, token) => {
 };
 
 // Fetch boards by class
-export const fetchBoardsByClass = async (class_id, token) => {
+export const fetchBoardsByClass = async (class_id, token, signal) => {
   try {
-    const response = await api.get(`/api/v1/boards/class/${class_id}`, {
+    const response = await api.get(`/api/v1/boards/classes/${class_id}`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal,
     });
     return response.data?.content?.boards || [];
   } catch (err) {
@@ -40,33 +44,12 @@ export const fetchBoardsByClass = async (class_id, token) => {
   }
 };
 
-// Fetch boards by gate
-export const fetchBoardsByGate = async (gate_id, token) => {
-  console.log("Fetching boards for gate_id:", gate_id);
-  if (!gate_id) {
-    const error = new Error("gate_id is undefined or invalid");
-    console.error(error);
-    handleApiError(error);
-    throw error;
-  }
+// Fetch a board by ID (standalone)
+export const fetchBoardById = async (board_id, token, signal) => {
   try {
-    const response = await api.get(`/api/v1/boards/gate/${gate_id}`, {
+    const response = await api.get(`/api/v1/boards/${board_id}`, {
       headers: { Authorization: `Bearer ${token}` },
-    });
-    console.log("Boards response:", response.data);
-    return response.data?.content?.boards || [];
-  } catch (err) {
-    console.error("Error fetching boards by gate:", err);
-    handleApiError(err);
-    throw err;
-  }
-};
-
-// Fetch a board by ID within a class
-export const fetchBoardByIdClass = async (board_id, class_id, token) => {
-  try {
-    const response = await api.get(`/api/v1/boards/class/${class_id}/${board_id}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      signal,
     });
     return response.data?.content || null;
   } catch (err) {
@@ -76,10 +59,11 @@ export const fetchBoardByIdClass = async (board_id, class_id, token) => {
 };
 
 // Fetch a board by ID within a gate
-export const fetchBoardByIdGate = async (board_id, gate_id, token) => {
+export const fetchBoardByIdGate = async (board_id, gate_id, token, signal) => {
   try {
-    const response = await api.get(`/api/v1/boards/gate/${gate_id}/${board_id}`, {
+    const response = await api.get(`/api/v1/boards/gates/${gate_id}/${board_id}`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal,
     });
     return response.data?.content || null;
   } catch (err) {
@@ -88,7 +72,21 @@ export const fetchBoardByIdGate = async (board_id, gate_id, token) => {
   }
 };
 
-// Create a board
+// Fetch a board by ID within a class
+export const fetchBoardByIdClass = async (board_id, class_id, token, signal) => {
+  try {
+    const response = await api.get(`/api/v1/boards/classes/${class_id}/${board_id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    });
+    return response.data?.content || null;
+  } catch (err) {
+    handleApiError(err);
+    throw err;
+  }
+};
+
+// Create a board (standalone)
 export const createBoard = async (boardData, token) => {
   try {
     const response = await api.post(`/api/v1/boards`, boardData, {
@@ -104,7 +102,7 @@ export const createBoard = async (boardData, token) => {
 // Create a board in a gate
 export const createBoardInGate = async (gate_id, boardData, token) => {
   try {
-    const response = await api.post(`/api/v1/boards/gate/${gate_id}`, boardData, {
+    const response = await api.post(`/api/v1/boards/gates/${gate_id}`, boardData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data?.content || null;
@@ -117,7 +115,7 @@ export const createBoardInGate = async (gate_id, boardData, token) => {
 // Create a board in a class
 export const createBoardInClass = async (class_id, boardData, token) => {
   try {
-    const response = await api.post(`/api/v1/boards/class/${class_id}`, boardData, {
+    const response = await api.post(`/api/v1/boards/classes/${class_id}`, boardData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data?.content || null;
@@ -127,10 +125,23 @@ export const createBoardInClass = async (class_id, boardData, token) => {
   }
 };
 
-// Update a board in a gate
+// Update a board (standalone)
+export const updateBoard = async (board_id, boardData, token) => {
+  try {
+    const response = await api.put(`/api/v1/boards/${board_id}`, boardData, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data?.content || null;
+  } catch (err) {
+    handleApiError(err);
+    throw err;
+  }
+};
+
+// Update a board within a gate
 export const updateBoardGate = async (gate_id, board_id, boardData, token) => {
   try {
-    const response = await api.put(`/api/v1/boards/gate/${gate_id}/${board_id}`, boardData, {
+    const response = await api.put(`/api/v1/boards/gates/${gate_id}/${board_id}`, boardData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data?.content || null;
@@ -140,10 +151,10 @@ export const updateBoardGate = async (gate_id, board_id, boardData, token) => {
   }
 };
 
-// Update a board in a class
+// Update a board within a class
 export const updateBoardClass = async (class_id, board_id, boardData, token) => {
   try {
-    const response = await api.put(`/api/v1/boards/class/${class_id}/${board_id}`, boardData, {
+    const response = await api.put(`/api/v1/boards/classes/${class_id}/${board_id}`, boardData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data?.content || null;
@@ -153,10 +164,10 @@ export const updateBoardClass = async (class_id, board_id, boardData, token) => 
   }
 };
 
-// Update board status in a gate
+// Update board status within a gate
 export const updateBoardStatusGate = async (gate_id, board_id, statusData, token) => {
   try {
-    const response = await api.put(`/api/v1/boards/gate/${gate_id}/${board_id}/status`, statusData, {
+    const response = await api.put(`/api/v1/boards/gates/${gate_id}/${board_id}/status`, statusData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data?.content || null;
@@ -166,10 +177,10 @@ export const updateBoardStatusGate = async (gate_id, board_id, statusData, token
   }
 };
 
-// Update board status in a class
+// Update board status within a class
 export const updateBoardStatusClass = async (class_id, board_id, statusData, token) => {
   try {
-    const response = await api.put(`/api/v1/boards/class/${class_id}/${board_id}/status`, statusData, {
+    const response = await api.put(`/api/v1/boards/classes/${class_id}/${board_id}/status`, statusData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data?.content || null;
@@ -179,10 +190,23 @@ export const updateBoardStatusClass = async (class_id, board_id, statusData, tok
   }
 };
 
-// Delete a board in a gate
+// Delete a board (standalone)
+export const deleteBoard = async (board_id, token) => {
+  try {
+    const response = await api.delete(`/api/v1/boards/${board_id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data?.content || null;
+  } catch (err) {
+    handleApiError(err);
+    throw err;
+  }
+};
+
+// Delete a board within a gate
 export const deleteBoardGate = async (gate_id, board_id, token) => {
   try {
-    const response = await api.delete(`/api/v1/boards/gate/${gate_id}/${board_id}`, {
+    const response = await api.delete(`/api/v1/boards/gates/${gate_id}/${board_id}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data?.content || null;
@@ -192,10 +216,10 @@ export const deleteBoardGate = async (gate_id, board_id, token) => {
   }
 };
 
-// Delete a board in a class
+// Delete a board within a class
 export const deleteBoardClass = async (class_id, board_id, token) => {
   try {
-    const response = await api.delete(`/api/v1/boards/class/${class_id}/${board_id}`, {
+    const response = await api.delete(`/api/v1/boards/classes/${class_id}/${board_id}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data?.content || null;

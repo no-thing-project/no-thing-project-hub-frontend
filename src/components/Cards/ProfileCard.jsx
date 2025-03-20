@@ -1,5 +1,19 @@
+// src/components/Cards/ProfileCard.jsx
 import React, { useCallback, useState } from "react";
-import { Box, Grid, Snackbar, Alert } from "@mui/material";
+import {
+  Box,
+  Grid,
+  Snackbar,
+  Alert,
+  List,
+  ListItem,
+  ListItemText,
+  IconButton,
+  Divider,
+  TextField,
+  Button,
+} from "@mui/material";
+import { MarkEmailRead, Delete, Send } from "@mui/icons-material";
 import ProfileHeader from "../Headers/ProfileHeader";
 import ProfileSection from "../../sections/ProfileSection/ProfileSection";
 import ProfileField from "../Fields/ProfileField";
@@ -7,11 +21,27 @@ import NotificationToggle from "../Toggles/NotificationToggle";
 import { containerStyles } from "../../styles/ProfileStyles";
 import { normalizeUserData } from "../../utils/profileUtils";
 
-const ProfileCard = ({ currentUser, isOwnProfile, onUpdate }) => {
+const ProfileCard = ({
+  profileData,
+  isOwnProfile,
+  pointsHistory,
+  messages,
+  onUpdate,
+  onSendMessage,
+  onMarkMessageAsRead,
+  onDeleteMessage,
+  onGetMessages,
+}) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [userData, setUserData] = useState(() => normalizeUserData(currentUser));
+  const [userData, setUserData] = useState(() => normalizeUserData(profileData));
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [messageContent, setMessageContent] = useState("");
+
+  // Update userData when profileData changes
+  React.useEffect(() => {
+    setUserData(normalizeUserData(profileData));
+  }, [profileData]);
 
   const handleChange = useCallback(
     (field, subfield) => (e) => {
@@ -74,24 +104,43 @@ const ProfileCard = ({ currentUser, isOwnProfile, onUpdate }) => {
       preferences: userData.preferences,
       onlineStatus: userData.onlineStatus,
     };
-    console.log("Calling onUpdate with updates:", updates);
-    const success = await onUpdate(updates);
-    if (success) {
-      setSuccess("Profile updated successfully!");
-      setIsEditing(false);
-    } else {
+    try {
+      const updatedProfile = await onUpdate(updates);
+      if (updatedProfile) {
+        setSuccess("Profile updated successfully!");
+        setIsEditing(false);
+      } else {
+        setError("Failed to update profile");
+      }
+    } catch (err) {
       setError("Failed to update profile");
+      console.error("Error updating profile:", err);
     }
   }, [userData, onUpdate]);
+
+  const handleSendMessage = useCallback(async () => {
+    if (!messageContent.trim()) {
+      setError("Message content cannot be empty");
+      return;
+    }
+    try {
+      await onSendMessage(profileData.anonymous_id, messageContent);
+      setSuccess("Message sent successfully!");
+      setMessageContent("");
+    } catch (err) {
+      setError("Failed to send message");
+      console.error("Error sending message:", err);
+    }
+  }, [messageContent, onSendMessage, profileData]);
 
   const handleCloseSnackbar = useCallback(() => {
     setError("");
     setSuccess("");
   }, []);
 
-  // Validate onUpdate prop after all hooks
+  // Validate onUpdate prop
   if (!onUpdate || typeof onUpdate !== "function") {
-    console.error("onUpdate prop is not a function. Received:", onUpdate, "Stack trace:", new Error().stack);
+    console.error("onUpdate prop is not a function. Received:", onUpdate);
     return (
       <div>
         Error: onUpdate prop is missing or invalid. Please check the parent component (ProfilePage).
@@ -161,12 +210,33 @@ const ProfileCard = ({ currentUser, isOwnProfile, onUpdate }) => {
                   onChange={handleChange}
                   select
                   options={[
-                    'UTC-12:00', 'UTC-11:00', 'UTC-10:00', 'UTC-09:00', 'UTC-08:00',
-                    'UTC-07:00', 'UTC-06:00', 'UTC-05:00', 'UTC-04:00', 'UTC-03:00',
-                    'UTC-02:00', 'UTC-01:00', 'UTC+00:00', 'UTC+01:00', 'UTC+02:00',
-                    'UTC+03:00', 'UTC+04:00', 'UTC+05:00', 'UTC+06:00', 'UTC+07:00',
-                    'UTC+08:00', 'UTC+09:00', 'UTC+10:00', 'UTC+11:00', 'UTC+12:00',
-                    'UTC+13:00', 'UTC+14:00',
+                    "UTC-12:00",
+                    "UTC-11:00",
+                    "UTC-10:00",
+                    "UTC-09:00",
+                    "UTC-08:00",
+                    "UTC-07:00",
+                    "UTC-06:00",
+                    "UTC-05:00",
+                    "UTC-04:00",
+                    "UTC-03:00",
+                    "UTC-02:00",
+                    "UTC-01:00",
+                    "UTC+00:00",
+                    "UTC+01:00",
+                    "UTC+02:00",
+                    "UTC+03:00",
+                    "UTC+04:00",
+                    "UTC+05:00",
+                    "UTC+06:00",
+                    "UTC+07:00",
+                    "UTC+08:00",
+                    "UTC+09:00",
+                    "UTC+10:00",
+                    "UTC+11:00",
+                    "UTC+12:00",
+                    "UTC+13:00",
+                    "UTC+14:00",
                   ]}
                 />
               </Grid>
@@ -179,8 +249,15 @@ const ProfileCard = ({ currentUser, isOwnProfile, onUpdate }) => {
                   onChange={handleChange}
                   select
                   options={[
-                    "Asian", "Black", "Hispanic", "White", "Native American", "Pacific Islander",
-                    "Mixed", "Other", "Prefer not to say",
+                    "Asian",
+                    "Black",
+                    "Hispanic",
+                    "White",
+                    "Native American",
+                    "Pacific Islander",
+                    "Mixed",
+                    "Other",
+                    "Prefer not to say",
                   ]}
                 />
               </Grid>
@@ -198,7 +275,11 @@ const ProfileCard = ({ currentUser, isOwnProfile, onUpdate }) => {
               <Grid item xs={12} sm={6}>
                 <ProfileField
                   label="Date of Birth"
-                  value={userData.dateOfBirth ? new Date(userData.dateOfBirth).toISOString().split("T")[0] : ""}
+                  value={
+                    userData.dateOfBirth
+                      ? new Date(userData.dateOfBirth).toISOString().split("T")[0]
+                      : ""
+                  }
                   field="dateOfBirth"
                   isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
@@ -330,6 +411,7 @@ const ProfileCard = ({ currentUser, isOwnProfile, onUpdate }) => {
                   label="Email"
                   checked={userData.preferences.notifications.email}
                   onChange={handleSwitchChange("preferences", "email")}
+                  disabled={!isEditing || !isOwnProfile}
                 />
               </Grid>
               <Grid item xs={12} sm={12}>
@@ -337,6 +419,7 @@ const ProfileCard = ({ currentUser, isOwnProfile, onUpdate }) => {
                   label="SMS"
                   checked={userData.preferences.notifications.sms}
                   onChange={handleSwitchChange("preferences", "sms")}
+                  disabled={!isEditing || !isOwnProfile}
                 />
               </Grid>
               <Grid item xs={12} sm={12}>
@@ -344,6 +427,7 @@ const ProfileCard = ({ currentUser, isOwnProfile, onUpdate }) => {
                   label="Push"
                   checked={userData.preferences.notifications.push}
                   onChange={handleSwitchChange("preferences", "push")}
+                  disabled={!isEditing || !isOwnProfile}
                 />
               </Grid>
             </Grid>
@@ -369,11 +453,109 @@ const ProfileCard = ({ currentUser, isOwnProfile, onUpdate }) => {
                   value={userData.preferences.contentLanguage}
                   field="preferences"
                   subfield="contentLanguage"
-                  isEditing={isEditing && isOwnProfile}
                   onChange={handleChange}
+                  isEditing={isEditing && isOwnProfile}
                   select
                   options={["en", "ua", "es", "fr"]}
                 />
+              </Grid>
+            </Grid>
+          </ProfileSection>
+        </Grid>
+
+        {/* Points History (only for own profile) */}
+        {isOwnProfile && pointsHistory.length > 0 && (
+          <Grid item xs={12}>
+            <ProfileSection title="Points History">
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <List>
+                    {pointsHistory.map((entry, index) => (
+                      <ListItem key={index}>
+                        <ListItemText
+                          primary={`Points: ${entry.points}`}
+                          secondary={`Reason: ${entry.reason} | Date: ${new Date(
+                            entry.created_at
+                          ).toLocaleDateString()}`}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Grid>
+              </Grid>
+            </ProfileSection>
+          </Grid>
+        )}
+
+        {/* Messages Section */}
+        <Grid item xs={12}>
+          <ProfileSection title={isOwnProfile ? "Your Messages" : "Send a Message"}>
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                {isOwnProfile ? (
+                  messages.length > 0 ? (
+                    <List>
+                      {messages.map((message) => (
+                        <React.Fragment key={message._id}>
+                          <ListItem
+                            secondaryAction={
+                              <>
+                                {!message.is_read && (
+                                  <IconButton
+                                    edge="end"
+                                    onClick={() => onMarkMessageAsRead(message._id)}
+                                  >
+                                    <MarkEmailRead />
+                                  </IconButton>
+                                )}
+                                <IconButton
+                                  edge="end"
+                                  onClick={() => onDeleteMessage(message._id)}
+                                >
+                                  <Delete />
+                                </IconButton>
+                              </>
+                            }
+                          >
+                            <ListItemText
+                              primary={message.content}
+                              secondary={`From: ${
+                                message.sender_id === profileData?.anonymous_id
+                                  ? "You"
+                                  : message.sender_id
+                              } | Date: ${new Date(message.created_at).toLocaleDateString()}`}
+                            />
+                          </ListItem>
+                          <Divider />
+                        </React.Fragment>
+                      ))}
+                    </List>
+                  ) : (
+                    <Box>No messages available.</Box>
+                  )
+                ) : (
+                  <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                      <TextField
+                        label="Message"
+                        value={messageContent}
+                        onChange={(e) => setMessageContent(e.target.value)}
+                        fullWidth
+                        multiline
+                        rows={3}
+                        margin="normal"
+                      />
+                      <Button
+                        variant="contained"
+                        startIcon={<Send />}
+                        onClick={handleSendMessage}
+                        disabled={!messageContent.trim()}
+                      >
+                        Send Message
+                      </Button>
+                    </Grid>
+                  </Grid>
+                )}
               </Grid>
             </Grid>
           </ProfileSection>

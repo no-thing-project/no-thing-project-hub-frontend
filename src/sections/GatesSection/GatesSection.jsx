@@ -1,8 +1,24 @@
 // src/sections/GatesSection/GatesSection.jsx
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Button, Card, CardContent, Typography } from "@mui/material";
-import { Add } from "@mui/icons-material";
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Typography,
+  IconButton,
+  Popover,
+  List,
+  ListItem,
+  ListItemText,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+} from "@mui/material";
+import { Add, Edit, Delete, Favorite, FavoriteBorder } from "@mui/icons-material";
 import UserHeader from "../../components/Headers/UserHeader";
 
 const containerStyles = {
@@ -34,22 +50,10 @@ const cardStyles = {
   "&:hover": { transform: "scale(1.02)", boxShadow: 3 },
 };
 
-/**
- * @typedef {Object} Gate
- * @property {string} _id
- * @property {string} gate_id
- * @property {string} name
- * @property {string} [description]
- */
-
-/**
- * @param {Object} props
- * @param {Object} props.currentUser
- * @param {Gate[]} props.gates
- * @param {() => void} props.onCreate
- */
-const GatesSection = React.memo(({ currentUser, gates, onCreate }) => {
+const GatesSection = React.memo(({ currentUser, gates, onCreate, onUpdate, onDelete, onLike }) => {
   const navigate = useNavigate();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [gateToDelete, setGateToDelete] = useState(null);
 
   const handleGateClick = useCallback((gate_id) => {
     if (gate_id) {
@@ -58,6 +62,11 @@ const GatesSection = React.memo(({ currentUser, gates, onCreate }) => {
       console.error("Invalid gate ID for navigation");
     }
   }, [navigate]);
+
+  const handleDeleteConfirm = (gate) => {
+    setGateToDelete(gate);
+    setDeleteDialogOpen(true);
+  };
 
   return (
     <Box sx={containerStyles}>
@@ -90,10 +99,61 @@ const GatesSection = React.memo(({ currentUser, gates, onCreate }) => {
               <Typography variant="body2" color="text.secondary">
                 {gate.description || "No description"}
               </Typography>
+              <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+                <IconButton
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdate(gate);
+                  }}
+                >
+                  <Edit />
+                </IconButton>
+                <IconButton
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onLike(gate.gate_id, gate.is_liked);
+                  }}
+                >
+                  {gate.is_liked ? <Favorite color="error" /> : <FavoriteBorder />}
+                </IconButton>
+                <IconButton
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteConfirm(gate);
+                  }}
+                >
+                  <Delete />
+                </IconButton>
+              </Box>
             </CardContent>
           </Card>
         ))}
       </Box>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete the gate "{gateToDelete?.name}"? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} color="primary">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              onDelete(gateToDelete.gate_id);
+              setDeleteDialogOpen(false);
+            }}
+            color="error"
+            autoFocus
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 });

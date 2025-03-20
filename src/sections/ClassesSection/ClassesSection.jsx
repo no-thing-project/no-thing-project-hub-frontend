@@ -1,4 +1,4 @@
-// src/sections/ClassSection/ClassesSection.jsx
+// src/sections/ClassesSection/ClassesSection.jsx
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Button, Card, CardContent, Typography } from "@mui/material";
@@ -54,7 +54,11 @@ const ClassesSection = ({ currentUser, classes, onCreate }) => {
       />
       <Box sx={cardGridStyles}>
         {classes.map((classItem) => (
-          <Card key={classItem._id} sx={cardStyles} onClick={() => handleClassClick(classItem.class_id)}>
+          <Card
+            key={classItem.class_id}
+            sx={cardStyles}
+            onClick={() => handleClassClick(classItem.class_id)}
+          >
             <CardContent>
               <Typography variant="h6">{classItem.name}</Typography>
               <Typography variant="body2" color="text.secondary">

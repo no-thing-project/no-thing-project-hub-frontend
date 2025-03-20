@@ -7,18 +7,32 @@ import React, {
   useEffect,
   useMemo,
 } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Box, IconButton, Typography, Badge } from "@mui/material";
+import { useNavigate } from "react-router-dom";
+import {
+  Box,
+  IconButton,
+  Typography,
+  Badge,
+  Tooltip,
+  List,
+  ListItem,
+  ListItemText,
+  Popover,
+} from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
 import PeopleIcon from "@mui/icons-material/People";
 import FavoriteIcon from "@mui/icons-material/Favorite";
+import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import ShareIcon from "@mui/icons-material/Share";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import LockIcon from "@mui/icons-material/Lock";
+import PublicIcon from "@mui/icons-material/Public";
 import DraggableTweet from "../Tweet/Tweet";
 import TweetPopup from "../Tweet/TweetPopup";
 import TweetContent from "../Tweet/TweetContent";
 import { useTweets } from "../../../hooks/useTweets";
+import { useBoards } from "../../../hooks/useBoards";
 import { useWebSocket } from "../../../hooks/useWebSocket";
 import { BOARD_SIZE, useBoardInteraction } from "../../../hooks/useBoard";
 import ErrorMessage from "../../Layout/ErrorMessage";
@@ -28,7 +42,7 @@ const ErrorFallback = ({ error }) => (
   <ErrorMessage message={error.message || "Something went wrong in the Board"} />
 );
 
-const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
+const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onStatusUpdate }) => {
   const navigate = useNavigate();
   const boardMainRef = useRef(null);
   const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0 });
@@ -36,25 +50,34 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
   const [replyTweet, setReplyTweet] = useState(null);
   const [highlightedParentId, setHighlightedParentId] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState(0);
+  const [membersAnchorEl, setMembersAnchorEl] = useState(null);
 
   const {
     tweets,
     setTweets,
     fetchTweets,
-    createTweet,
-    updateTweet,
-    toggleLike,
-    deleteTweet,
+    createNewTweet,
+    updateExistingTweet,
+    toggleLikeTweet,
+    deleteExistingTweet,
     loading: tweetsLoading,
     error: tweetsError,
   } = useTweets(token, boardId, currentUser, onLogout, navigate);
+
+  const {
+    board,
+    members,
+    fetchBoard,
+    fetchMembersForBoard,
+    loading: boardsLoading,
+    error: boardsError,
+  } = useBoards(token, null, null, boardId, onLogout, navigate);
 
   const socketRef = useWebSocket(
     token,
     boardId,
     currentUser,
     setTweets,
-    setOnlineUsers,
     onLogout,
     navigate
   );
@@ -63,9 +86,11 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
     if (boardId) {
       const controller = new AbortController();
       fetchTweets({ signal: controller.signal });
+      fetchBoard(boardId, controller.signal);
+      fetchMembersForBoard(boardId);
       return () => controller.abort();
     }
-  }, [boardId, fetchTweets]);
+  }, [boardId, fetchTweets, fetchBoard, fetchMembersForBoard]);
 
   useEffect(() => {
     return () => {
@@ -78,8 +103,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
   const handleCreateTweet = useCallback(
     async (text, x, y) => {
       try {
-        const newTweet = await createTweet(
-          boardId,
+        const newTweet = await createNewTweet(
           text,
           x,
           y,
@@ -94,13 +118,13 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
         console.error("Error creating tweet:", err);
       }
     },
-    [createTweet, socketRef, boardId, replyTweet]
+    [createNewTweet, socketRef, boardId, replyTweet]
   );
 
   const handleUpdateTweet = useCallback(
     async (id, updates) => {
       try {
-        await updateTweet(id, updates);
+        await updateExistingTweet(id, updates);
         if (socketRef.current) {
           socketRef.current.emit("tweetUpdated", {
             boardId,
@@ -113,13 +137,13 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
         console.error("Error updating tweet:", err);
       }
     },
-    [updateTweet, socketRef, boardId]
+    [updateExistingTweet, socketRef, boardId]
   );
 
-  const handleToggleLike = useCallback(
+  const handleToggleLikeTweet = useCallback(
     async (id, isLiked) => {
       try {
-        const updatedTweet = await toggleLike(id, isLiked);
+        const updatedTweet = await toggleLikeTweet(id, isLiked);
         if (updatedTweet && socketRef.current) {
           socketRef.current.emit("tweetUpdated", { boardId, ...updatedTweet });
         }
@@ -127,13 +151,13 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
         console.error("Error toggling like:", err);
       }
     },
-    [toggleLike, socketRef, boardId]
+    [toggleLikeTweet, socketRef, boardId]
   );
 
   const handleDeleteTweet = useCallback(
     async (id) => {
       try {
-        await deleteTweet(id);
+        await deleteExistingTweet(id);
         if (socketRef.current) {
           socketRef.current.emit("tweetDeleted", { boardId, tweet_id: id });
         }
@@ -141,7 +165,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
         console.error("Error deleting tweet:", err);
       }
     },
-    [deleteTweet, socketRef, boardId]
+    [deleteExistingTweet, socketRef, boardId]
   );
 
   const handleReply = useCallback((tweet) => {
@@ -178,7 +202,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
         <TweetContent
           tweet={tweet}
           currentUser={currentUser}
-          onLike={handleToggleLike}
+          onLike={handleToggleLikeTweet}
           onDelete={handleDeleteTweet}
           onReply={handleReply}
           onReplyHover={handleReplyHover}
@@ -190,7 +214,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
     tweets,
     currentUser,
     handleUpdateTweet,
-    handleToggleLike,
+    handleToggleLikeTweet,
     handleDeleteTweet,
     handleReply,
     handleReplyHover,
@@ -232,8 +256,8 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
     [handleMouseUp]
   );
 
-  if (tweetsError) {
-    return <ErrorMessage message={tweetsError} />;
+  if (tweetsError || boardsError) {
+    return <ErrorMessage message={tweetsError || boardsError} />;
   }
 
   return (
@@ -241,8 +265,8 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
       <Box
         sx={{
           display: "flex",
-          width: "100vw",
-          height: "100vh",
+          width: "100%",
+          height: "100%",
           overflow: "hidden",
         }}
       >
@@ -254,6 +278,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
             position: "relative",
           }}
         >
+          {/* Return Button */}
           <Box
             sx={{
               position: "absolute",
@@ -267,6 +292,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
             </IconButton>
           </Box>
 
+          {/* Board Canvas */}
           <Box
             ref={boardMainRef}
             sx={{
@@ -365,6 +391,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
               )}
             </Box>
 
+            {/* Zoom Controls */}
             <Box
               className="zoom-controls"
               sx={{
@@ -403,6 +430,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
               </IconButton>
             </Box>
 
+            {/* Board Controls */}
             <Box
               className="board-top-controls"
               sx={{
@@ -418,33 +446,74 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle }) => {
                 padding: "4px",
               }}
             >
-              <IconButton
-                sx={{
-                  transition: "transform 0.2s ease-in-out",
-                  "&:hover": { transform: "scale(1.1)" },
-                }}
-              >
-                <Badge badgeContent={onlineUsers} color="primary">
-                  <PeopleIcon sx={{ color: "text.primary" }} />
-                </Badge>
-              </IconButton>
-              <IconButton
-                sx={{
-                  transition: "transform 0.2s ease-in-out",
-                  "&:hover": { transform: "scale(1.1)" },
-                }}
-              >
-                <FavoriteIcon sx={{ color: "text.primary" }} />
-              </IconButton>
-              <IconButton
-                sx={{
-                  transition: "transform 0.2s ease-in-out",
-                  "&:hover": { transform: "scale(1.1)" },
-                }}
-              >
-                <ShareIcon sx={{ color: "text.primary" }} />
-              </IconButton>
+              <Tooltip title="Board Visibility">
+                <IconButton>
+                  {board?.is_public ? (
+                    <PublicIcon sx={{ color: "#3E435D" }} />
+                  ) : (
+                    <LockIcon sx={{ color: "#990000" }} />
+                  )}
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Members">
+                <IconButton
+                  onClick={(e) => setMembersAnchorEl(e.currentTarget)}
+                >
+                  <Badge badgeContent={onlineUsers} color="primary">
+                    <PeopleIcon sx={{ color: "text.primary" }} />
+                  </Badge>
+                </IconButton>
+              </Tooltip>
+              <Tooltip title={board?.is_liked ? "Unlike Board" : "Like Board"}>
+                <IconButton onClick={onLike}>
+                  {board?.is_liked ? (
+                    <FavoriteIcon sx={{ color: "red" }} />
+                  ) : (
+                    <FavoriteBorderIcon sx={{ color: "text.primary" }} />
+                  )}
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Share Board">
+                <IconButton>
+                  <ShareIcon sx={{ color: "text.primary" }} />
+                </IconButton>
+              </Tooltip>
             </Box>
+
+            {/* Members Popover */}
+            <Popover
+              open={Boolean(membersAnchorEl)}
+              anchorEl={membersAnchorEl}
+              onClose={() => setMembersAnchorEl(null)}
+              anchorOrigin={{
+                vertical: "bottom",
+                horizontal: "right",
+              }}
+              transformOrigin={{
+                vertical: "top",
+                horizontal: "right",
+              }}
+            >
+              <Box sx={{ p: 2, maxHeight: 300, overflowY: "auto" }}>
+                <Typography variant="h6" gutterBottom>
+                  Members
+                </Typography>
+                {members.length > 0 ? (
+                  <List dense>
+                    {members.map((member) => (
+                      <ListItem key={member._id}>
+                        <ListItemText
+                          primary={member.username || "Anonymous"}
+                          secondary={member.role || "Member"}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                ) : (
+                  <Typography>No members found.</Typography>
+                )}
+              </Box>
+            </Popover>
           </Box>
         </Box>
       </Box>

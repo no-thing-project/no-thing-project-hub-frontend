@@ -5,7 +5,7 @@ import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import ErrorMessage from "../components/Layout/ErrorMessage";
 import ProfileCard from "../components/Cards/ProfileCard";
-import useProfile  from "../hooks/useProfile";
+import useProfile from "../hooks/useProfile";
 
 const ProfilePage = ({ currentUser, onLogout, token }) => {
   const { anonymous_id } = useParams();
@@ -17,40 +17,68 @@ const ProfilePage = ({ currentUser, onLogout, token }) => {
     messages,
     loading,
     error,
-    fetchProfile,
-    updateProfile,
-    fetchPointsHistory,
-    getMessages,
-    sendMessage,
-    markMessageAsRead,
-    deleteMessage,
+    fetchProfileData,
+    fetchProfilePointsHistory,
+    // fetchProfileMessages,
+    sendProfileMessage,
+    markProfileMessageAsRead,
+    deleteProfileMessage,
+    updateProfileData,
   } = useProfile(token, currentUser, onLogout, navigate);
 
   useEffect(() => {
-    // Fetch the profile data
-    fetchProfile(anonymous_id);
+    const controller = new AbortController();
+    const signal = controller.signal;
 
-    // Fetch points history if it's the user's own profile
-    if (currentUser?.anonymous_id === anonymous_id) {
-      fetchPointsHistory();
+    const loadData = async () => {
+      try {
+        // Fetch the profile data
+        await fetchProfileData(anonymous_id, signal);
+
+        // Fetch points history and messages if it's the user's own profile
+        if (isOwnProfile) {
+          await Promise.all([
+            fetchProfilePointsHistory(signal),
+            // fetchProfileMessages(currentUser?.anonymous_id, 50, 0, signal),
+          ]);
+        }
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          console.error("Error loading profile data:", err);
+        }
+      }
+    };
+
+    if (anonymous_id) {
+      loadData();
     }
-  }, [anonymous_id, currentUser, fetchProfile, fetchPointsHistory]);
+
+    return () => controller.abort();
+  }, [
+    anonymous_id,
+    currentUser,
+    fetchProfileData,
+    fetchProfilePointsHistory,
+    // fetchProfileMessages,
+    isOwnProfile,
+  ]);
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} />;
+  if (!profileData) return <ErrorMessage message="Profile not found" />;
 
   return (
     <AppLayout currentUser={currentUser} onLogout={onLogout} token={token}>
       <ProfileCard
         profileData={profileData}
         isOwnProfile={isOwnProfile}
-        onUpdate={updateProfile}
         pointsHistory={pointsHistory}
         messages={messages}
-        onSendMessage={sendMessage}
-        onMarkMessageAsRead={markMessageAsRead}
-        onDeleteMessage={deleteMessage}
-        onGetMessages={() => getMessages(anonymous_id)} // Call when needed
+        onUpdate={updateProfileData}
+        onSendMessage={sendProfileMessage}
+        onMarkMessageAsRead={markProfileMessageAsRead}
+        onDeleteMessage={deleteProfileMessage}
+        // onGetMessages={() => fetchProfileMessages(anonymous_id, 50, 0)}
       />
     </AppLayout>
   );

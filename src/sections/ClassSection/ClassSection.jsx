@@ -1,12 +1,26 @@
+// src/sections/ClassSection/ClassSection.jsx
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Button, Typography, Stack } from "@mui/material";
-import { Add } from "@mui/icons-material";
+import {
+  Box,
+  Button,
+  Typography,
+  Stack,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+} from "@mui/material";
+import { Add, Edit, Delete } from "@mui/icons-material";
 import UserHeader from "../../components/Headers/UserHeader";
 import CategoryChip from "../../components/Chips/CategoryChip";
 import BoardCard from "../../components/Cards/BoardCard";
-import { fetchBoardsByClass } from "../../utils/boardsApi";
-import { likeBoard, unlikeBoard } from "../../utils/boardsApi";
+import { useBoards } from "../../hooks/useBoards";
 
 const containerStyles = {
   display: "flex",
@@ -39,33 +53,26 @@ const cardGridStyles = {
   gap: 2,
 };
 
-const ClassSection = ({ currentUser, classData, token, onCreate }) => {
+const ClassSection = ({ currentUser, classData, token, onCreate, onUpdate, onDelete, onStatusUpdate }) => {
   const navigate = useNavigate();
-  const [boards, setBoards] = useState([]);
+  const { boards, fetchBoardsByClassId, likeBoard, unlikeBoard } = useBoards(
+    token,
+    null,
+    classData.class_id,
+    null,
+    () => {},
+    navigate
+  );
   const [likedBoards, setLikedBoards] = useState({});
   const [activeCategory, setActiveCategory] = useState("All");
-  const [loadingBoards, setLoadingBoards] = useState(false);
-  const [errorBoards, setErrorBoards] = useState(null);
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [statusData, setStatusData] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  // Fetch boards for the class
   useEffect(() => {
-    const loadBoards = async () => {
-      if (!classData?.class_id || !classData?.gate_id) return;
-      setLoadingBoards(true);
-      setErrorBoards(null);
-      try {
-        const fetchedBoards = await fetchBoardsByClass(classData.class_id, token);
-        setBoards(fetchedBoards);
-      } catch (err) {
-        setErrorBoards(err.message || "Failed to fetch boards");
-      } finally {
-        setLoadingBoards(false);
-      }
-    };
-    loadBoards();
-  }, [classData, token]);
+    fetchBoardsByClassId();
+  }, [fetchBoardsByClassId]);
 
-  // Initialize likedBoards state
   useEffect(() => {
     const newLikedBoards = boards.reduce(
       (acc, board) => ({
@@ -94,90 +101,32 @@ const ClassSection = ({ currentUser, classData, token, onCreate }) => {
   }, [boards, activeCategory]);
 
   const handleBoardClick = useCallback((board_id) => {
-    if (board_id) {
-      navigate(`/board/${board_id}`);
-    } else {
-      console.error("Invalid board ID for navigation");
-    }
+    navigate(`/board/${board_id}`);
   }, [navigate]);
 
-  const handleLike = useCallback(async (e, board_id) => {
-    e.stopPropagation();
-    const isLiked = likedBoards[board_id];
+  const handleLikeBoard = useCallback(async (board_id, isLiked) => {
     try {
       if (isLiked) {
-        await unlikeBoard(board_id, token);
-        setLikedBoards((prev) => ({
-          ...prev,
-          [board_id]: false,
-        }));
-        setBoards((prev) =>
-          prev.map((board) =>
-            board.board_id === board_id
-              ? {
-                  ...board,
-                  liked_by: board.liked_by.filter(
-                    (like) => like.user_id !== currentUser?.anonymous_id
-                  ),
-                }
-              : board
-          )
-        );
+        await unlikeBoard(board_id);
       } else {
-        await likeBoard(board_id, token);
-        setLikedBoards((prev) => ({
-          ...prev,
-          [board_id]: true,
-        }));
-        setBoards((prev) =>
-          prev.map((board) =>
-            board.board_id === board_id
-              ? {
-                  ...board,
-                  liked_by: [
-                    ...(board.liked_by || []),
-                    { user_id: currentUser?.anonymous_id },
-                  ],
-                }
-              : board
-          )
-        );
+        await likeBoard(board_id);
       }
+      setLikedBoards((prev) => ({
+        ...prev,
+        [board_id]: !isLiked,
+      }));
     } catch (err) {
       console.error(`Error ${isLiked ? "unliking" : "liking"} board:`, err);
-      // Optionally revert the UI change if the API call fails
     }
-  }, [likedBoards, token, currentUser]);
+  }, [likeBoard, unlikeBoard]);
 
-  const handleCategoryClick = useCallback((cat) => {
-    setActiveCategory(cat);
-  }, []);
-
-  if (!currentUser || !classData) {
-    return (
-      <Box sx={{ textAlign: "center", mt: 5 }}>
-        <Typography variant="h6" color="error">
-          Error: User or class data is missing. Please try again.
-        </Typography>
-      </Box>
-    );
-  }
-
-  if (loadingBoards) {
-    return (
-      <Box sx={{ textAlign: "center", mt: 5 }}>
-        <Typography>Loading boards...</Typography>
-      </Box>
-    );
-  }
-
-  if (errorBoards) {
-    return (
-      <Box sx={{ textAlign: "center", mt: 5 }}>
-        <Typography color="error">{errorBoards}</Typography>
-      </Box>
-    );
-  }
+  const handleStatusSubmit = () => {
+    if (statusData) {
+      onStatusUpdate({ status: statusData });
+      setStatusDialogOpen(false);
+      setStatusData("");
+    }
+  };
 
   return (
     <Box sx={containerStyles}>
@@ -185,55 +134,71 @@ const ClassSection = ({ currentUser, classData, token, onCreate }) => {
         username={currentUser.username}
         accessLevel={currentUser.access_level}
         actionButton={
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={onCreate}
-            sx={buttonStyles}
-          >
-            Create Board
-          </Button>
+          <Box sx={{ display: "flex", gap: 1 }}>
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={onCreate}
+              sx={buttonStyles}
+            >
+              Create Board
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<Edit />}
+              onClick={onUpdate}
+              sx={buttonStyles}
+            >
+              Update Class
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<Delete />}
+              onClick={() => setDeleteDialogOpen(true)}
+              sx={buttonStyles}
+              color="error"
+            >
+              Delete Class
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => setStatusDialogOpen(true)}
+              sx={buttonStyles}
+            >
+              Update Status
+            </Button>
+          </Box>
         }
       />
-      <Typography variant="h5" sx={{ mb: 2 }}>
-        {classData.name}
-      </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+      <Typography variant="h5">{classData.name}</Typography>
+      <Typography variant="body1" color="text.secondary">
         {classData.description || "No description provided."}
       </Typography>
 
-      {filteredBoards.length > 0 && (
-        <Box sx={filtersStyles}>
-          <Stack direction="row" spacing={1}>
-            {derivedCategories.map((cat) => (
-              <CategoryChip
-                key={cat}
-                label={cat}
-                isActive={activeCategory === cat}
-                backgroundColor="#3E435D"
-                onClick={() => handleCategoryClick(cat)}
-              />
-            ))}
-          </Stack>
-          <Typography
-            variant="body1"
-            sx={{ color: "text.secondary", fontSize: "1rem" }}
-          >
-            Found: {filteredBoards.length}
-          </Typography>
-        </Box>
-      )}
+      {/* Filters */}
+      <Box sx={filtersStyles}>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+          {derivedCategories.map((category) => (
+            <CategoryChip
+              key={category}
+              category={category}
+              active={activeCategory === category}
+              onClick={() => setActiveCategory(category)}
+            />
+          ))}
+        </Stack>
+      </Box>
 
+      {/* Boards Grid */}
       {filteredBoards.length > 0 ? (
         <Box sx={cardGridStyles}>
           {filteredBoards.map((board) => (
             <BoardCard
               key={board.board_id}
               board={board}
-              liked={likedBoards[board.board_id] || false}
               onClick={() => handleBoardClick(board.board_id)}
-              onLike={(e) => handleLike(e, board.board_id)}
-              boardClasses={{}}
+              onLike={() => handleLikeBoard(board.board_id, likedBoards[board.board_id])}
+              isLiked={likedBoards[board.board_id]}
             />
           ))}
         </Box>
@@ -251,6 +216,52 @@ const ClassSection = ({ currentUser, classData, token, onCreate }) => {
           </Typography>
         </Box>
       )}
+
+      {/* Status Update Dialog */}
+      <Dialog open={statusDialogOpen} onClose={() => setStatusDialogOpen(false)}>
+        <DialogTitle>Update Class Status</DialogTitle>
+        <DialogContent>
+          <FormControl fullWidth margin="normal">
+            <InputLabel id="status-select-label">Status</InputLabel>
+            <Select
+              labelId="status-select-label"
+              value={statusData}
+              onChange={(e) => setStatusData(e.target.value)}
+              label="Status"
+            >
+              <MenuItem value="active">Active</MenuItem>
+              <MenuItem value="inactive">Inactive</MenuItem>
+              {/* Add more status options as needed */}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStatusDialogOpen(false)} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleStatusSubmit} color="primary" autoFocus>
+            Update
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete this class? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={onDelete} color="error" autoFocus>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
