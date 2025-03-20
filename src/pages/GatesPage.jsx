@@ -3,8 +3,8 @@ import React, { useEffect, useState } from "react";
 import AppLayout from "../components/Layout/AppLayout";
 import GatesSection from "../sections/GatesSection/GatesSection";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
-import { Button, Typography } from "@mui/material";
-import CreateModal from "../components/CreateModal/CreateModal";
+import { Typography } from "@mui/material";
+import CreateModal from "../components/Modals/CreateModal";
 import { useGates } from "../hooks/useGates";
 
 const GatesPage = ({ currentUser, onLogout, token }) => {

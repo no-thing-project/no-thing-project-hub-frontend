@@ -4,7 +4,7 @@ import AppLayout from "../components/Layout/AppLayout";
 import BoardsSection from "../sections/BoardsSection/BoardsSection";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import { Typography } from "@mui/material";
-import CreateModal from "../components/CreateModal/CreateModal";
+import CreateModal from "../components/Modals/CreateModal";
 import { useBoards } from "../hooks/useBoards";
 
 const BoardsPage = ({ currentUser, onLogout, token }) => {

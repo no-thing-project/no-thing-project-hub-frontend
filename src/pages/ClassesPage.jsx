@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import AppLayout from "../components/Layout/AppLayout";
 import ClassesSection from "../sections/ClassesSection/ClassesSection";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
-import { Button, Typography } from "@mui/material";
-import CreateModal from "../components/CreateModal/CreateModal";
+import { Typography } from "@mui/material";
+import CreateModal from "../components/Modals/CreateModal";
 import { useClasses } from "../hooks/useClasses";
 
 const ClassesPage = ({ currentUser, onLogout, token }) => {

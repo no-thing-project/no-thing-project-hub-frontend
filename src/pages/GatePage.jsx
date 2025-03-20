@@ -5,7 +5,7 @@ import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import ErrorMessage from "../components/Layout/ErrorMessage";
 import GateSection from "../sections/GateSection/GateSection";
-import CreateModal from "../components/CreateModal/CreateModal";
+import CreateModal from "../components/Modals/CreateModal";
 import { useGates } from "../hooks/useGates";
 import { useClasses } from "../hooks/useClasses";
 

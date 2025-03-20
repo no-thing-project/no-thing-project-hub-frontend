@@ -4,7 +4,7 @@ import AppLayout from "../components/Layout/AppLayout";
 import ClassSection from "../sections/ClassSection/ClassSection";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import ErrorMessage from "../components/Layout/ErrorMessage";
-import CreateModal from "../components/CreateModal/CreateModal";
+import CreateModal from "../components/Modals/CreateModal";
 import { useClasses } from "../hooks/useClasses";
 
 const ClassPage = ({ currentUser, onLogout, token }) => {
