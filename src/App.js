@@ -8,11 +8,12 @@ import ProfilePage from "./pages/ProfilePage";
 import HomePage from "./pages/HomePage";
 import BoardsPage from "./pages/BoardsPage";
 import GatesPage from "./pages/GatesPage";
+import GatePage from "./pages/GatePage";
 import ClassesPage from "./pages/ClassesPage";
 import ClassPage from "./pages/ClassPage";
+import BoardPage from "./pages/BoardPage";
 import LoginForm from "./components/Forms/LoginForm/LoginForm";
 import ResetPasswordForm from "./components/Forms/ResetPasswordForm/ResetPasswordForm";
-import Board from "./components/social-features/Board/Board";
 import ErrorBoundary from "./components/Layout/ErrorBoudary";
 import LoadingSpinner from "./components/Layout/LoadingSpinner";
 import { useAuth } from "./hooks/useAuth";
@@ -115,7 +116,7 @@ function App() {
                 <PrivateRoute
                   isAuthenticated={isAuthenticated}
                   element={
-                    <Board
+                    <BoardPage
                       token={token}
                       currentUser={authData}
                       onLogout={handleLogout}
@@ -132,6 +133,22 @@ function App() {
                   isAuthenticated={isAuthenticated}
                   element={
                     <GatesPage
+                      token={token}
+                      currentUser={authData}
+                      onLogout={handleLogout}
+                    />
+                  }
+                  loading={loading}
+                />
+              }
+            />
+            <Route
+              path="/gate/:gate_id"
+              element={
+                <PrivateRoute
+                  isAuthenticated={isAuthenticated}
+                  element={
+                    <GatePage
                       token={token}
                       currentUser={authData}
                       onLogout={handleLogout}

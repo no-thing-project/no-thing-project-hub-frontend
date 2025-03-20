@@ -8,27 +8,31 @@ const api = axios.create({
 });
 
 // Gates
-export const fetchGates = async (token) => {
+// Fetch all gates
+  export const fetchGates = async (token, signal) => {
     try {
       const response = await api.get(`/api/v1/gates`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal,
       });
       return response.data?.content?.gates || [];
     } catch (err) {
       handleApiError(err);
-      return [];
+      throw err;
     }
   };
-  
-  export const fetchGateById = async (gate_id, token) => {
+
+  // Fetch a gate by ID
+  export const fetchGateById = async (gate_id, token, signal) => {
     try {
       const response = await api.get(`/api/v1/gates/${gate_id}`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal,
       });
       return response.data?.content || null;
     } catch (err) {
       handleApiError(err);
-      return null;
+      throw err;
     }
   };
   

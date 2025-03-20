@@ -18,12 +18,13 @@ export const useBoardInteraction = (boardRef) => {
     if (boardRef.current) {
       const { clientWidth, clientHeight } = boardRef.current;
       setOffset({
-        x: clientWidth / 2 - BOARD_SIZE / 2,
-        y: clientHeight / 2 - BOARD_SIZE / 2,
+        x: clientWidth / 2 - (BOARD_SIZE * scale) / 2,
+        y: clientHeight / 2 - (BOARD_SIZE * scale) / 2,
       });
     }
-  }, [boardRef]);
+  }, [boardRef, scale]);
 
+  // Adjust the offset when zooming to keep the cursor position fixed
   const adjustOffsetForZoom = useCallback(
     (cursorX, cursorY, oldScale, newScale) => {
       if (!boardRef.current) return;
@@ -40,6 +41,7 @@ export const useBoardInteraction = (boardRef) => {
     [offset, boardRef]
   );
 
+  // Handle zooming in or out
   const handleZoom = useCallback(
     (cursorX, cursorY, delta) => {
       setScale((prev) => {
@@ -51,6 +53,7 @@ export const useBoardInteraction = (boardRef) => {
     [adjustOffsetForZoom]
   );
 
+  // Handle zoom buttons (in/out)
   const handleZoomButton = useCallback(
     (direction) => {
       if (!boardRef.current) return;
@@ -62,6 +65,7 @@ export const useBoardInteraction = (boardRef) => {
     [boardRef, handleZoom]
   );
 
+  // Handle mouse wheel for zooming
   const handleWheel = useCallback(
     (e) => {
       e.preventDefault();
@@ -115,27 +119,20 @@ export const useBoardInteraction = (boardRef) => {
     (e, onClick) => {
       if (!isDragging.current && dragStart.current && onClick && boardRef.current) {
         const boardRect = boardRef.current.getBoundingClientRect();
-  
-        // Позиція кліку відносно верхнього лівого кута дошки
         const clickX = e.clientX - boardRect.left;
         const clickY = e.clientY - boardRect.top;
-  
-        // Враховуємо, що offset вже враховує масштаб
         const tweetX = (clickX - offset.x) / scale;
         const tweetY = (clickY - offset.y) / scale;
-  
-        // Додаткове логування (для дебагу)
-        console.log({
-          clickX,
-          clickY,
-          offsetX: offset.x,
-          offsetY: offset.y,
-          scale,
-          tweetX,
-          tweetY,
-        });
-  
-        onClick(tweetX, tweetY);
+
+        // Ensure the tweet is within the board boundaries
+        if (
+          tweetX >= 0 &&
+          tweetX <= BOARD_SIZE &&
+          tweetY >= 0 &&
+          tweetY <= BOARD_SIZE
+        ) {
+          onClick(tweetX, tweetY);
+        }
       }
       dragStart.current = null;
       isDragging.current = false;
@@ -143,7 +140,6 @@ export const useBoardInteraction = (boardRef) => {
     },
     [boardRef, offset, scale]
   );
-  
 
   return {
     scale,
