@@ -146,7 +146,7 @@ const BoardPage = () => {
         : await likeBoardById(board_id);
       if (updatedBoard) {
         setSuccess(`Board ${boardData.is_liked ? "unliked" : "liked"} successfully!`);
-        await loadBoardData(); // Refresh board data after like/unlike
+        await loadBoardData();
       }
     } catch (err) {
       setErrorMessage(`Failed to ${boardData?.is_liked ? "unlike" : "like"} board`);

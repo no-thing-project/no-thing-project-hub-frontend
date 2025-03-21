@@ -1,4 +1,3 @@
-// src/components/social-features/Board/Board.jsx
 import React, {
   useState,
   useCallback,
@@ -33,7 +32,6 @@ import DraggableTweet from "../Tweet/Tweet";
 import TweetPopup from "../Tweet/TweetPopup";
 import TweetContent from "../Tweet/TweetContent";
 import { useTweets } from "../../../hooks/useTweets";
-import { useBoards } from "../../../hooks/useBoards";
 import { useWebSocket } from "../../../hooks/useWebSocket";
 import { BOARD_SIZE, useBoardInteraction } from "../../../hooks/useBoard";
 import LoadingSpinner from "../../Layout/LoadingSpinner";
@@ -44,7 +42,17 @@ const ErrorFallback = ({ error }) => (
   <ErrorMessage message={error.message || "Something went wrong in the Board"} />
 );
 
-const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onStatusUpdate }) => {
+const Board = ({
+  token,
+  currentUser,
+  onLogout,
+  boardId,
+  boardData,
+  members,
+  boardTitle,
+  onLike,
+  onStatusUpdate,
+}) => {
   const navigate = useNavigate();
   const boardMainRef = useRef(null);
   const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0 });
@@ -66,15 +74,6 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
     error: tweetsError,
   } = useTweets(token, boardId, currentUser, onLogout, navigate);
 
-  const {
-    board,
-    members,
-    fetchBoard,
-    fetchMembersForBoard,
-    loading: boardsLoading,
-    error: boardsError,
-  } = useBoards(token, null, null, boardId, onLogout, navigate);
-
   const socketRef = useWebSocket(
     token,
     boardId,
@@ -82,36 +81,32 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
     setTweets,
     onLogout,
     navigate,
-    setOnlineUsers // Pass setOnlineUsers to update online users via WebSocket
+    setOnlineUsers
   );
 
   useEffect(() => {
     if (boardId) {
       const controller = new AbortController();
       const signal = controller.signal;
-      const loadData = async () => {
+      const loadTweets = async () => {
         try {
-          await Promise.all([
-            fetchTweets({ signal }),
-            fetchBoard(boardId, signal),
-            fetchMembersForBoard(boardId),
-          ]);
+          await fetchTweets({ signal });
         } catch (err) {
           if (err.name !== "AbortError") {
-            console.error("Error loading board data:", err);
+            console.error("Error loading tweets:", err);
           }
         }
       };
-      loadData();
+      loadTweets();
       return () => controller.abort();
     }
-  }, [boardId, fetchTweets, fetchBoard, fetchMembersForBoard]);
+  }, [boardId, fetchTweets]);
 
   useEffect(() => {
-    const socket = socketRef.current; // Copy socketRef.current to a variable
+    const socket = socketRef.current;
     return () => {
-      if (socket) {
-        socket.disconnect();
+      if (socket?.boards) {
+        socket.boards.disconnect();
       }
     };
   }, [socketRef]);
@@ -125,9 +120,9 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
           y,
           replyTweet ? replyTweet.tweet_id : null
         );
-        if (newTweet && socketRef.current) {
+        if (newTweet && socketRef.current?.boards) {
           newTweet.timestamp = newTweet.timestamp || new Date().toISOString();
-          socketRef.current.emit("newTweet", { boardId, ...newTweet });
+          socketRef.current.boards.emit("newTweet", { boardId, ...newTweet });
         }
         setReplyTweet(null);
       } catch (err) {
@@ -141,8 +136,8 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
     async (id, updates) => {
       try {
         await updateExistingTweet(id, updates);
-        if (socketRef.current) {
-          socketRef.current.emit("tweetUpdated", {
+        if (socketRef.current?.boards) {
+          socketRef.current.boards.emit("tweetUpdated", {
             boardId,
             tweet_id: id,
             ...updates,
@@ -160,8 +155,8 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
     async (id, isLiked) => {
       try {
         const updatedTweet = await toggleLikeTweet(id, isLiked);
-        if (updatedTweet && socketRef.current) {
-          socketRef.current.emit("tweetUpdated", { boardId, ...updatedTweet });
+        if (updatedTweet && socketRef.current?.boards) {
+          socketRef.current.boards.emit("tweetUpdated", { boardId, ...updatedTweet });
         }
       } catch (err) {
         console.error("Error toggling like:", err);
@@ -174,8 +169,8 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
     async (id) => {
       try {
         await deleteExistingTweet(id);
-        if (socketRef.current) {
-          socketRef.current.emit("tweetDeleted", { boardId, tweet_id: id });
+        if (socketRef.current?.boards) {
+          socketRef.current.boards.emit("tweetDeleted", { boardId, tweet_id: id });
         }
       } catch (err) {
         console.error("Error deleting tweet:", err);
@@ -272,16 +267,12 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
     [handleMouseUp]
   );
 
-  if (tweetsLoading || boardsLoading) {
+  if (tweetsLoading) {
     return <LoadingSpinner />;
   }
 
-  if (tweetsError || boardsError) {
-    return <ErrorMessage message={tweetsError || boardsError} />;
-  }
-
-  if (!board) {
-    return <ErrorMessage message="Board not found" />;
+  if (tweetsError) {
+    return <ErrorMessage message={tweetsError} />;
   }
 
   return (
@@ -302,7 +293,6 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
             position: "relative",
           }}
         >
-          {/* Return Button */}
           <Box
             sx={{
               position: "absolute",
@@ -320,7 +310,6 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
             </IconButton>
           </Box>
 
-          {/* Board Canvas */}
           <Box
             ref={boardMainRef}
             sx={{
@@ -421,7 +410,6 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
               )}
             </Box>
 
-            {/* Zoom Controls */}
             <Box
               className="zoom-controls"
               sx={{
@@ -462,7 +450,6 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
               </IconButton>
             </Box>
 
-            {/* Board Controls */}
             <Box
               className="board-top-controls"
               sx={{
@@ -480,7 +467,7 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
             >
               <Tooltip title="Board Visibility">
                 <IconButton aria-label="Board visibility">
-                  {board?.is_public ? (
+                  {boardData?.is_public ? (
                     <PublicIcon sx={{ color: "#3E435D" }} />
                   ) : (
                     <LockIcon sx={{ color: "#990000" }} />
@@ -497,9 +484,9 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
                   </Badge>
                 </IconButton>
               </Tooltip>
-              <Tooltip title={board?.is_liked ? "Unlike Board" : "Like Board"}>
+              <Tooltip title={boardData?.is_liked ? "Unlike Board" : "Like Board"}>
                 <IconButton onClick={onLike} aria-label="Like or unlike board">
-                  {board?.is_liked ? (
+                  {boardData?.is_liked ? (
                     <FavoriteIcon sx={{ color: "red" }} />
                   ) : (
                     <FavoriteBorderIcon sx={{ color: "text.primary" }} />
@@ -513,7 +500,6 @@ const Board = ({ token, currentUser, onLogout, boardId, boardTitle, onLike, onSt
               </Tooltip>
             </Box>
 
-            {/* Members Popover */}
             <Popover
               open={Boolean(membersAnchorEl)}
               anchorEl={membersAnchorEl}
@@ -559,6 +545,8 @@ Board.propTypes = {
   currentUser: PropTypes.object.isRequired,
   onLogout: PropTypes.func.isRequired,
   boardId: PropTypes.string.isRequired,
+  boardData: PropTypes.object.isRequired,
+  members: PropTypes.array.isRequired,
   boardTitle: PropTypes.string.isRequired,
   onLike: PropTypes.func.isRequired,
   onStatusUpdate: PropTypes.func.isRequired,
