@@ -4,35 +4,41 @@ import { useNavigate } from "react-router-dom";
 import AppLayout from "../components/Layout/AppLayout";
 import ClassesSection from "../sections/ClassesSection/ClassesSection";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
-import { Typography, Snackbar, Alert } from "@mui/material";
+import ErrorMessage from "../components/Layout/ErrorMessage";
 import CreateModal from "../components/Modals/CreateModal";
 import { useClasses } from "../hooks/useClasses";
+import { Snackbar, Alert } from "@mui/material";
 import useAuth from "../hooks/useAuth";
 
 const ClassesPage = () => {
   const navigate = useNavigate();
-  const { token, authData, handleLogout } = useAuth(navigate);
+  const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
   const { classes, loading, error, fetchClassesList } = useClasses(token, handleLogout, navigate);
   const [openModal, setOpenModal] = useState(false);
   const [success, setSuccess] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     fetchClassesList();
-  }, [fetchClassesList]);
+  }, [fetchClassesList, isAuthenticated]);
 
-  const handleCreateSuccess = () => {
+  const handleCreateSuccess = useCallback(() => {
     fetchClassesList();
     setSuccess("Class created successfully!");
-  };
+  }, [fetchClassesList]);
 
   const handleCloseSnackbar = () => {
     setSuccess("");
     setErrorMessage("");
   };
 
-  if (loading) return <LoadingSpinner />;
-  if (error) return <Typography color="error">{error}</Typography>;
+  if (authLoading || loading) return <LoadingSpinner />;
+  if (!isAuthenticated) {
+    navigate("/login");
+    return null;
+  }
+  if (error) return <ErrorMessage message={error} />;
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>

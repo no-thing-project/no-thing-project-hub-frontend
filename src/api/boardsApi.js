@@ -44,13 +44,16 @@ export const fetchBoardsByClassId = async (classId, token, filters = {}, signal)
 
 export const fetchBoardById = async (boardId, gateId, classId, token, signal) => {
   if (!boardId) throw new Error("Board ID is required");
-  let url = `/api/v1/boards/${boardId}`;
-  if (gateId) url = `/api/v1/boards/${gateId}/${boardId}`;
-  else if (classId) url = `/api/v1/boards/classes/${classId}/${boardId}`;
+  let url = `/api/v1/boards/${boardId}`; // Default case: standalone board
+  if (gateId && gateId !== null && typeof gateId === "string") {
+    url = `/api/v1/boards/gates/${gateId}/${boardId}`;
+  } else if (classId && classId !== null && typeof classId === "string") {
+    url = `/api/v1/boards/classes/${classId}/${boardId}`;
+  }
   try {
     const response = await api.get(url, {
       headers: { Authorization: `Bearer ${token}` },
-      signal,
+      signal, // Pass signal as an option, not part of URL
     });
     return response.data?.content || response.data;
   } catch (err) {

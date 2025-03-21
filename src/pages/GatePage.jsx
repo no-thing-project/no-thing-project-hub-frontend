@@ -14,125 +14,176 @@ import useAuth from "../hooks/useAuth";
 
 const GatePage = () => {
   const navigate = useNavigate();
-  const { token, authData, handleLogout } = useAuth(navigate);
+  const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
   const { gate_id } = useParams();
+
   const {
     gate: gateData,
+    members,
     fetchGate,
-    updateGateStatus,
+    fetchGateMembersList,
+    updateExistingGate,
+    updateGateStatusById,
     deleteExistingGate,
-    likeGate,
-    unlikeGate,
-    fetchMembersForGate,
+    likeGateById,
+    unlikeGateById,
     addMemberToGate,
     removeMemberFromGate,
     loading: gateLoading,
     error: gateError,
   } = useGates(token, handleLogout, navigate);
+
   const {
-    classes,
-    fetchClassesByGateId,
+    createNewClassInGate,
     loading: classesLoading,
     error: classesError,
   } = useClasses(token, handleLogout, navigate);
+
   const [openCreateModal, setOpenCreateModal] = useState(false);
   const [openUpdateModal, setOpenUpdateModal] = useState(false);
   const [success, setSuccess] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  useEffect(() => {
+  const loadGateData = useCallback(async () => {
     const controller = new AbortController();
     const signal = controller.signal;
 
-    const loadData = async () => {
-      try {
-        await fetchGate(gate_id, signal);
-        await fetchClassesByGateId(gate_id, signal);
-        await fetchMembersForGate(gate_id);
-      } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Error loading gate data:", err);
-        }
-      }
-    };
+    if (!gate_id || !token) {
+      setErrorMessage("Gate ID or authentication missing.");
+      return;
+    }
 
-    if (gate_id && token) {
-      loadData();
+    try {
+      const [gateResult, membersResult] = await Promise.all([
+        fetchGate(gate_id, signal),
+        fetchGateMembersList(gate_id),
+      ]);
+      console.log("Gate data:", gateResult);
+      console.log("Members:", membersResult);
+      console.log("Classes from gateData:", gateResult.classes);
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        console.error("Error loading gate data:", err);
+        setErrorMessage(err.message || "Failed to load gate data.");
+      }
     }
 
     return () => controller.abort();
-  }, [gate_id, token, fetchGate, fetchClassesByGateId, fetchMembersForGate]);
+  }, [gate_id, token, fetchGate, fetchGateMembersList]);
 
-  const handleCreateSuccess = () => {
-    fetchClassesByGateId(gate_id);
-    setSuccess("Class created successfully!");
-  };
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    loadGateData();
+  }, [loadGateData, isAuthenticated]);
 
-  const handleUpdateSuccess = () => {
-    fetchGate(gate_id);
-    setSuccess("Gate updated successfully!");
-  };
+  const handleCreateClass = useCallback(
+    async (classData) => {
+      try {
+        const newClass = await createNewClassInGate(gate_id, classData);
+        if (newClass) {
+          setSuccess("Class created successfully!");
+          setOpenCreateModal(false);
+          await loadGateData(); // Оновлюємо дані гейта, щоб отримати оновлений список класів
+        }
+      } catch (err) {
+        setErrorMessage("Failed to create class.");
+      }
+    },
+    [gate_id, createNewClassInGate, loadGateData]
+  );
 
-  const handleDelete = useCallback(async () => {
+  const handleUpdateGate = useCallback(
+    async (gateData) => {
+      try {
+        const updatedGate = await updateExistingGate(gate_id, gateData);
+        if (updatedGate) {
+          setSuccess("Gate updated successfully!");
+          setOpenUpdateModal(false);
+        }
+      } catch (err) {
+        setErrorMessage("Failed to update gate.");
+      }
+    },
+    [gate_id, updateExistingGate]
+  );
+
+  const handleDeleteGate = useCallback(async () => {
     try {
       await deleteExistingGate(gate_id);
       setSuccess("Gate deleted successfully!");
       navigate("/gates");
     } catch (err) {
-      setErrorMessage("Failed to delete gate");
+      setErrorMessage("Failed to delete gate.");
     }
   }, [deleteExistingGate, gate_id, navigate]);
 
-  const handleLike = useCallback(async (isLiked) => {
-    try {
-      if (isLiked) {
-        await unlikeGate(gate_id);
-      } else {
-        await likeGate(gate_id);
+  const handleLike = useCallback(
+    async (isLiked) => {
+      try {
+        const updatedGate = isLiked ? await unlikeGateById(gate_id) : await likeGateById(gate_id);
+        if (updatedGate) {
+          setSuccess(`Gate ${isLiked ? "unliked" : "liked"} successfully!`);
+        }
+      } catch (err) {
+        setErrorMessage(`Failed to ${isLiked ? "unlike" : "like"} gate`);
       }
-      setSuccess(`Gate ${isLiked ? "unliked" : "liked"} successfully!`);
-    } catch (err) {
-      setErrorMessage(`Failed to ${isLiked ? "unlike" : "like"} gate`);
-    }
-  }, [likeGate, unlikeGate, gate_id]);
+    },
+    [likeGateById, unlikeGateById, gate_id]
+  );
 
-  const handleStatusUpdate = useCallback(async (statusData) => {
-    try {
-      await updateGateStatus(gate_id, statusData);
-      setSuccess("Gate status updated successfully!");
-    } catch (err) {
-      setErrorMessage("Failed to update gate status");
-    }
-  }, [updateGateStatus, gate_id]);
+  const handleStatusUpdate = useCallback(
+    async (statusData) => {
+      try {
+        await updateGateStatusById(gate_id, statusData);
+        setSuccess("Gate status updated successfully!");
+        await fetchGate(gate_id);
+      } catch (err) {
+        setErrorMessage("Failed to update gate status.");
+      }
+    },
+    [gate_id, updateGateStatusById, fetchGate]
+  );
 
-  const handleAddMember = useCallback(async (memberData) => {
-    try {
-      await addMemberToGate(gate_id, memberData);
-      setSuccess("Member added successfully!");
-      fetchMembersForGate(gate_id);
-    } catch (err) {
-      setErrorMessage("Failed to add member");
-    }
-  }, [addMemberToGate, gate_id, fetchMembersForGate]);
+  const handleAddMember = useCallback(
+    async (memberData) => {
+      try {
+        await addMemberToGate(gate_id, memberData);
+        setSuccess("Member added successfully!");
+        await fetchGateMembersList(gate_id);
+      } catch (err) {
+        setErrorMessage("Failed to add member.");
+      }
+    },
+    [gate_id, addMemberToGate, fetchGateMembersList]
+  );
 
-  const handleRemoveMember = useCallback(async (memberId) => {
-    try {
-      await removeMemberFromGate(gate_id, memberId);
-      setSuccess("Member removed successfully!");
-      fetchMembersForGate(gate_id);
-    } catch (err) {
-      setErrorMessage("Failed to remove member");
-    }
-  }, [removeMemberFromGate, gate_id, fetchMembersForGate]);
+  const handleRemoveMember = useCallback(
+    async (memberId) => {
+      try {
+        await removeMemberFromGate(gate_id, memberId);
+        setSuccess("Member removed successfully!");
+        await fetchGateMembersList(gate_id);
+      } catch (err) {
+        setErrorMessage("Failed to remove member.");
+      }
+    },
+    [gate_id, removeMemberFromGate, fetchGateMembersList]
+  );
 
   const handleCloseSnackbar = () => {
     setSuccess("");
     setErrorMessage("");
   };
 
-  if (gateLoading || classesLoading) return <LoadingSpinner />;
-  if (gateError) return <ErrorMessage message={gateError} />;
-  if (classesError) return <ErrorMessage message={classesError} />;
+  const isLoading = authLoading || gateLoading || classesLoading;
+  const error = gateError || classesError || errorMessage;
+
+  if (isLoading) return <LoadingSpinner />;
+  if (!isAuthenticated) {
+    navigate("/login");
+    return null;
+  }
+  if (error) return <ErrorMessage message={error} />;
   if (!gateData) return <ErrorMessage message="Gate not found" />;
 
   return (
@@ -140,10 +191,12 @@ const GatePage = () => {
       <GateSection
         currentUser={authData}
         gateData={gateData}
-        classes={classes}
+        classes={gateData.classes || []} // Використовуємо classes із gateData
+        members={members}
+        token={token}
         onCreate={() => setOpenCreateModal(true)}
         onUpdate={() => setOpenUpdateModal(true)}
-        onDelete={handleDelete}
+        onDelete={handleDeleteGate}
         onLike={handleLike}
         onStatusUpdate={handleStatusUpdate}
         onAddMember={handleAddMember}
@@ -155,7 +208,7 @@ const GatePage = () => {
         entityType="class"
         token={token}
         gateId={gate_id}
-        onSuccess={handleCreateSuccess}
+        onSuccess={handleCreateClass}
         onLogout={handleLogout}
         navigate={navigate}
       />
@@ -165,7 +218,7 @@ const GatePage = () => {
         entityType="gate"
         entityData={gateData}
         token={token}
-        onSuccess={handleUpdateSuccess}
+        onSuccess={handleUpdateGate}
         onLogout={handleLogout}
         navigate={navigate}
       />

@@ -8,86 +8,154 @@ import ErrorMessage from "../components/Layout/ErrorMessage";
 import CreateModal from "../components/Modals/CreateModal";
 import UpdateModal from "../components/Modals/UpdateModal";
 import { useClasses } from "../hooks/useClasses";
+import { useBoards } from "../hooks/useBoards";
 import { Snackbar, Alert } from "@mui/material";
+import useAuth from "../hooks/useAuth";
 
-const ClassPage = ({ currentUser, onLogout, token }) => {
-  const { class_id } = useParams(); // Removed gate_id since it's not needed
+const ClassPage = () => {
   const navigate = useNavigate();
+  const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
+  const { class_id } = useParams();
+
   const {
     classData,
+    members,
+    gateInfo,
     fetchClass,
-    updateClassStatus,
-    deleteClass,
-    fetchClassMembers,
-    loading,
-    error,
-  } = useClasses(token, onLogout, navigate);
+    fetchClassMembersList,
+    updateExistingClass,
+    updateClassStatusById,
+    deleteExistingClass,
+    loading: classLoading,
+    error: classError,
+  } = useClasses(token, handleLogout, navigate);
+
+  const {
+    createNewBoardInClass,
+    loading: boardsLoading,
+    error: boardsError,
+  } = useBoards(token, handleLogout, navigate);
+
   const [openCreateModal, setOpenCreateModal] = useState(false);
   const [openUpdateModal, setOpenUpdateModal] = useState(false);
   const [success, setSuccess] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  useEffect(() => {
-    const loadClass = async () => {
-      try {
-        await fetchClass(class_id);
-        await fetchClassMembers(class_id);
-      } catch (err) {
-        console.error("Error loading class:", err);
-      }
-    };
-    if (class_id && token) {
-      loadClass();
+  const loadClassData = useCallback(async () => {
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    if (!class_id || !token) {
+      setErrorMessage("Class ID or authentication missing.");
+      return;
     }
-  }, [class_id, token, fetchClass, fetchClassMembers]);
 
-  const handleCreateSuccess = () => {
-    fetchClass(class_id);
-    setSuccess("Board created successfully!");
-  };
-
-  const handleUpdateSuccess = () => {
-    fetchClass(class_id);
-    setSuccess("Class updated successfully!");
-  };
-
-  const handleDelete = useCallback(async () => {
     try {
-      await deleteClass(class_id);
+      const [classResult, membersResult] = await Promise.all([
+        fetchClass(class_id, signal),
+        fetchClassMembersList(class_id, signal),
+      ]);
+      console.log("Class data:", classResult);
+      console.log("Members:", membersResult);
+      console.log("Boards from classData:", classResult.boards);
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        console.error("Error loading class data:", err);
+        setErrorMessage(err.message || "Failed to load class data.");
+      }
+    }
+
+    return () => controller.abort();
+  }, [class_id, token, fetchClass, fetchClassMembersList]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    loadClassData();
+  }, [loadClassData, isAuthenticated]);
+
+  const handleCreateBoard = useCallback(
+    async (boardData) => {
+      try {
+        const newBoard = await createNewBoardInClass(class_id, boardData);
+        if (newBoard) {
+          setSuccess("Board created successfully!");
+          setOpenCreateModal(false);
+          await loadClassData(); // Оновлюємо classData, щоб отримати оновлений список дощок
+        }
+      } catch (err) {
+        setErrorMessage("Failed to create board.");
+      }
+    },
+    [class_id, createNewBoardInClass, loadClassData]
+  );
+
+  const handleUpdateClass = useCallback(
+    async (classData) => {
+      try {
+        const updatedClass = await updateExistingClass(class_id, classData);
+        if (updatedClass) {
+          setSuccess("Class updated successfully!");
+          setOpenUpdateModal(false);
+        }
+      } catch (err) {
+        setErrorMessage("Failed to update class.");
+      }
+    },
+    [class_id, updateExistingClass]
+  );
+
+  const handleDeleteClass = useCallback(async () => {
+    try {
+      await deleteExistingClass(class_id);
       setSuccess("Class deleted successfully!");
       navigate("/classes");
     } catch (err) {
-      setErrorMessage("Failed to delete class");
+      setErrorMessage("Failed to delete class.");
     }
-  }, [deleteClass, class_id, navigate]);
+  }, [class_id, deleteExistingClass, navigate]);
 
-  const handleStatusUpdate = useCallback(async (statusData) => {
-    try {
-      await updateClassStatus(class_id, statusData);
-      setSuccess("Class status updated successfully!");
-    } catch (err) {
-      setErrorMessage("Failed to update class status");
-    }
-  }, [updateClassStatus, class_id]);
+  const handleStatusUpdate = useCallback(
+    async (statusData) => {
+      try {
+        const gateId = gateInfo?.gate_id || null;
+        await updateClassStatusById(gateId, class_id, statusData);
+        setSuccess("Class status updated successfully!");
+        await fetchClass(class_id);
+      } catch (err) {
+        setErrorMessage("Failed to update class status.");
+      }
+    },
+    [class_id, gateInfo, updateClassStatusById, fetchClass]
+  );
 
   const handleCloseSnackbar = () => {
     setSuccess("");
     setErrorMessage("");
   };
 
-  if (loading) return <LoadingSpinner />;
+  const isLoading = authLoading || classLoading || boardsLoading;
+  const error = classError || boardsError || errorMessage;
+
+  if (isLoading) return <LoadingSpinner />;
+  if (!isAuthenticated) {
+    navigate("/login");
+    return null;
+  }
   if (error) return <ErrorMessage message={error} />;
   if (!classData) return <ErrorMessage message="Class not found" />;
 
   return (
-    <AppLayout currentUser={currentUser} onLogout={onLogout} token={token}>
+    <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <ClassSection
-        currentUser={currentUser}
+        currentUser={authData}
         classData={classData}
+        boards={classData.boards || []} // Використовуємо boards із classData
+        members={members}
+        gateInfo={gateInfo}
         token={token}
         onCreate={() => setOpenCreateModal(true)}
         onUpdate={() => setOpenUpdateModal(true)}
-        onDelete={handleDelete}
+        onDelete={handleDeleteClass}
         onStatusUpdate={handleStatusUpdate}
       />
       <CreateModal
@@ -96,8 +164,8 @@ const ClassPage = ({ currentUser, onLogout, token }) => {
         entityType="board"
         token={token}
         classId={class_id}
-        onSuccess={handleCreateSuccess}
-        onLogout={onLogout}
+        onSuccess={handleCreateBoard}
+        onLogout={handleLogout}
         navigate={navigate}
       />
       <UpdateModal
@@ -106,8 +174,8 @@ const ClassPage = ({ currentUser, onLogout, token }) => {
         entityType="class"
         entityData={classData}
         token={token}
-        onSuccess={handleUpdateSuccess}
-        onLogout={onLogout}
+        onSuccess={handleUpdateClass}
+        onLogout={handleLogout}
         navigate={navigate}
       />
       <Snackbar open={!!success} autoHideDuration={3000} onClose={handleCloseSnackbar}>

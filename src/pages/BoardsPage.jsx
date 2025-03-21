@@ -1,4 +1,3 @@
-// src/pages/BoardsPage.jsx
 import React, { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -26,19 +25,22 @@ import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import ErrorMessage from "../components/Layout/ErrorMessage";
 import { useBoards } from "../hooks/useBoards";
+import useAuth from "../hooks/useAuth";
 
-const BoardsPage = ({ currentUser, onLogout, token }) => {
+const BoardsPage = () => {
   const navigate = useNavigate();
+  const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
   const {
     boards,
-    loading,
-    error,
+    loading: boardsLoading,
+    error: boardsError,
+    fetchBoardsList,
     createNewBoard,
     updateExistingBoard,
     deleteExistingBoard,
-    likeBoard,
-    unlikeBoard,
-  } = useBoards(token, null, null, null, onLogout, navigate);
+    likeBoardById,
+    unlikeBoardById,
+  } = useBoards(token, handleLogout, navigate);
 
   const [newBoard, setNewBoard] = useState({
     name: "",
@@ -50,6 +52,11 @@ const BoardsPage = ({ currentUser, onLogout, token }) => {
   const [errorMessage, setErrorMessage] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [boardToDelete, setBoardToDelete] = useState(null);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetchBoardsList();
+  }, [isAuthenticated, fetchBoardsList]);
 
   const handleCreateBoard = useCallback(async () => {
     if (!newBoard.name.trim()) {
@@ -71,60 +78,70 @@ const BoardsPage = ({ currentUser, onLogout, token }) => {
   }, [newBoard, createNewBoard, navigate]);
 
   const handleUpdateBoard = useCallback(async () => {
-    if (!editingBoard.name.trim()) {
+    if (!editingBoard?.name.trim()) {
       setErrorMessage("Board name is required");
       return;
     }
     try {
-      await updateExistingBoard(editingBoard.board_id, {
+      await updateExistingBoard(editingBoard.board_id, null, null, {
         name: editingBoard.name,
         description: editingBoard.description,
         is_public: editingBoard.visibility === "Public",
       });
       setSuccess("Board updated successfully!");
       setEditingBoard(null);
+      await fetchBoardsList();
     } catch (err) {
       setErrorMessage(err.response?.data?.errors?.[0] || "Failed to update board");
     }
-  }, [editingBoard, updateExistingBoard]);
+  }, [editingBoard, updateExistingBoard, fetchBoardsList]);
 
   const handleDeleteBoard = useCallback(async () => {
     if (!boardToDelete) return;
     try {
-      await deleteExistingBoard(boardToDelete);
+      await deleteExistingBoard(boardToDelete, null, null);
       setSuccess("Board deleted successfully!");
       setDeleteDialogOpen(false);
       setBoardToDelete(null);
+      await fetchBoardsList();
     } catch (err) {
       setErrorMessage(err.response?.data?.errors?.[0] || "Failed to delete board");
       setDeleteDialogOpen(false);
       setBoardToDelete(null);
     }
-  }, [boardToDelete, deleteExistingBoard]);
+  }, [boardToDelete, deleteExistingBoard, fetchBoardsList]);
 
   const handleLike = useCallback(async (board_id, isLiked) => {
     try {
       if (isLiked) {
-        await unlikeBoard(board_id);
+        await unlikeBoardById(board_id);
       } else {
-        await likeBoard(board_id);
+        await likeBoardById(board_id);
       }
       setSuccess(`Board ${isLiked ? "unliked" : "liked"} successfully!`);
+      await fetchBoardsList();
     } catch (err) {
       setErrorMessage(`Failed to ${isLiked ? "unlike" : "like"} board`);
     }
-  }, [likeBoard, unlikeBoard]);
+  }, [likeBoardById, unlikeBoardById, fetchBoardsList]);
 
   const handleCloseSnackbar = () => {
     setSuccess("");
     setErrorMessage("");
   };
 
-  if (loading) return <LoadingSpinner />;
+  const isLoading = authLoading || boardsLoading;
+  const error = boardsError || errorMessage;
+
+  if (isLoading) return <LoadingSpinner />;
+  if (!isAuthenticated) {
+    navigate("/login");
+    return null;
+  }
   if (error) return <ErrorMessage message={error} />;
 
   return (
-    <AppLayout currentUser={currentUser} onLogout={onLogout} token={token}>
+    <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box sx={{ maxWidth: 1200, margin: "auto", padding: 3 }}>
         <Typography variant="h4" gutterBottom>
           Boards
@@ -178,7 +195,7 @@ const BoardsPage = ({ currentUser, onLogout, token }) => {
                 color="primary"
                 onClick={handleCreateBoard}
                 fullWidth
-                disabled={loading}
+                disabled={isLoading}
               >
                 Create Board
               </Button>
@@ -254,14 +271,14 @@ const BoardsPage = ({ currentUser, onLogout, token }) => {
                         color="primary"
                         onClick={handleUpdateBoard}
                         sx={{ mr: 1 }}
-                        disabled={loading}
+                        disabled={isLoading}
                       >
                         Save
                       </Button>
                       <Button
                         variant="outlined"
                         onClick={() => setEditingBoard(null)}
-                        disabled={loading}
+                        disabled={isLoading}
                       >
                         Cancel
                       </Button>
@@ -273,7 +290,8 @@ const BoardsPage = ({ currentUser, onLogout, token }) => {
                       primary={board.name}
                       secondary={
                         <>
-                          {board.description || "No description"} | Visibility: {board.is_public ? "Public" : "Private"}
+                          {board.description || "No description"} | Visibility:{" "}
+                          {board.is_public ? "Public" : "Private"}
                         </>
                       }
                       onClick={() => navigate(`/board/${board.board_id}`)}
@@ -283,7 +301,7 @@ const BoardsPage = ({ currentUser, onLogout, token }) => {
                       <IconButton
                         edge="end"
                         onClick={() => navigate(`/board/${board.board_id}`)}
-                        disabled={loading}
+                        disabled={isLoading}
                       >
                         <Visibility />
                       </IconButton>
@@ -297,14 +315,14 @@ const BoardsPage = ({ currentUser, onLogout, token }) => {
                             visibility: board.is_public ? "Public" : "Private",
                           })
                         }
-                        disabled={loading}
+                        disabled={isLoading}
                       >
                         <Edit />
                       </IconButton>
                       <IconButton
                         edge="end"
                         onClick={() => handleLike(board.board_id, board.is_liked)}
-                        disabled={loading}
+                        disabled={isLoading}
                       >
                         {board.is_liked ? <Favorite color="error" /> : <FavoriteBorder />}
                       </IconButton>
@@ -314,7 +332,7 @@ const BoardsPage = ({ currentUser, onLogout, token }) => {
                           setBoardToDelete(board.board_id);
                           setDeleteDialogOpen(true);
                         }}
-                        disabled={loading}
+                        disabled={isLoading}
                       >
                         <Delete />
                       </IconButton>
@@ -326,7 +344,6 @@ const BoardsPage = ({ currentUser, onLogout, token }) => {
           </List>
         )}
 
-        {/* Delete Confirmation Dialog */}
         <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
           <DialogTitle>Confirm Deletion</DialogTitle>
           <DialogContent>
@@ -344,7 +361,6 @@ const BoardsPage = ({ currentUser, onLogout, token }) => {
           </DialogActions>
         </Dialog>
 
-        {/* Snackbar for Success/Error Messages */}
         <Snackbar open={!!success} autoHideDuration={3000} onClose={handleCloseSnackbar}>
           <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
             {success}

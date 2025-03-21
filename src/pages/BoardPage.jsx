@@ -1,5 +1,4 @@
-// src/pages/BoardPage.jsx
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Box,
@@ -23,28 +22,33 @@ import ErrorMessage from "../components/Layout/ErrorMessage";
 import Board from "../components/social-features/Board/Board";
 import { useBoards } from "../hooks/useBoards";
 import ErrorBoundary from "../components/Layout/ErrorBoudary";
+import useAuth from "../hooks/useAuth";
 
 const ErrorFallback = ({ error }) => (
   <ErrorMessage message={error.message || "Something went wrong in BoardPage"} />
 );
 
-const BoardPage = ({ currentUser, onLogout, token }) => {
-  const { board_id } = useParams();
+const BoardPage = () => {
   const navigate = useNavigate();
+  const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
+  const { board_id } = useParams();
+
   const {
-    board,
+    boardData,
+    members,
+    fetchBoard,
+    fetchBoardMembersList,
     updateExistingBoard,
-    updateBoardStatus,
+    updateBoardStatusById,
     deleteExistingBoard,
-    likeBoard,
-    unlikeBoard,
-    fetchMembersForBoard,
-    loading,
-    error,
-  } = useBoards(token, null, null, board_id, onLogout, navigate);
+    likeBoardById,
+    unlikeBoardById,
+    loading: boardLoading,
+    error: boardError,
+  } = useBoards(token, handleLogout, navigate);
 
   const [isEditing, setIsEditing] = useState(false);
-  const [boardData, setBoardData] = useState({
+  const [boardFormData, setBoardFormData] = useState({
     name: "",
     description: "",
     visibility: "Public",
@@ -53,38 +57,69 @@ const BoardPage = ({ currentUser, onLogout, token }) => {
   const [errorMessage, setErrorMessage] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  useEffect(() => {
-    if (board) {
-      setBoardData({
-        name: board.name || "",
-        description: board.description || "",
-        visibility: board.is_public ? "Public" : "Private",
-      });
-      fetchMembersForBoard(board_id);
+  const loadBoardData = useCallback(async () => {
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    if (!board_id || !token) {
+      setErrorMessage("Board ID or authentication missing.");
+      return;
     }
-  }, [board, board_id, fetchMembersForBoard]);
+
+    try {
+      const [boardResult, membersResult] = await Promise.all([
+        fetchBoard(board_id, null, null, signal),
+        fetchBoardMembersList(board_id, signal),
+      ]);
+      console.log("BoardPage - Board data:", boardResult);
+      console.log("BoardPage - Members:", membersResult);
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        console.error("Error loading board data:", err);
+        setErrorMessage(err.message || "Failed to load board data.");
+      }
+    }
+
+    return () => controller.abort();
+  }, [board_id, token, fetchBoard, fetchBoardMembersList]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    loadBoardData();
+  }, [loadBoardData, isAuthenticated]);
+
+  useEffect(() => {
+    if (boardData) {
+      setBoardFormData({
+        name: boardData.name || "",
+        description: boardData.description || "",
+        visibility: boardData.is_public ? "Public" : "Private",
+      });
+    }
+  }, [boardData]);
 
   const handleUpdateBoard = useCallback(async () => {
-    if (!boardData.name.trim()) {
+    if (!boardFormData.name.trim()) {
       setErrorMessage("Board name is required");
       return;
     }
     try {
-      await updateExistingBoard(board_id, {
-        name: boardData.name,
-        description: boardData.description,
-        is_public: boardData.visibility === "Public",
+      await updateExistingBoard(board_id, null, null, {
+        name: boardFormData.name,
+        description: boardFormData.description,
+        is_public: boardFormData.visibility === "Public",
       });
       setSuccess("Board updated successfully!");
       setIsEditing(false);
+      await loadBoardData();
     } catch (err) {
-      setErrorMessage(err.response?.data?.errors?.[0] || "Failed to update board");
+      setErrorMessage(err.message || "Failed to update board");
     }
-  }, [board_id, boardData, updateExistingBoard]);
+  }, [board_id, boardFormData, updateExistingBoard, loadBoardData]);
 
   const handleDeleteBoard = useCallback(async () => {
     try {
-      await deleteExistingBoard(board_id);
+      await deleteExistingBoard(board_id, null, null);
       setSuccess("Board deleted successfully!");
       setDeleteDialogOpen(false);
       navigate("/boards");
@@ -96,40 +131,48 @@ const BoardPage = ({ currentUser, onLogout, token }) => {
 
   const handleStatusUpdate = useCallback(async (statusData) => {
     try {
-      await updateBoardStatus(board_id, statusData);
+      await updateBoardStatusById(board_id, null, null, statusData);
       setSuccess("Board status updated successfully!");
+      await loadBoardData();
     } catch (err) {
       setErrorMessage("Failed to update board status");
     }
-  }, [board_id, updateBoardStatus]);
+  }, [board_id, updateBoardStatusById, loadBoardData]);
 
   const handleLike = useCallback(async () => {
     try {
-      if (board.is_liked) {
-        await unlikeBoard(board_id);
-      } else {
-        await likeBoard(board_id);
+      const updatedBoard = boardData?.is_liked
+        ? await unlikeBoardById(board_id)
+        : await likeBoardById(board_id);
+      if (updatedBoard) {
+        setSuccess(`Board ${boardData.is_liked ? "unliked" : "liked"} successfully!`);
+        await loadBoardData(); // Refresh board data after like/unlike
       }
-      setSuccess(`Board ${board.is_liked ? "unliked" : "liked"} successfully!`);
     } catch (err) {
-      setErrorMessage(`Failed to ${board.is_liked ? "unlike" : "like"} board`);
+      setErrorMessage(`Failed to ${boardData?.is_liked ? "unlike" : "like"} board`);
     }
-  }, [board, board_id, likeBoard, unlikeBoard]);
+  }, [board_id, boardData, likeBoardById, unlikeBoardById, loadBoardData]);
 
   const handleCloseSnackbar = () => {
     setSuccess("");
     setErrorMessage("");
   };
 
-  if (loading) return <LoadingSpinner />;
+  const isLoading = authLoading || boardLoading;
+  const error = boardError || errorMessage;
+
+  if (isLoading) return <LoadingSpinner />;
+  if (!isAuthenticated) {
+    navigate("/login");
+    return null;
+  }
   if (error) return <ErrorMessage message={error} />;
-  if (!board) return <ErrorMessage message="Board not found" />;
+  if (!boardData) return <ErrorMessage message="Board not found" />;
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <AppLayout currentUser={currentUser} onLogout={onLogout} token={token}>
+      <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
         <Box sx={{ position: "relative", width: "100%", height: "100vh" }}>
-          {/* Board Header with Edit Option */}
           <Box
             sx={{
               position: "absolute",
@@ -149,32 +192,32 @@ const BoardPage = ({ currentUser, onLogout, token }) => {
               <>
                 <TextField
                   label="Board Name"
-                  value={boardData.name}
+                  value={boardFormData.name}
                   onChange={(e) =>
-                    setBoardData({ ...boardData, name: e.target.value })
+                    setBoardFormData({ ...boardFormData, name: e.target.value })
                   }
                   size="small"
                   required
-                  disabled={loading}
+                  disabled={isLoading}
                   inputProps={{ "aria-label": "Board Name" }}
                 />
                 <TextField
                   label="Description"
-                  value={boardData.description}
+                  value={boardFormData.description}
                   onChange={(e) =>
-                    setBoardData({ ...boardData, description: e.target.value })
+                    setBoardFormData({ ...boardFormData, description: e.target.value })
                   }
                   size="small"
-                  disabled={loading}
+                  disabled={isLoading}
                   inputProps={{ "aria-label": "Board Description" }}
                 />
                 <Select
-                  value={boardData.visibility}
+                  value={boardFormData.visibility}
                   onChange={(e) =>
-                    setBoardData({ ...boardData, visibility: e.target.value })
+                    setBoardFormData({ ...boardFormData, visibility: e.target.value })
                   }
                   size="small"
-                  disabled={loading}
+                  disabled={isLoading}
                   inputProps={{ "aria-label": "Board Visibility" }}
                 >
                   <MenuItem value="Public">Public</MenuItem>
@@ -185,7 +228,7 @@ const BoardPage = ({ currentUser, onLogout, token }) => {
                   color="primary"
                   onClick={handleUpdateBoard}
                   size="small"
-                  disabled={loading}
+                  disabled={isLoading}
                   aria-label="Save Board Changes"
                 >
                   Save
@@ -194,7 +237,7 @@ const BoardPage = ({ currentUser, onLogout, token }) => {
                   variant="outlined"
                   onClick={() => setIsEditing(false)}
                   size="small"
-                  disabled={loading}
+                  disabled={isLoading}
                   aria-label="Cancel Editing"
                 >
                   Cancel
@@ -203,18 +246,18 @@ const BoardPage = ({ currentUser, onLogout, token }) => {
             ) : (
               <>
                 <Typography variant="h6">
-                  {board.name || "Untitled Board"}
+                  {boardData.name || "Untitled Board"}
                 </Typography>
                 <IconButton
                   onClick={() => setIsEditing(true)}
-                  disabled={loading}
+                  disabled={isLoading}
                   aria-label="Edit Board"
                 >
                   <Edit />
                 </IconButton>
                 <IconButton
                   onClick={() => setDeleteDialogOpen(true)}
-                  disabled={loading}
+                  disabled={isLoading}
                   aria-label="Delete Board"
                 >
                   <Delete />
@@ -223,18 +266,18 @@ const BoardPage = ({ currentUser, onLogout, token }) => {
             )}
           </Box>
 
-          {/* Board Component */}
           <Board
             token={token}
-            currentUser={currentUser}
-            onLogout={onLogout}
+            currentUser={authData}
+            onLogout={handleLogout}
             boardId={board_id}
-            boardTitle={board.name || "Untitled Board"}
+            boardData={boardData}
+            members={members}
+            boardTitle={boardData.name || "Untitled Board"}
             onLike={handleLike}
             onStatusUpdate={handleStatusUpdate}
           />
 
-          {/* Delete Confirmation Dialog */}
           <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
             <DialogTitle>Confirm Deletion</DialogTitle>
             <DialogContent>
@@ -252,7 +295,6 @@ const BoardPage = ({ currentUser, onLogout, token }) => {
             </DialogActions>
           </Dialog>
 
-          {/* Snackbar for Success/Error Messages */}
           <Snackbar open={!!success} autoHideDuration={3000} onClose={handleCloseSnackbar}>
             <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
               {success}

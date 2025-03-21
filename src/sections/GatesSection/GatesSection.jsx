@@ -8,15 +8,10 @@ import {
   CardContent,
   Typography,
   IconButton,
-  Popover,
-  List,
-  ListItem,
-  ListItemText,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
 } from "@mui/material";
 import { Add, Edit, Delete, Favorite, FavoriteBorder } from "@mui/icons-material";
 import UserHeader from "../../components/Headers/UserHeader";
@@ -51,18 +46,20 @@ const cardStyles = {
 };
 
 const GatesSection = React.memo(({ currentUser, gates, onCreate, onUpdate, onDelete, onLike }) => {
-
   const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [gateToDelete, setGateToDelete] = useState(null);
 
-  const handleGateClick = useCallback((gate_id) => {
-    if (gate_id) {
-      navigate(`/gate/${gate_id}`);
-    } else {
-      console.error("Invalid gate ID for navigation");
-    }
-  }, [navigate]);
+  const handleGateClick = useCallback(
+    (gate_id) => {
+      if (gate_id) {
+        navigate(`/gate/${gate_id}`);
+      } else {
+        console.error("Invalid gate ID for navigation");
+      }
+    },
+    [navigate]
+  );
 
   const handleDeleteConfirm = (gate) => {
     setGateToDelete(gate);
@@ -72,66 +69,74 @@ const GatesSection = React.memo(({ currentUser, gates, onCreate, onUpdate, onDel
   return (
     <Box sx={containerStyles}>
       <UserHeader
-        username={currentUser.username}
-        accessLevel={currentUser.access_level}
+        username={currentUser?.username || "Guest"}
+        accessLevel={currentUser?.access_level || 0}
         actionButton={
           <Button variant="contained" onClick={onCreate} startIcon={<Add />} sx={buttonStyles}>
             Create Gate
           </Button>
         }
       />
-      <Box sx={cardGridStyles}>
-        {gates.map((gate) => (
-          <Card
-            key={gate.gate_id}
-            sx={cardStyles}
-            onClick={() => handleGateClick(gate.gate_id)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                handleGateClick(gate.gate_id);
-              }
-            }}
-            tabIndex={0}
-            role="button"
-            aria-label={`Open gate ${gate.name}`}
-          >
-            <CardContent>
-              <Typography variant="h6">{gate.name}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {gate.description || "No description"}
-              </Typography>
-              <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
-                <IconButton
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onUpdate(gate);
-                  }}
-                >
-                  <Edit />
-                </IconButton>
-                <IconButton
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onLike(gate.gate_id, gate.is_liked);
-                  }}
-                >
-                  {gate.is_liked ? <Favorite color="error" /> : <FavoriteBorder />}
-                </IconButton>
-                <IconButton
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteConfirm(gate);
-                  }}
-                >
-                  <Delete />
-                </IconButton>
-              </Box>
-            </CardContent>
-          </Card>
-        ))}
-      </Box>
+      {gates.length > 0 ? (
+        <Box sx={cardGridStyles}>
+          {gates.map((gate) => {
+            const isLiked = gate.liked_by?.includes(currentUser?.anonymous_id);
+            return (
+              <Card
+                key={gate.gate_id}
+                sx={cardStyles}
+                onClick={() => handleGateClick(gate.gate_id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    handleGateClick(gate.gate_id);
+                  }
+                }}
+                tabIndex={0}
+                role="button"
+                aria-label={`Open gate ${gate.name}`}
+              >
+                <CardContent>
+                  <Typography variant="h6">{gate.name}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {gate.description || "No description"}
+                  </Typography>
+                  <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUpdate(gate);
+                      }}
+                    >
+                      <Edit />
+                    </IconButton>
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLike(gate.gate_id, isLiked);
+                      }}
+                    >
+                      {isLiked ? <Favorite color="error" /> : <FavoriteBorder />}
+                    </IconButton>
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteConfirm(gate);
+                      }}
+                    >
+                      <Delete />
+                    </IconButton>
+                  </Box>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </Box>
+      ) : (
+        <Typography variant="h5" sx={{ textAlign: "center", mt: 5, color: "text.secondary" }}>
+          No gates found
+        </Typography>
+      )}
 
-      {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
         <DialogTitle>Confirm Deletion</DialogTitle>
         <DialogContent>

@@ -52,22 +52,28 @@ const ClassesSection = ({ currentUser, classes, onCreate }) => {
           </Button>
         }
       />
-      <Box sx={cardGridStyles}>
-        {classes.map((classItem) => (
-          <Card
-            key={classItem.class_id}
-            sx={cardStyles}
-            onClick={() => handleClassClick(classItem.class_id)}
-          >
-            <CardContent>
-              <Typography variant="h6">{classItem.name}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {classItem.description || ""}
-              </Typography>
-            </CardContent>
-          </Card>
-        ))}
-      </Box>
+      {classes.length > 0 ? (
+        <Box sx={cardGridStyles}>
+          {classes.map((classItem) => (
+            <Card
+              key={classItem.class_id}
+              sx={cardStyles}
+              onClick={() => handleClassClick(classItem.class_id)}
+            >
+              <CardContent>
+                <Typography variant="h6">{classItem.name}</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {classItem.description || ""}
+                </Typography>
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
+      ) : (
+        <Typography variant="h5" sx={{ textAlign: "center", mt: 5, color: "text.secondary" }}>
+          No classes found
+        </Typography>
+      )}
     </Box>
   );
 };
