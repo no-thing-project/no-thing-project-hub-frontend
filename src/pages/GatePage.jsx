@@ -10,10 +10,12 @@ import UpdateModal from "../components/Modals/UpdateModal";
 import { useGates } from "../hooks/useGates";
 import { useClasses } from "../hooks/useClasses";
 import { Snackbar, Alert } from "@mui/material";
+import useAuth from "../hooks/useAuth";
 
-const GatePage = ({ currentUser, onLogout, token }) => {
-  const { gate_id } = useParams();
+const GatePage = () => {
   const navigate = useNavigate();
+  const { token, authData, handleLogout } = useAuth(navigate);
+  const { gate_id } = useParams();
   const {
     gate: gateData,
     fetchGate,
@@ -26,13 +28,13 @@ const GatePage = ({ currentUser, onLogout, token }) => {
     removeMemberFromGate,
     loading: gateLoading,
     error: gateError,
-  } = useGates(token, onLogout, navigate);
+  } = useGates(token, handleLogout, navigate);
   const {
     classes,
     fetchClassesByGateId,
     loading: classesLoading,
     error: classesError,
-  } = useClasses(token, onLogout, navigate);
+  } = useClasses(token, handleLogout, navigate);
   const [openCreateModal, setOpenCreateModal] = useState(false);
   const [openUpdateModal, setOpenUpdateModal] = useState(false);
   const [success, setSuccess] = useState("");
@@ -134,9 +136,9 @@ const GatePage = ({ currentUser, onLogout, token }) => {
   if (!gateData) return <ErrorMessage message="Gate not found" />;
 
   return (
-    <AppLayout currentUser={currentUser} onLogout={onLogout} token={token}>
+    <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <GateSection
-        currentUser={currentUser}
+        currentUser={authData}
         gateData={gateData}
         classes={classes}
         onCreate={() => setOpenCreateModal(true)}
@@ -154,7 +156,7 @@ const GatePage = ({ currentUser, onLogout, token }) => {
         token={token}
         gateId={gate_id}
         onSuccess={handleCreateSuccess}
-        onLogout={onLogout}
+        onLogout={handleLogout}
         navigate={navigate}
       />
       <UpdateModal
@@ -164,7 +166,7 @@ const GatePage = ({ currentUser, onLogout, token }) => {
         entityData={gateData}
         token={token}
         onSuccess={handleUpdateSuccess}
-        onLogout={onLogout}
+        onLogout={handleLogout}
         navigate={navigate}
       />
       <Snackbar open={!!success} autoHideDuration={3000} onClose={handleCloseSnackbar}>

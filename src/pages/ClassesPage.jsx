@@ -7,20 +7,22 @@ import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import { Typography, Snackbar, Alert } from "@mui/material";
 import CreateModal from "../components/Modals/CreateModal";
 import { useClasses } from "../hooks/useClasses";
+import useAuth from "../hooks/useAuth";
 
-const ClassesPage = ({ currentUser, onLogout, token }) => {
+const ClassesPage = () => {
   const navigate = useNavigate();
-  const { classes, loading, error, fetchAllClasses } = useClasses(token, onLogout, navigate);
+  const { token, authData, handleLogout } = useAuth(navigate);
+  const { classes, loading, error, fetchClassesList } = useClasses(token, handleLogout, navigate);
   const [openModal, setOpenModal] = useState(false);
   const [success, setSuccess] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    fetchAllClasses();
-  }, [fetchAllClasses]);
+    fetchClassesList();
+  }, [fetchClassesList]);
 
   const handleCreateSuccess = () => {
-    fetchAllClasses();
+    fetchClassesList();
     setSuccess("Class created successfully!");
   };
 
@@ -33,9 +35,9 @@ const ClassesPage = ({ currentUser, onLogout, token }) => {
   if (error) return <Typography color="error">{error}</Typography>;
 
   return (
-    <AppLayout currentUser={currentUser} onLogout={onLogout} token={token}>
+    <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <ClassesSection
-        currentUser={currentUser}
+        currentUser={authData}
         classes={classes}
         onCreate={() => setOpenModal(true)}
       />
@@ -45,7 +47,7 @@ const ClassesPage = ({ currentUser, onLogout, token }) => {
         entityType="class"
         token={token}
         onSuccess={handleCreateSuccess}
-        onLogout={onLogout}
+        onLogout={handleLogout}
         navigate={navigate}
       />
       <Snackbar open={!!success} autoHideDuration={3000} onClose={handleCloseSnackbar}>

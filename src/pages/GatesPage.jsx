@@ -7,9 +7,13 @@ import { Typography, Snackbar, Alert } from "@mui/material";
 import CreateModal from "../components/Modals/CreateModal";
 import UpdateModal from "../components/Modals/UpdateModal"; // We'll create this
 import { useGates } from "../hooks/useGates";
+import { useNavigate } from "react-router-dom";
+import useAuth from "../hooks/useAuth";
 
-const GatesPage = ({ currentUser, onLogout, token }) => {
-  const { gates, loading, error, fetchGatesList, likeGate, unlikeGate, deleteExistingGate } = useGates(token, onLogout);
+const GatesPage = () => {
+  const navigate = useNavigate();
+  const { token, authData, handleLogout } = useAuth(navigate);
+  const { gates, loading, error, fetchGatesList, likeGate, unlikeGate, deleteExistingGate } = useGates(token, handleLogout);
   const [openCreateModal, setOpenCreateModal] = useState(false);
   const [openUpdateModal, setOpenUpdateModal] = useState(false);
   const [selectedGate, setSelectedGate] = useState(null);
@@ -61,9 +65,9 @@ const GatesPage = ({ currentUser, onLogout, token }) => {
   if (error) return <Typography color="error">{error}</Typography>;
 
   return (
-    <AppLayout currentUser={currentUser} onLogout={onLogout} token={token}>
+    <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <GatesSection
-        currentUser={currentUser}
+        currentUser={authData}
         gates={gates}
         onCreate={() => setOpenCreateModal(true)}
         onUpdate={(gate) => {
@@ -79,7 +83,7 @@ const GatesPage = ({ currentUser, onLogout, token }) => {
         entityType="gate"
         token={token}
         onSuccess={handleCreateSuccess}
-        onLogout={onLogout}
+        onLogout={handleLogout}
         navigate={null} // Will be provided by GatesSection if needed
       />
       <UpdateModal
@@ -92,7 +96,7 @@ const GatesPage = ({ currentUser, onLogout, token }) => {
         entityData={selectedGate}
         token={token}
         onSuccess={handleUpdateSuccess}
-        onLogout={onLogout}
+        onLogout={handleLogout}
         navigate={null}
       />
       <Snackbar open={!!success} autoHideDuration={3000} onClose={handleCloseSnackbar}>
