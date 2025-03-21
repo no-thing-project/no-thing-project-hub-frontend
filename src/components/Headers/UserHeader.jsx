@@ -12,7 +12,7 @@ const UserHeader = ({ username, accessLevel, actionButton = null }) => {
               {username}
             </Typography>
             <Typography variant="body2" sx={{ color: "text.secondary" }}>
-              Class: <StatusBadge level={accessLevel} />
+              Level: <StatusBadge level={accessLevel} />
             </Typography>
           </Box>
           {actionButton}

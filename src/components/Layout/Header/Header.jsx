@@ -3,14 +3,8 @@ import React from "react";
 import { AppBar, Toolbar, Typography, Box, Avatar } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { useUserExtras } from "../../../hooks/useUserExtras";
+import { formatPoints } from "../../../utils/formatPoints";
 
-// Function to format points
-const formatPoints = (points) => {
-  if (points < 1000) return points.toString();
-  if (points < 1000000) return (points / 1000).toFixed(1).replace(/\.0$/, "") + "K";
-  if (points < 1000000000) return (points / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
-  return (points / 1000000000).toFixed(1).replace(/\.0$/, "") + "B";
-};
 
 const Header = ({ currentUser, token }) => {
   const navigate = useNavigate();
@@ -18,7 +12,7 @@ const Header = ({ currentUser, token }) => {
 
   const userName = currentUser?.username || "Someone";
   const userAvatar = currentUser?.profile_picture || "";
-  const userStatus = currentUser?.onlineStatus || "offline"; // Fixed to use onlineStatus
+  const userStatus = currentUser?.onlineStatus || "offline";
   const userPoints = currentUser?.total_points || 0;
   const statusColor = { online: "green", offline: "red", anonymous: "grey" }[userStatus];
 
@@ -59,7 +53,7 @@ const Header = ({ currentUser, token }) => {
       <Toolbar className="top-bar-toolbar">
         <Box className="top-bar-left">
           <Typography variant="h5" className="welcome-text" sx={{ color: "text.primary" }}>
-            Welcome, {userName}. {randomPrediction}
+            Передбачення для {userName}. {randomPrediction}
           </Typography>
           <Typography variant="body1" className="date-text" sx={{ color: "text.secondary" }}>
             {currentDate}

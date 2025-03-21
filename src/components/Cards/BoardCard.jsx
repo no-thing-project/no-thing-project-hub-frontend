@@ -14,7 +14,7 @@ const BoardCard = ({ board, liked, onClick, onLike, boardClasses }) => {
       <CardContent>
         <Typography variant="h6">{board.name || "Unnamed Board"}</Typography>
         <Typography variant="body2" color="text.secondary">
-          Class: {className}
+          Level: {className}
         </Typography>
         <Typography variant="body2" color="text.secondary">
           Category: {board.category || "Uncategorized"}
