@@ -1,8 +1,8 @@
 {
-  "name": "nothing_hub_front_end",
+  "name": "gate_from_nothingproject_front_end",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://hub.nothingproject.io",
+  "homepage": "https://gate.nothingproject.io",
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
