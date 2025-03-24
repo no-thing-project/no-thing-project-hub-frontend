@@ -21,14 +21,12 @@ const getChangedFields = (original, updated) => {
       const originalValue = original[key];
       const updatedValue = updated[key];
 
-      // Якщо значення є об’єктом, рекурсивно порівнюємо його
       if (typeof updatedValue === "object" && updatedValue !== null && !Array.isArray(updatedValue)) {
         const nestedChanges = getChangedFields(originalValue || {}, updatedValue);
         if (Object.keys(nestedChanges).length > 0) {
           changes[key] = nestedChanges;
         }
       } else if (JSON.stringify(originalValue) !== JSON.stringify(updatedValue)) {
-        // Додаємо лише змінені поля
         changes[key] = updatedValue;
       }
     }
@@ -114,17 +112,14 @@ const ProfilePage = () => {
   ]);
 
   const isOwnProfile = anonymous_id === currentUser?.anonymous_id;
-  const profileData = isOwnProfile ? currentUser : fetchedProfileData;
 
   const handleEditProfile = () => {
     setIsEditing(true);
   };
 
   const handleSaveProfile = useCallback(async () => {
-    // Отримуємо лише змінені поля
-    const changes = getChangedFields(normalizeUserData(profileData), userData);
+    const changes = getChangedFields(normalizeUserData(currentUser), userData);
 
-    // Якщо немає змін, просто виходимо з редагування
     if (Object.keys(changes).length === 0) {
       setSuccess("No changes to save.");
       setIsEditing(false);
@@ -136,7 +131,9 @@ const ProfilePage = () => {
       if (updatedProfile) {
         setSuccess("Profile updated successfully!");
         setIsEditing(false);
-        setUserData(normalizeUserData(updatedProfile));
+        const normalizedProfile = normalizeUserData(updatedProfile);
+        setUserData(normalizedProfile);
+        updateAuthData(normalizedProfile); // Явно оновлюємо currentUser
       } else {
         setErrorMessage("Failed to update profile");
       }
@@ -144,10 +141,10 @@ const ProfilePage = () => {
       setErrorMessage(err.message || "Failed to update profile");
       console.error("Error updating profile:", err);
     }
-  }, [userData, profileData, updateProfileData]);
+  }, [userData, currentUser, updateProfileData, updateAuthData]);
 
   const handleCancelEdit = () => {
-    setUserData(normalizeUserData(profileData));
+    setUserData(normalizeUserData(currentUser));
     setIsEditing(false);
   };
 
@@ -161,7 +158,7 @@ const ProfilePage = () => {
 
   if (isLoading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} />;
-  if (!profileData) return <ErrorMessage message="Profile not found. Please try again or check the profile ID." />;
+  if (!userData) return <ErrorMessage message="Profile not found. Please try again or check the profile ID." />;
 
   return (
     <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token} headerTitle="Profile">
