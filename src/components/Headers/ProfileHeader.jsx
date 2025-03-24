@@ -1,46 +1,24 @@
 import React from "react";
-import { Box, Button, Card, CardContent, Typography } from "@mui/material";
-import { Edit, Save } from "@mui/icons-material";
+import { Box, Card, CardContent, Typography } from "@mui/material";
 import { headerStyles } from "../../styles/ProfileStyles";
 import StatusBage from "../Bages/StatusBage";
 
-const ProfileHeader = ({ username, accessLevel, isEditing, isOwnProfile, onEdit, onSave, onCancel }) => {
+const ProfileHeader = ({ user, isOwnProfile, children, ...props }) => {
   return (
     <Card sx={headerStyles.card}>
       <CardContent>
         <Box sx={headerStyles.content}>
           <Box>
             <Typography variant="h4" sx={headerStyles.title}>
-              {username}
+              {user.username}
             </Typography>
             <Typography variant="body2" sx={headerStyles.level}>
-              Level: <StatusBage level={accessLevel} />
+              Level: <StatusBage level={user.access_level} />
             </Typography>
           </Box>
-          {isOwnProfile && (
+          {isOwnProfile && children && (
             <Box sx={headerStyles.buttonGroup}>
-              {isEditing ? (
-                <>
-                  <Button
-                    variant="contained"
-                    onClick={onSave}
-                    startIcon={<Save />}
-                    label="Save Profile"
-                  />
-                  <Button
-                    variant="outlined"
-                    onClick={onCancel}
-                    label="Cancel"
-                  />
-                </>
-              ) : (
-                <Button
-                  variant="contained"
-                  onClick={onEdit}
-                  startIcon={<Edit />}
-                  label="Update Profile"
-                />
-              )}
+              {children}
             </Box>
           )}
         </Box>
@@ -50,3 +28,4 @@ const ProfileHeader = ({ username, accessLevel, isEditing, isOwnProfile, onEdit,
 };
 
 export default ProfileHeader;
+

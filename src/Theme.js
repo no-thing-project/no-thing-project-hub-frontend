@@ -1,6 +1,6 @@
 import { createTheme } from "@mui/material";
 
-const theme = createTheme({
+export const theme = createTheme({
   palette: {
     mode: "light",
     background: {
@@ -37,6 +37,11 @@ const theme = createTheme({
       fontSize: "1.2rem",
       lineHeight: 1.4,
       fontWeight: 400,
+    },
+    caption: {
+      fontSize: "1rem",
+      lineHeight: 1.4,
+      fontWeight: 200,
     },
   },
   shape: {

@@ -14,8 +14,6 @@ const ProfilePage = () => {
   const { token, authData: currentUser, isAuthenticated, handleLogout, updateAuthData, loading: authLoading } = useAuth(navigate);
   const {
     profileData: fetchedProfileData,
-    setProfileData,
-    isOwnProfile: fetchedIsOwnProfile,
     pointsHistory,
     loading: profileLoading,
     error: profileError,

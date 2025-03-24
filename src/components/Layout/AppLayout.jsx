@@ -3,12 +3,12 @@ import { Box } from "@mui/material";
 import LeftDrawer from "./LeftDrawer/LeftDrawer";
 import Header from "./Header/Header";
 
-const AppLayout = ({ currentUser, onLogout, token, children }) => {
+const AppLayout = ({ currentUser, onLogout, token, children, headerTitle }) => {
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", backgroundColor: "background.default" }}>
+    <Box sx={{ display: "flex", minHeight: "100dvh", backgroundColor: "background.default" }}>
       <LeftDrawer onLogout={onLogout} />
       <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
-        <Header currentUser={currentUser} token={token} />
+        <Header currentUser={currentUser} token={token} title={headerTitle} />
         <Box sx={{ flex: 1, p: 3 }}>{children}</Box>
       </Box>
     </Box>

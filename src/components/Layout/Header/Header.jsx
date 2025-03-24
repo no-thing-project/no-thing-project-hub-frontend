@@ -5,8 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useUserExtras } from "../../../hooks/useUserExtras";
 import { formatPoints } from "../../../utils/formatPoints";
 
-
-const Header = ({ currentUser, token }) => {
+const Header = ({ currentUser, token, title }) => {
   const navigate = useNavigate();
   const { randomPrediction, sessionAvatarBg } = useUserExtras(token);
 
@@ -42,18 +41,24 @@ const Header = ({ currentUser, token }) => {
     }
   };
 
+  const headerText = `Передбачення для ${userName}. ${randomPrediction}`;
+
   return (
     <AppBar
       position="sticky"
       elevation={0}
       className="top-bar"
-      sx={{ backgroundColor: "background.default" }}
+      sx={{
+        backgroundColor: "rgba(255, 255, 255, 0)",
+        backdropFilter: "blur(10px)",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
+      }}
       role="banner"
     >
       <Toolbar className="top-bar-toolbar">
         <Box className="top-bar-left">
           <Typography variant="h5" className="welcome-text" sx={{ color: "text.primary" }}>
-            Передбачення для {userName}. {randomPrediction}
+            {title ? title : headerText}
           </Typography>
           <Typography variant="body1" className="date-text" sx={{ color: "text.secondary" }}>
             {currentDate}

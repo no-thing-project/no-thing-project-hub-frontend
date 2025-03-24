@@ -1,4 +1,3 @@
-// src/hooks/useAuth.js
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import api from "../api/apiClient";
 import { handleApiError } from "../api/apiClient";
@@ -28,8 +27,12 @@ const decodeToken = (token) => {
 };
 
 const useAuth = (navigate) => {
-  const [token, setToken] = useState(() => localStorage.getItem("token") || null);
-  const [refreshToken, setRefreshToken] = useState(() => localStorage.getItem("refreshToken") || null);
+  const [token, setToken] = useState(
+    () => localStorage.getItem("token") || null
+  );
+  const [refreshToken, setRefreshToken] = useState(
+    () => localStorage.getItem("refreshToken") || null
+  );
   const [authData, setAuthData] = useState(() => {
     try {
       const storedAuthData = localStorage.getItem("authData");
@@ -43,26 +46,30 @@ const useAuth = (navigate) => {
   const [error, setError] = useState(null);
 
   const isInitialValidationComplete = useRef(false);
-  const refreshInProgress = useRef(false); // Додано для уникнення одночасних оновлень токена
+  const refreshInProgress = useRef(false);
+  // Додаємо прапорець, щоб логаут виконувався лише один раз
+  const isLoggingOut = useRef(false);
 
   const handleLogout = useCallback((message) => {
+    if (isLoggingOut.current) return;
+    isLoggingOut.current = true;
+
     setToken(null);
     setRefreshToken(null);
     setAuthData(null);
     localStorage.clear();
     setError(message || "Logged out successfully.");
-    if (navigate) navigate("/login");
-  }, [navigate]);
+  }, []);
 
   const refreshAccessToken = useCallback(async () => {
     if (!refreshToken || refreshInProgress.current) {
       return false;
     }
-
     refreshInProgress.current = true;
     try {
       const response = await api.post("/api/v1/auth/refresh", { refreshToken });
-      const { accessToken: newToken, refreshToken: newRefreshToken } = response.data.content || response.data;
+      const { accessToken: newToken, refreshToken: newRefreshToken } =
+        response.data.content || response.data;
       setToken(newToken);
       setRefreshToken(newRefreshToken);
       localStorage.setItem("token", newToken);
@@ -81,7 +88,6 @@ const useAuth = (navigate) => {
     async (newToken, newRefreshToken, authDataFromResponse) => {
       setLoading(true);
       setError(null);
-
       const decodedData = decodeToken(newToken);
       const normalizedAuthData = authDataFromResponse || decodedData;
       if (!normalizedAuthData?.anonymous_id) {
@@ -89,7 +95,6 @@ const useAuth = (navigate) => {
         setLoading(false);
         return;
       }
-
       setToken(newToken);
       setRefreshToken(newRefreshToken);
       setAuthData(normalizedAuthData);
@@ -98,7 +103,6 @@ const useAuth = (navigate) => {
       localStorage.setItem("authData", JSON.stringify(normalizedAuthData));
       isInitialValidationComplete.current = true;
       setLoading(false);
-
       if (navigate) navigate("/home");
     },
     [navigate]
@@ -132,7 +136,10 @@ const useAuth = (navigate) => {
             return api.request(error.config);
           }
         } else if (error.response?.status === 403) {
-          handleLogout("Access denied. Please log in again.");
+          // Викликаємо logout, лише якщо ще не було викликано
+          if (!isLoggingOut.current) {
+            handleLogout("Access denied. Please log in again.");
+          }
         }
         handleApiError(error, setError);
         return Promise.reject(error);
@@ -151,11 +158,9 @@ const useAuth = (navigate) => {
         setLoading(false);
         return;
       }
-
       setLoading(true);
       try {
         if (!token && !refreshToken) return;
-
         const payload = decodeToken(token);
         if (!payload) {
           await refreshAccessToken();
@@ -167,7 +172,6 @@ const useAuth = (navigate) => {
         isInitialValidationComplete.current = true;
       }
     };
-
     validateAuth();
   }, [token, refreshToken, authData, handleLogin, refreshAccessToken]);
 
@@ -186,7 +190,7 @@ const useAuth = (navigate) => {
     updateAuthData,
     loading,
     error,
-    clearError: () => setError(null), // Спрощено
+    clearError: () => setError(null),
   };
 };
 

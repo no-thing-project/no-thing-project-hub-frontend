@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { lazy, Suspense, useCallback } from "react";
+import React, { lazy, Suspense, useCallback, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import "./index.css";
 import { Button, Container, ThemeProvider, Typography } from "@mui/material";
@@ -28,6 +28,12 @@ const PrivateRoute = ({ element, isAuthenticated }) => {
 const AppContent = () => {
   const navigate = useNavigate();
   const { token, authData, isAuthenticated, handleLogin, handleLogout, loading, error, clearError } = useAuth(navigate);
+
+  useEffect(() => {
+    if (!isAuthenticated && window.location.pathname !== "/login") {
+      navigate("/login", { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleRetry = useCallback(() => {
     clearError();

@@ -20,6 +20,7 @@ import { Visibility, VisibilityOff } from "@mui/icons-material";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import config from "../../../config";
+import { inputStyles } from "../../../styles/BaseStyles";
 
 const LoginForm = ({ theme, onLogin }) => {
   const [email, setEmail] = useState("");
@@ -74,12 +75,12 @@ const LoginForm = ({ theme, onLogin }) => {
         email,
         password,
       });
-      const { token, profile } = res.data; // Adjusted to expect refreshToken
+      const { token, profile } = res.data;
       if (!token || !profile) {
-        throw new Error("Invalid login response: Missing token, refresh token, or profile");
+        throw new Error("Invalid login response: Missing token or profile");
       }
       localStorage.setItem("token", token);
-      onLogin(token, profile); // Pass refreshToken to onLogin
+      onLogin(token, profile);
       setSuccess("Login successful! Redirecting...");
     } catch (err) {
       console.error("Login error:", err.response?.data || err);
@@ -132,7 +133,6 @@ const LoginForm = ({ theme, onLogin }) => {
     setSuccess("");
   };
 
-  // Redirect after successful login
   useEffect(() => {
     if (success) {
       const timer = setTimeout(() => navigate("/home"), 3000);
@@ -149,198 +149,161 @@ const LoginForm = ({ theme, onLogin }) => {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          minHeight: "100vh",
+          minHeight: "100dvh",
         }}
       >
-        <Paper
-          elevation={6}
-          sx={{
-            p: 5,
-            borderRadius: theme.shape.borderRadiusMedium,
-            backgroundColor: "background.paper",
-            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.1)",
-            width: theme.custom.loginPaperWidth,
-            maxWidth: theme.custom.loginPaperMaxWidth,
-            textAlign: "center",
-          }}
-        >
-          <Box sx={{ textAlign: "center", mb: 3 }}>
-            <Typography
-              variant="h4"
-              sx={{ color: "text.primary", fontWeight: 600 }}
-            >
-              Sign In
-            </Typography>
-            <Typography variant="body1" sx={{ color: "text.secondary", mt: 1 }}>
-              Sign in to continue
-            </Typography>
-          </Box>
-
-          <Box
-            component="form"
-            onSubmit={handleSubmit}
-            sx={{ mt: 2, textAlign: "left" }}
-            noValidate
-            aria-label="Login form"
+        <Fade in timeout={600}>
+          <Paper
+            elevation={6}
+            sx={{
+              p: theme.spacing(5),
+              borderRadius: theme.shape.borderRadiusMedium,
+              backgroundColor: "background.paper",
+              boxShadow: "0 8px 24px rgba(0, 0, 0, 0.1)",
+              width: theme.custom.loginPaperWidth,
+              maxWidth: theme.custom.loginPaperMaxWidth,
+              textAlign: "center",
+            }}
           >
-            <TextField
-              label="Email"
-              variant="outlined"
-              fullWidth
-              margin="normal"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              InputProps={{ notched: false }}
-              sx={{
-                mt: 1,
-                "& .MuiFormLabel-root.MuiInputLabel-shrink": {
-                  backgroundColor: "background.paper",
-                  padding: "0 5px",
-                },
-                "& .MuiInputLabel-root": {
-                  color: "text.secondary",
-                },
-                "& .MuiInputLabel-root.Mui-focused": {
-                  color: "text.primary",
-                },
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: theme.shape.borderRadiusSmall,
-                  "&:hover fieldset": {
-                    borderColor: "background.button",
-                  },
-                  "&.Mui-focused fieldset": {
-                    borderColor: "background.button",
-                  },
-                },
-                "& .MuiInputBase-input::placeholder": {
-                  color: theme.palette.text.secondary,
-                },
-              }}
-              required
-              error={!!error && error.includes("Email")}
-              helperText={error && error.includes("Email") ? error : ""}
-              aria-describedby={error && error.includes("Email") ? "email-error" : undefined}
-            />
-            <TextField
-              label="Password"
-              type={showPassword ? "text" : "password"}
-              variant="outlined"
-              fullWidth
-              margin="normal"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              sx={{
-                mt: 1,
-                "& .MuiFormLabel-root.MuiInputLabel-shrink": {
-                  backgroundColor: "background.paper",
-                  padding: "0 5px",
-                },
-                "& .MuiInputLabel-root": {
-                  color: "text.secondary",
-                },
-                "& .MuiInputLabel-root.Mui-focused": {
-                  color: "text.primary",
-                },
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: theme.shape.borderRadiusSmall,
-                  "&:hover fieldset": {
-                    borderColor: "background.button",
-                  },
-                  "&.Mui-focused fieldset": {
-                    borderColor: "background.button",
-                  },
-                },
-                "& .MuiInputBase-input::placeholder": {
-                  color: theme.palette.text.secondary,
-                },
-              }}
-              InputProps={{
-                notched: false,
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      onClick={() => setShowPassword(!showPassword)}
-                      edge="end"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                    >
-                      {showPassword ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-              required
-              error={!!error && error.includes("Password")}
-              helperText={error && error.includes("Password") ? error : ""}
-              aria-describedby={error && error.includes("Password") ? "password-error" : undefined}
-            />
+            <Box sx={{ textAlign: "center", mb: theme.spacing(3) }}>
+              <Typography
+                variant="h4"
+                sx={{ color: "text.primary", fontWeight: 600 }}
+              >
+                Sign In
+              </Typography>
+              <Typography
+                variant="body1"
+                sx={{ color: "text.secondary", mt: theme.spacing(1) }}
+              >
+                Sign in to continue
+              </Typography>
+            </Box>
 
-            <Button
-              type="submit"
-              variant="contained"
-              fullWidth
-              disabled={isSubmitting}
-              sx={{
-                mt: 3,
-                minHeight: theme.custom.loginButtonHeight,
-                borderRadius: theme.shape.borderRadiusSmall,
-                backgroundColor: "background.button",
-                color: "background.default",
-                textTransform: "none",
-                fontSize: theme.custom.loginButtonFontSize,
-                boxShadow: "0 4px 12px rgba(33, 37, 41, 0.2)",
-                transition: "all 0.3s ease-in-out",
-                "&:hover": {
-                  transition: "all 0.3s ease-in-out",
+            <Box
+              component="form"
+              onSubmit={handleSubmit}
+              sx={{ mt: theme.spacing(2), textAlign: "left" }}
+              noValidate
+              aria-label="Login form"
+            >
+              <TextField
+                label="Email"
+                variant="outlined"
+                fullWidth
+                margin="normal"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                InputProps={{ notched: false }}
+                sx={inputStyles}
+                required
+                error={!!error && error.includes("Email")}
+              />
+              <TextField
+                label="Password"
+                type={showPassword ? "text" : "password"}
+                variant="outlined"
+                fullWidth
+                margin="normal"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                sx={inputStyles}
+                InputProps={{
+                  notched: false,
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowPassword(!showPassword)}
+                        edge="end"
+                        aria-label={
+                          showPassword ? "Hide password" : "Show password"
+                        }
+                        sx={{ color: "text.primary" }}
+                      >
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+                required
+                error={!!error && error.includes("Password")}
+                aria-describedby={
+                  error && error.includes("Password")
+                    ? "password-error"
+                    : undefined
+                }
+              />
+
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                disabled={isSubmitting}
+                sx={{
+                  mt: theme.spacing(3),
+                  minHeight: theme.custom.loginButtonHeight,
+                  borderRadius: theme.shape.borderRadiusSmall,
                   backgroundColor: "background.button",
-                  opacity: 0.9,
-                  boxShadow: "0 6px 16px rgba(33, 37, 41, 0.3)",
-                },
-                "&:disabled": {
-                  opacity: 0.6,
-                  cursor: "not-allowed",
-                },
-              }}
-              aria-label="Sign in"
-            >
-              {isSubmitting ? "Signing In..." : "Sign In"}
-            </Button>
-          </Box>
+                  color: "background.default",
+                  textTransform: "none",
+                  fontSize: theme.custom.loginButtonFontSize,
+                  boxShadow: "0 4px 12px rgba(33, 37, 41, 0.2)",
+                  transition: "all 0.3s ease-in-out",
+                  "&:hover": {
+                    backgroundColor: "background.button",
+                    opacity: 0.9,
+                    boxShadow: "0 6px 16px rgba(33, 37, 41, 0.3)",
+                  },
+                  "&:disabled": {
+                    opacity: 0.6,
+                    cursor: "not-allowed",
+                  },
+                }}
+                aria-label="Sign in"
+              >
+                {isSubmitting ? "Signing In..." : "Sign In"}
+              </Button>
+            </Box>
 
-          <Box sx={{ mt: 2, textAlign: "center" }}>
-            <Button
-              variant="text"
-              sx={{
-                color: "text.primary",
-                textTransform: "none",
-                fontSize: "16px",
-              }}
-              onClick={handleOpenModal}
-              aria-label="Forgot password"
-            >
-              Forgot password?
-            </Button>
-          </Box>
-
-          <Box sx={{ mt: 2, textAlign: "center" }}>
-            <Typography variant="body1" sx={{ color: "text.secondary" }}>
-              Don’t have an account?{" "}
-              <Link
-                href={registrationLink}
-                target="_blank"
-                rel="noopener noreferrer"
+            <Box sx={{ mt: theme.spacing(2), textAlign: "center" }}>
+              <Button
+                variant="text"
                 sx={{
                   color: "text.primary",
-                  textDecoration: "none",
-                  fontWeight: 500,
-                  "&:hover": { textDecoration: "underline" },
+                  textTransform: "none",
+                  fontSize: "16px",
+                  "&:hover": {
+                    textDecoration: "underline",
+                  },
                 }}
-                aria-label="Sign up"
+                onClick={handleOpenModal}
+                aria-label="Forgot password"
               >
-                Sign Up
-              </Link>
-            </Typography>
-          </Box>
-        </Paper>
+                Forgot password?
+              </Button>
+            </Box>
+
+            <Box sx={{ mt: theme.spacing(2), textAlign: "center" }}>
+              <Typography variant="body1" sx={{ color: "text.secondary" }}>
+                Don’t have an account?{" "}
+                <Link
+                  href={registrationLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    color: "text.primary",
+                    textDecoration: "none",
+                    fontWeight: 500,
+                    "&:hover": { textDecoration: "underline" },
+                  }}
+                  aria-label="Sign up"
+                >
+                  Sign Up
+                </Link>
+              </Typography>
+            </Box>
+          </Paper>
+        </Fade>
 
         <Modal
           open={openModal}
@@ -358,7 +321,7 @@ const LoginForm = ({ theme, onLogin }) => {
                 backgroundColor: "background.paper",
                 borderRadius: theme.shape.borderRadiusMedium,
                 boxShadow: 24,
-                p: 4,
+                p: theme.spacing(4),
                 width: "100%",
                 maxWidth: theme.custom.loginPaperMaxWidth,
               }}
@@ -368,52 +331,28 @@ const LoginForm = ({ theme, onLogin }) => {
               <Typography
                 id="password-recovery-title"
                 variant="h6"
-                sx={{ mb: 2, fontWeight: theme.typography.fontWeightMedium }}
+                sx={{ mb: theme.spacing(2), fontWeight: 600 }}
               >
                 Password Recovery
               </Typography>
               <TextField
-                label="Your email"
+                label="Email"
                 variant="outlined"
                 fullWidth
+                margin="normal"
                 value={forgotEmail}
                 onChange={(e) => setForgotEmail(e.target.value)}
                 InputProps={{ notched: false }}
-                sx={{
-                  mb: 2,
-                  "& .MuiFormLabel-root.MuiInputLabel-shrink": {
-                    backgroundColor: "background.paper",
-                    padding: "0 5px",
-                  },
-                  "& .MuiInputLabel-root": {
-                    color: "text.secondary",
-                  },
-                  "& .MuiInputLabel-root.Mui-focused": {
-                    color: "text.primary",
-                  },
-                  "& .MuiOutlinedInput-root": {
-                    borderRadius: theme.shape.borderRadiusSmall,
-                    "&:hover fieldset": {
-                      borderColor: "background.button",
-                    },
-                    "&.Mui-focused fieldset": {
-                      borderColor: "background.button",
-                    },
-                  },
-                  "& .MuiInputBase-input::placeholder": {
-                    color: theme.palette.text.secondary,
-                  },
-                }}
+                sx={inputStyles}
                 required
                 error={!!error && error.includes("Email")}
-                helperText={error && error.includes("Email") ? error : ""}
-                aria-describedby={error && error.includes("Email") ? "forgot-email-error" : undefined}
               />
               <Button
                 variant="contained"
                 fullWidth
                 onClick={handleForgotPassword}
                 sx={{
+                  mt: theme.spacing(2),
                   backgroundColor: "background.button",
                   color: "background.default",
                   borderRadius: theme.shape.borderRadiusSmall,
@@ -423,7 +362,6 @@ const LoginForm = ({ theme, onLogin }) => {
                   boxShadow: "0 4px 12px rgba(33, 37, 41, 0.2)",
                   transition: "all 0.3s ease-in-out",
                   "&:hover": {
-                    transition: "all 0.3s ease-in-out",
                     backgroundColor: "background.button",
                     opacity: 0.9,
                     boxShadow: "0 6px 16px rgba(33, 37, 41, 0.3)",

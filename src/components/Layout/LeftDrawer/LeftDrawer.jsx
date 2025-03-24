@@ -32,7 +32,9 @@ const LeftDrawer = ({ onLogout }) => {
           flexDirection: "column",
           alignItems: "center",
           width: 72,
-          backgroundColor: "background.default",
+          backgroundColor: "rgba(255, 255, 255, 0)",
+          backdropFilter: "blur(10px)",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
         },
       }}
       role="navigation"

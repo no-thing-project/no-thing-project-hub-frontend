@@ -114,8 +114,7 @@ const ProfileCard = ({ profileData, isOwnProfile, pointsHistory, onUpdate }) => 
   return (
     <Box sx={containerStyles}>
       <ProfileHeader
-        username={userData.username || "Unknown User"}
-        accessLevel={userData.access_level || 0}
+        user={userData}
         isEditing={isEditing}
         isOwnProfile={isOwnProfile}
         onEdit={() => setIsEditing(true)}

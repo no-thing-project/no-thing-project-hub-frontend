@@ -21,6 +21,8 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 const HomeSection = ({ profileData, isOwnProfile }) => {
   const { stats = {}, total_points = 0, donated_points = 0 } = profileData || {};
 
+  console.log("Profile Data:", profileData);
+
   const statsData = [
     { label: "Posts", value: stats.tweet_count || 0 },
     { label: "Boards", value: stats.board_count || 0 },

@@ -15,7 +15,6 @@ const HomePage = () => {
   
   const {
     profileData: fetchedProfileData,
-    isOwnProfile: fetchedIsOwnProfile,
     loading: profileLoading,
     error: profileError,
     fetchProfileData,
@@ -75,7 +74,7 @@ const HomePage = () => {
     loadProfile();
 
     return () => controller.abort();
-  }, [anonymous_id, token, isAuthenticated, authLoading, navigate, fetchProfileData, handleLogout, clearProfileState]);
+  }, [anonymous_id, currentUser, token, isAuthenticated, authLoading, navigate, fetchProfileData, handleLogout, clearProfileState]);
 
   // Використовуємо currentUser, якщо це власний профіль і немає anonymous_id
   const isOwnProfile = !anonymous_id || anonymous_id === initialAnonymousIdRef.current;
