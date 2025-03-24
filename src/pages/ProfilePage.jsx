@@ -1,12 +1,40 @@
 // src/pages/ProfilePage.jsx
-import React, { useEffect } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { Box, Button, Snackbar, Alert } from "@mui/material";
+import { Edit } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import ErrorMessage from "../components/Layout/ErrorMessage";
 import ProfileCard from "../components/Cards/ProfileCard";
+import ProfileHeader from "../components/Headers/ProfileHeader";
 import useAuth from "../hooks/useAuth";
 import useProfile from "../hooks/useProfile";
+import { actionButtonStyles } from "../styles/BaseStyles";
+import { normalizeUserData } from "../utils/profileUtils";
+
+// Функція для порівняння об’єктів і повернення лише змінених полів
+const getChangedFields = (original, updated) => {
+  const changes = {};
+  for (const key in updated) {
+    if (Object.prototype.hasOwnProperty.call(updated, key)) {
+      const originalValue = original[key];
+      const updatedValue = updated[key];
+
+      // Якщо значення є об’єктом, рекурсивно порівнюємо його
+      if (typeof updatedValue === "object" && updatedValue !== null && !Array.isArray(updatedValue)) {
+        const nestedChanges = getChangedFields(originalValue || {}, updatedValue);
+        if (Object.keys(nestedChanges).length > 0) {
+          changes[key] = nestedChanges;
+        }
+      } else if (JSON.stringify(originalValue) !== JSON.stringify(updatedValue)) {
+        // Додаємо лише змінені поля
+        changes[key] = updatedValue;
+      }
+    }
+  }
+  return changes;
+};
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -22,6 +50,11 @@ const ProfilePage = () => {
     updateProfileData,
     clearProfileState,
   } = useProfile(token, currentUser, handleLogout, navigate, updateAuthData);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [userData, setUserData] = useState(() => normalizeUserData(currentUser || fetchedProfileData));
+  const [success, setSuccess] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     if (authLoading) return;
@@ -44,18 +77,15 @@ const ProfilePage = () => {
 
       try {
         const promises = [];
-
-        // Завантажуємо профіль лише для чужих сторінок
         if (!isOwnProfile) {
           promises.push(fetchProfileData(anonymous_id, signal));
         }
-
-        // Завантажуємо історію балів лише для власного профілю
         if (isOwnProfile) {
           promises.push(fetchProfilePointsHistory(signal));
         }
-
         await Promise.all(promises);
+
+        setUserData(normalizeUserData(isOwnProfile ? currentUser : fetchedProfileData));
       } catch (err) {
         if (err.name !== "AbortError") {
           console.error("Error loading profile data in ProfilePage:", err);
@@ -80,10 +110,51 @@ const ProfilePage = () => {
     fetchProfilePointsHistory,
     handleLogout,
     clearProfileState,
+    fetchedProfileData,
   ]);
 
   const isOwnProfile = anonymous_id === currentUser?.anonymous_id;
   const profileData = isOwnProfile ? currentUser : fetchedProfileData;
+
+  const handleEditProfile = () => {
+    setIsEditing(true);
+  };
+
+  const handleSaveProfile = useCallback(async () => {
+    // Отримуємо лише змінені поля
+    const changes = getChangedFields(normalizeUserData(profileData), userData);
+
+    // Якщо немає змін, просто виходимо з редагування
+    if (Object.keys(changes).length === 0) {
+      setSuccess("No changes to save.");
+      setIsEditing(false);
+      return;
+    }
+
+    try {
+      const updatedProfile = await updateProfileData(changes);
+      if (updatedProfile) {
+        setSuccess("Profile updated successfully!");
+        setIsEditing(false);
+        setUserData(normalizeUserData(updatedProfile));
+      } else {
+        setErrorMessage("Failed to update profile");
+      }
+    } catch (err) {
+      setErrorMessage(err.message || "Failed to update profile");
+      console.error("Error updating profile:", err);
+    }
+  }, [userData, profileData, updateProfileData]);
+
+  const handleCancelEdit = () => {
+    setUserData(normalizeUserData(profileData));
+    setIsEditing(false);
+  };
+
+  const handleCloseSnackbar = () => {
+    setSuccess("");
+    setErrorMessage("");
+  };
 
   const isLoading = authLoading || (!isOwnProfile && profileLoading);
   const error = profileError;
@@ -93,13 +164,70 @@ const ProfilePage = () => {
   if (!profileData) return <ErrorMessage message="Profile not found. Please try again or check the profile ID." />;
 
   return (
-    <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token}>
-      <ProfileCard
-        profileData={profileData}
-        isOwnProfile={isOwnProfile}
-        pointsHistory={pointsHistory}
-        onUpdate={updateProfileData}
-      />
+    <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token} headerTitle="Profile">
+      <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
+        <ProfileHeader user={userData} isOwnProfile={isOwnProfile}>
+          {isOwnProfile && (
+            <>
+              {!isEditing ? (
+                <Button
+                  variant="contained"
+                  onClick={handleEditProfile}
+                  startIcon={<Edit />}
+                  sx={actionButtonStyles}
+                >
+                  Edit Profile
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="contained"
+                    onClick={handleSaveProfile}
+                    sx={{ ...actionButtonStyles, mr: 1 }}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={handleCancelEdit}
+                    sx={actionButtonStyles}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              )}
+            </>
+          )}
+        </ProfileHeader>
+        <ProfileCard
+          profileData={userData}
+          isOwnProfile={isOwnProfile}
+          pointsHistory={pointsHistory}
+          isEditing={isEditing}
+          setUserData={setUserData}
+        />
+      </Box>
+
+      <Snackbar
+        open={!!success}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
+          {success}
+        </Alert>
+      </Snackbar>
+      <Snackbar
+        open={!!errorMessage}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity="error" sx={{ width: "100%" }}>
+          {errorMessage}
+        </Alert>
+      </Snackbar>
     </AppLayout>
   );
 };
