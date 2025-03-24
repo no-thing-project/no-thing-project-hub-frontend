@@ -6,7 +6,7 @@ import { Button, Container, ThemeProvider, Typography } from "@mui/material";
 import theme from "./Theme";
 import ErrorBoundary from "./components/Layout/ErrorBoudary";
 import LoadingSpinner from "./components/Layout/LoadingSpinner";
-import useAuth  from "./hooks/useAuth";
+import useAuth from "./hooks/useAuth";
 
 // Lazy load pages to improve performance
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
@@ -17,7 +17,9 @@ const GatePage = lazy(() => import("./pages/GatePage"));
 const ClassesPage = lazy(() => import("./pages/ClassesPage"));
 const ClassPage = lazy(() => import("./pages/ClassPage"));
 const BoardPage = lazy(() => import("./pages/BoardPage"));
-const NotFoundPage = lazy(() => import("./pages/NotFoundPage")); // Add NotFoundPage
+const FriendsPage = lazy(() => import("./pages/FriendsPage")); // Нова сторінка
+const MessagesPage = lazy(() => import("./pages/MessagesPage")); // Нова сторінка
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 const LoginForm = lazy(() => import("./components/Forms/LoginForm/LoginForm"));
 const ResetPasswordForm = lazy(() => import("./components/Forms/ResetPasswordForm/ResetPasswordForm"));
 
@@ -154,6 +156,24 @@ const AppContent = () => {
             <PrivateRoute
               isAuthenticated={isAuthenticated}
               element={<ClassPage />}
+            />
+          }
+        />
+        <Route
+          path="/friends"
+          element={
+            <PrivateRoute
+              isAuthenticated={isAuthenticated}
+              element={<FriendsPage />}
+            />
+          }
+        />
+        <Route
+          path="/messages"
+          element={
+            <PrivateRoute
+              isAuthenticated={isAuthenticated}
+              element={<MessagesPage />}
             />
           }
         />

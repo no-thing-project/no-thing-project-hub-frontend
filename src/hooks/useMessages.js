@@ -1,18 +1,16 @@
-import { useState, useCallback, useEffect } from "react";
-import { io } from "socket.io-client";
+// src/hooks/useMessages.js
+import { useState, useCallback } from "react";
 import {
   sendMessage,
   fetchMessages,
   markMessageAsRead,
   deleteMessage,
 } from "../api/messagesApi";
-import config from "../config";
 
 export const useMessages = (token, userId, onLogout, navigate) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [socket, setSocket] = useState(null);
 
   const handleAuthError = useCallback(
     (err) => {
@@ -25,58 +23,23 @@ export const useMessages = (token, userId, onLogout, navigate) => {
     [onLogout, navigate]
   );
 
-  useEffect(() => {
-    if (!token || !userId) return;
-
-    const newSocket = io(`${config.REACT_APP_HUB_API_URL}/messages`, {
-      auth: { token: `Bearer ${token}` },
-      reconnection: true,
-      reconnectionAttempts: 5,
-    });
-
-    newSocket.on("connect", () => {
-      console.log("Connected to messages namespace");
-      newSocket.emit("join", userId);
-    });
-
-    newSocket.on("newMessage", (message) => {
-      setMessages((prev) => {
-        if (prev.some((m) => m.message_id === message.message_id)) return prev;
-        return [...prev, message];
-      });
-    });
-
-    newSocket.on("messageDeleted", (messageId) => {
-      setMessages((prev) => prev.filter((m) => m.message_id !== messageId));
-    });
-
-    newSocket.on("connect_error", (err) => {
-      console.error("Socket connection error:", err.message);
-      handleAuthError({ status: 401, message: "Socket authentication failed" });
-    });
-
-    setSocket(newSocket);
-
-    return () => {
-      newSocket.disconnect();
-    };
-  }, [token, userId, handleAuthError]);
-
   const fetchMessagesList = useCallback(
-    async (filters = {}) => {
+    async ({ signal } = {}) => {
       if (!token) {
         setError("Authentication required.");
-        return [];
+        return;
       }
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchMessages(token, filters);
-        setMessages(data);
-        return data;
+        const data = await fetchMessages(token, {}, signal);
+        setMessages(data || []);
       } catch (err) {
+        if (err.name === "AbortError") {
+          console.log("Fetch aborted");
+          return;
+        }
         handleAuthError(err);
-        return [];
       } finally {
         setLoading(false);
       }
@@ -94,14 +57,10 @@ export const useMessages = (token, userId, onLogout, navigate) => {
       setError(null);
       try {
         const newMessage = await sendMessage(messageData, token);
-        setMessages((prev) => {
-          if (prev.some((m) => m.message_id === newMessage.message_id)) return prev;
-          return [...prev, newMessage];
-        });
-        return newMessage;
+        return newMessage; // Повертаємо нове повідомлення, але не оновлюємо стан локально
       } catch (err) {
         handleAuthError(err);
-        return null;
+        throw err;
       } finally {
         setLoading(false);
       }
@@ -125,7 +84,7 @@ export const useMessages = (token, userId, onLogout, navigate) => {
         return updatedMessage;
       } catch (err) {
         handleAuthError(err);
-        return null;
+        throw err;
       } finally {
         setLoading(false);
       }
@@ -144,21 +103,20 @@ export const useMessages = (token, userId, onLogout, navigate) => {
       try {
         await deleteMessage(messageId, token);
         setMessages((prev) => prev.filter((m) => m.message_id !== messageId));
-        socket?.emit("deleteMessage", { messageId, userId }); // Повідомляємо іншого користувача
       } catch (err) {
         handleAuthError(err);
+        throw err;
       } finally {
         setLoading(false);
       }
     },
-    [token, socket, userId, handleAuthError]
+    [token, handleAuthError]
   );
 
   return {
     messages,
     loading,
     error,
-    socket,
     fetchMessagesList,
     sendNewMessage,
     markMessageRead,

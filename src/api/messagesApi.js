@@ -14,11 +14,12 @@ export const sendMessage = async (messageData, token) => {
   }
 };
 
-export const fetchMessages = async (token, filters = {}) => {
+export const fetchMessages = async (token, filters = {}, signal) => { // Додано signal
   try {
     const response = await api.get(`/api/v1/messages`, {
       headers: { Authorization: `Bearer ${token}` },
       params: filters, // withUserId, limit, offset
+      signal, // Передаємо signal для скасування запиту
     });
     return response.data?.content || [];
   } catch (err) {

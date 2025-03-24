@@ -14,6 +14,8 @@ import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import StyleRoundedIcon from "@mui/icons-material/StyleRounded";
 import ClassRoundedIcon from "@mui/icons-material/ClassRounded";
+import PeopleRoundedIcon from "@mui/icons-material/PeopleRounded"; // Іконка для "Друзів"
+import MessageRoundedIcon from "@mui/icons-material/MessageRounded"; // Іконка для "Повідомлень"
 import ExitToAppRoundedIcon from "@mui/icons-material/ExitToAppRounded";
 
 const LeftDrawer = ({ onLogout }) => {
@@ -154,6 +156,60 @@ const LeftDrawer = ({ onLogout }) => {
                 }}
               >
                 <ClassRoundedIcon sx={{ fontSize: 30 }} aria-label="Classes" />
+              </ListItemIcon>
+            </Tooltip>
+          </ListItem>
+
+          <ListItem
+            button
+            component={Link}
+            to="/friends"
+            sx={{
+              justifyContent: "center",
+              "&:hover .MuiListItemIcon-root": {
+                color: "var(--color-icon-hover)",
+              },
+            }}
+          >
+            <Tooltip title="Friends" placement="right">
+              <ListItemIcon
+                sx={{
+                  minWidth: 0,
+                  justifyContent: "center",
+                  color:
+                    currentPath === "/friends"
+                      ? "var(--color-icon-hover)"
+                      : "var(--color-icon-default)",
+                }}
+              >
+                <PeopleRoundedIcon sx={{ fontSize: 30 }} aria-label="Friends" />
+              </ListItemIcon>
+            </Tooltip>
+          </ListItem>
+
+          <ListItem
+            button
+            component={Link}
+            to="/messages"
+            sx={{
+              justifyContent: "center",
+              "&:hover .MuiListItemIcon-root": {
+                color: "var(--color-icon-hover)",
+              },
+            }}
+          >
+            <Tooltip title="Messages" placement="right">
+              <ListItemIcon
+                sx={{
+                  minWidth: 0,
+                  justifyContent: "center",
+                  color:
+                    currentPath === "/messages"
+                      ? "var(--color-icon-hover)"
+                      : "var(--color-icon-default)",
+                }}
+              >
+                <MessageRoundedIcon sx={{ fontSize: 30 }} aria-label="Messages" />
               </ListItemIcon>
             </Tooltip>
           </ListItem>

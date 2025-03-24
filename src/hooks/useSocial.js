@@ -1,3 +1,4 @@
+// src/hooks/useSocial.js
 import { useState, useCallback } from "react";
 import {
   addFriend,
@@ -29,19 +30,18 @@ export const useSocial = (token, onLogout, navigate) => {
 
   const addNewFriend = useCallback(
     async (friendId) => {
-      if (!token) {
-        setError("Authentication required");
+      if (!token || !friendId) {
+        setError("Authentication or friend ID missing");
         return null;
       }
       setLoading(true);
       setError(null);
       try {
         const data = await addFriend(friendId, token);
-        setPendingRequests((prev) => [...prev, { anonymous_id: friendId, status: 'pending', requested_at: new Date() }]);
-        return data;
+        return data; // Повертаємо дані, але не оновлюємо стан локально
       } catch (err) {
         handleAuthError(err);
-        return null;
+        throw err;
       } finally {
         setLoading(false);
       }
@@ -51,20 +51,18 @@ export const useSocial = (token, onLogout, navigate) => {
 
   const acceptFriend = useCallback(
     async (friendId) => {
-      if (!token) {
-        setError("Authentication required");
+      if (!token || !friendId) {
+        setError("Authentication or friend ID missing");
         return null;
       }
       setLoading(true);
       setError(null);
       try {
         const data = await acceptFriendRequest(friendId, token);
-        setPendingRequests((prev) => prev.filter((req) => req.anonymous_id !== friendId));
-        setFriends((prev) => [...prev, { anonymous_id: friendId, status: 'accepted' }]);
         return data;
       } catch (err) {
         handleAuthError(err);
-        return null;
+        throw err;
       } finally {
         setLoading(false);
       }
@@ -74,19 +72,18 @@ export const useSocial = (token, onLogout, navigate) => {
 
   const rejectFriend = useCallback(
     async (friendId) => {
-      if (!token) {
-        setError("Authentication required");
+      if (!token || !friendId) {
+        setError("Authentication or friend ID missing");
         return null;
       }
       setLoading(true);
       setError(null);
       try {
         const data = await rejectFriendRequest(friendId, token);
-        setPendingRequests((prev) => prev.filter((req) => req.anonymous_id !== friendId));
         return data;
       } catch (err) {
         handleAuthError(err);
-        return null;
+        throw err;
       } finally {
         setLoading(false);
       }
@@ -96,19 +93,18 @@ export const useSocial = (token, onLogout, navigate) => {
 
   const removeExistingFriend = useCallback(
     async (friendId) => {
-      if (!token) {
-        setError("Authentication required");
+      if (!token || !friendId) {
+        setError("Authentication or friend ID missing");
         return null;
       }
       setLoading(true);
       setError(null);
       try {
         const data = await removeFriend(friendId, token);
-        setFriends((prev) => prev.filter((f) => f.anonymous_id !== friendId));
         return data;
       } catch (err) {
         handleAuthError(err);
-        return null;
+        throw err;
       } finally {
         setLoading(false);
       }
@@ -126,8 +122,8 @@ export const useSocial = (token, onLogout, navigate) => {
       setError(null);
       try {
         const data = await fetchFriends(token, options, signal);
-        setFriends(data.friends);
-        setFriendsPagination(data.pagination);
+        setFriends(data.friends || []);
+        setFriendsPagination(data.pagination || {});
         return data.friends;
       } catch (err) {
         if (err.name !== "AbortError") handleAuthError(err);
@@ -149,8 +145,8 @@ export const useSocial = (token, onLogout, navigate) => {
       setError(null);
       try {
         const data = await fetchPendingRequests(token, options, signal);
-        setPendingRequests(data.pendingRequests);
-        setPendingPagination(data.pagination);
+        setPendingRequests(data.pendingRequests || []);
+        setPendingPagination(data.pagination || {});
         return data.pendingRequests;
       } catch (err) {
         if (err.name !== "AbortError") handleAuthError(err);
