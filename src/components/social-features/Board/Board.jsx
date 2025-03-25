@@ -1,44 +1,47 @@
-import React, {
-  useState,
-  useCallback,
-  useRef,
-  useLayoutEffect,
-  useEffect,
-  useMemo,
-} from "react";
-import PropTypes from "prop-types";
-import { useNavigate } from "react-router-dom";
+import { Edit, RestartAlt } from "@mui/icons-material";
+import AddIcon from "@mui/icons-material/Add";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import FavoriteIcon from "@mui/icons-material/Favorite";
+import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
+import LockIcon from "@mui/icons-material/Lock";
+import PeopleIcon from "@mui/icons-material/People";
+import PublicIcon from "@mui/icons-material/Public";
+import RemoveIcon from "@mui/icons-material/Remove";
+import ShareIcon from "@mui/icons-material/Share";
 import {
+  Badge,
   Box,
   IconButton,
-  Typography,
-  Badge,
-  Tooltip,
   List,
   ListItem,
   ListItemText,
   Popover,
+  Tooltip,
+  Typography,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import RemoveIcon from "@mui/icons-material/Remove";
-import PeopleIcon from "@mui/icons-material/People";
-import FavoriteIcon from "@mui/icons-material/Favorite";
-import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
-import ShareIcon from "@mui/icons-material/Share";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import LockIcon from "@mui/icons-material/Lock";
-import PublicIcon from "@mui/icons-material/Public";
-import DraggableTweet from "../Tweet/Tweet";
-import TweetPopup from "../Tweet/TweetPopup";
-import TweetContent from "../Tweet/TweetContent";
+import { AnimatePresence, motion } from "framer-motion";
+import PropTypes from "prop-types";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useNavigate } from "react-router-dom";
+import { BOARD_SIZE, useBoardInteraction } from "../../../hooks/useBoard";
 import { useTweets } from "../../../hooks/useTweets";
 import { useWebSocket } from "../../../hooks/useWebSocket";
-import { BOARD_SIZE, useBoardInteraction } from "../../../hooks/useBoard";
-import LoadingSpinner from "../../Layout/LoadingSpinner";
 import ErrorMessage from "../../Layout/ErrorMessage";
+import LoadingSpinner from "../../Layout/LoadingSpinner";
+import DraggableTweet from "../Tweet/Tweet";
+import TweetContent from "../Tweet/TweetContent";
+import TweetPopup from "../Tweet/TweetPopup";
 
 const ErrorFallback = ({ error }) => (
-  <ErrorMessage message={error.message || "Something went wrong in the Board"} />
+  <ErrorMessage
+    message={error.message || "Something went wrong in the Board"}
+  />
 );
 
 const Board = ({
@@ -50,7 +53,7 @@ const Board = ({
   members,
   boardTitle,
   onLike,
-  onStatusUpdate,
+  setEditingBoard
 }) => {
   const navigate = useNavigate();
   const boardMainRef = useRef(null);
@@ -155,7 +158,10 @@ const Board = ({
       try {
         const updatedTweet = await toggleLikeTweet(id, isLiked);
         if (updatedTweet && socketRef.current?.boards) {
-          socketRef.current.boards.emit("tweetUpdated", { boardId, ...updatedTweet });
+          socketRef.current.boards.emit("tweetUpdated", {
+            boardId,
+            ...updatedTweet,
+          });
         }
       } catch (err) {
         console.error("Error toggling like:", err);
@@ -169,7 +175,10 @@ const Board = ({
       try {
         await deleteExistingTweet(id);
         if (socketRef.current?.boards) {
-          socketRef.current.boards.emit("tweetDeleted", { boardId, tweet_id: id });
+          socketRef.current.boards.emit("tweetDeleted", {
+            boardId,
+            tweet_id: id,
+          });
         }
       } catch (err) {
         console.error("Error deleting tweet:", err);
@@ -206,7 +215,9 @@ const Board = ({
         tweet={tweet}
         currentUser={currentUser}
         onStop={(e, data) =>
-          handleUpdateTweet(tweet.tweet_id, { position: { x: data.x, y: data.y } })
+          handleUpdateTweet(tweet.tweet_id, {
+            position: { x: data.x, y: data.y },
+          })
         }
       >
         <TweetContent
@@ -231,23 +242,11 @@ const Board = ({
     highlightedParentId,
   ]);
 
-  useLayoutEffect(() => {
-    if (boardMainRef.current) {
-      window.requestAnimationFrame(() => {
-        centerBoard();
-      });
-    }
-  }, [centerBoard]);
-
   useEffect(() => {
     if (boardMainRef.current) {
-      const observer = new ResizeObserver(() => {
-        centerBoard();
-      });
-      observer.observe(boardMainRef.current);
-      return () => observer.disconnect();
+      centerBoard();
     }
-  }, [centerBoard]);
+  }, []);
 
   const handlePopupSubmit = useCallback(
     (text, x, y) => {
@@ -275,265 +274,305 @@ const Board = ({
   }
 
   return (
+    <Box
+      sx={{
+        display: "flex",
+        width: "100%",
+        height: "100%",
+        overflow: "hidden",
+      }}
+    >
       <Box
         sx={{
+          flexGrow: 1,
           display: "flex",
-          width: "100%",
-          height: "100%",
-          overflow: "hidden",
+          flexDirection: "column",
+          position: "relative",
         }}
       >
         <Box
           sx={{
-            flexGrow: 1,
-            display: "flex",
-            flexDirection: "column",
-            position: "relative",
+            position: "absolute",
+            top: 16,
+            left: 16,
+            zIndex: 1100,
           }}
+        >
+          <IconButton
+            onClick={() => navigate(-1)}
+            className="return-button"
+            aria-label="Go back"
+          >
+            <ArrowBackIcon sx={{ color: "text.primary" }} />
+          </IconButton>
+        </Box>
+
+        <Box
+          ref={boardMainRef}
+          sx={{
+            flex: 1,
+            position: "relative",
+            overflow: "hidden",
+            cursor: dragging ? "grabbing" : "grab",
+          }}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUpWithPopup}
+          onTouchStart={(e) => {
+            if (e.touches?.length === 1) {
+              handleMouseDown({
+                clientX: e.touches[0].clientX,
+                clientY: e.touches[0].clientY,
+                target: e.target,
+              });
+            }
+          }}
+          onTouchMove={(e) => {
+            if (e.touches?.length === 1) {
+              handleMouseMove({
+                clientX: e.touches[0].clientX,
+                clientY: e.touches[0].clientY,
+                target: e.target,
+              });
+              e.preventDefault();
+            }
+          }}
+          onTouchEnd={(e) => {
+            if (e.changedTouches?.length === 1) {
+              handleMouseUpWithPopup({
+                clientX: e.changedTouches[0].clientX,
+                clientY: e.changedTouches[0].clientY,
+                target: e.target,
+              });
+            }
+          }}
+          onWheel={handleWheel}
+          role="region"
+          aria-label="Interactive board canvas"
         >
           <Box
             sx={{
               position: "absolute",
-              top: 16,
-              left: 16,
-              zIndex: 1100,
+              top: 0,
+              left: 0,
+              width: BOARD_SIZE,
+              height: BOARD_SIZE,
+              backgroundColor: "background.paper",
+              backgroundImage:
+                "radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)",
+              backgroundSize: "20px 20px",
+              boxShadow: "inset 0 0 10px rgba(0,0,0,0.1)",
+              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+              transformOrigin: "top left",
             }}
           >
-            <IconButton
-              onClick={() => navigate(-1)}
-              className="return-button"
-              aria-label="Go back"
+            <Box
+              sx={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                textAlign: "center",
+                pointerEvents: "none",
+              }}
             >
-              <ArrowBackIcon sx={{ color: "text.primary" }} />
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "#eee",
+                  fontSize: "clamp(2rem, 8vw, 15rem)",
+                  fontWeight: 700,
+                }}
+              >
+                {boardTitle}
+              </Typography>
+            </Box>
+
+            {renderedTweets}
+
+            {tweetPopup.visible && (
+              <Box onClick={(e) => e.stopPropagation()}>
+                <TweetPopup
+                  x={tweetPopup.x}
+                  y={tweetPopup.y}
+                  draft={tweetDraft}
+                  onDraftChange={setTweetDraft}
+                  onSubmit={handlePopupSubmit}
+                  onClose={() =>
+                    setTweetPopup((prev) => ({ ...prev, visible: false }))
+                  }
+                />
+              </Box>
+            )}
+          </Box>
+
+          <Box
+            className="zoom-controls"
+            sx={{
+              position: "absolute",
+              bottom: 16,
+              right: 16,
+              zIndex: 1100,
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              borderRadius: 1,
+              padding: "4px",
+              backgroundColor: "rgba(255, 255, 255, 0)",
+              backdropFilter: "blur(10px)",
+              borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
+            }}
+          >
+            <AnimatePresence>
+              {scale < 1 && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <IconButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleZoomButton("reset");
+                    }}
+                    size="small"
+                    aria-label="Reset zoom"
+                  >
+                    <RestartAlt sx={{ color: "text.primary" }} />
+                  </IconButton>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation();
+                handleZoomButton("out");
+              }}
+              size="small"
+              aria-label="Zoom out"
+            >
+              <RemoveIcon sx={{ color: "text.primary" }} />
+            </IconButton>
+            <Typography variant="body2">{Math.round(scale * 100)}%</Typography>
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation();
+                handleZoomButton("in");
+              }}
+              size="small"
+              aria-label="Zoom in"
+            >
+              <AddIcon sx={{ color: "text.primary" }} />
             </IconButton>
           </Box>
 
           <Box
-            ref={boardMainRef}
+            className="board-top-controls"
             sx={{
-              flex: 1,
-              position: "relative",
-              overflow: "hidden",
-              cursor: dragging ? "grabbing" : "grab",
-              borderRadius: 2.5,
+              position: "absolute",
+              top: 16,
+              right: 16,
+              zIndex: 1100,
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              borderRadius: 1,
+              padding: "4px",
+              backgroundColor: "rgba(255, 255, 255, 0)",
+              backdropFilter: "blur(10px)",
+              borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
             }}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUpWithPopup}
-            onTouchStart={(e) => {
-              if (e.touches?.length === 1) {
-                handleMouseDown({
-                  clientX: e.touches[0].clientX,
-                  clientY: e.touches[0].clientY,
-                  target: e.target,
-                });
-              }
-            }}
-            onTouchMove={(e) => {
-              if (e.touches?.length === 1) {
-                handleMouseMove({
-                  clientX: e.touches[0].clientX,
-                  clientY: e.touches[0].clientY,
-                  target: e.target,
-                });
-                e.preventDefault();
-              }
-            }}
-            onTouchEnd={(e) => {
-              if (e.changedTouches?.length === 1) {
-                handleMouseUpWithPopup({
-                  clientX: e.changedTouches[0].clientX,
-                  clientY: e.changedTouches[0].clientY,
-                  target: e.target,
-                });
-              }
-            }}
-            onWheel={handleWheel}
-            role="region"
-            aria-label="Interactive board canvas"
           >
-            <Box
-              sx={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: BOARD_SIZE,
-                height: BOARD_SIZE,
-                backgroundColor: "background.paper",
-                backgroundImage:
-                  "radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)",
-                backgroundSize: "20px 20px",
-                boxShadow: "inset 0 0 10px rgba(0,0,0,0.1)",
-                transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-                transformOrigin: "top left",
-              }}
-            >
-              <Box
-                sx={{
-                  position: "absolute",
-                  top: "50%",
-                  left: "50%",
-                  transform: "translate(-50%, -50%)",
-                  textAlign: "center",
-                  pointerEvents: "none",
-                }}
+            <Tooltip title="Board Visibility">
+              <IconButton aria-label="Board visibility">
+                {boardData?.is_public ? (
+                  <PublicIcon sx={{ color: "#3E435D" }} />
+                ) : (
+                  <LockIcon sx={{ color: "#990000" }} />
+                )}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Members">
+              <IconButton
+                onClick={(e) => setMembersAnchorEl(e.currentTarget)}
+                aria-label="View members"
               >
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "#eee",
-                    fontSize: "clamp(2rem, 8vw, 15rem)",
-                    fontWeight: 700,
-                  }}
-                >
-                  {boardTitle}
-                </Typography>
-              </Box>
+                <Badge badgeContent={onlineUsers} color="primary">
+                  <PeopleIcon sx={{ color: "text.primary" }} />
+                </Badge>
+              </IconButton>
+            </Tooltip>
+            <Tooltip
+              title={boardData?.is_liked ? "Unlike Board" : "Like Board"}
+            >
+              <IconButton onClick={onLike} aria-label="Like or unlike board">
+                {boardData?.is_liked ? (
+                  <FavoriteIcon sx={{ color: "red" }} />
+                ) : (
+                  <FavoriteBorderIcon sx={{ color: "text.primary" }} />
+                )}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Share Board">
+              <IconButton aria-label="Share board">
+                <ShareIcon sx={{ color: "text.primary" }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Edit Board">
+              <IconButton
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingBoard({
+                    board_id: boardData.board_id,
+                    name: boardData.name,
+                    description: boardData.description || "",
+                    visibility: boardData.is_public ? "Public" : "Private",
+                  });
+                }}
+                sx={{ p: 1, color: "text.primary" }}
+              >
+                <Edit />
+              </IconButton>
+            </Tooltip>
+          </Box>
 
-              {renderedTweets}
-
-              {tweetPopup.visible && (
-                <Box onClick={(e) => e.stopPropagation()}>
-                  <TweetPopup
-                    x={tweetPopup.x}
-                    y={tweetPopup.y}
-                    draft={tweetDraft}
-                    onDraftChange={setTweetDraft}
-                    onSubmit={handlePopupSubmit}
-                    onClose={() =>
-                      setTweetPopup((prev) => ({ ...prev, visible: false }))
-                    }
-                  />
-                </Box>
+          <Popover
+            open={Boolean(membersAnchorEl)}
+            anchorEl={membersAnchorEl}
+            onClose={() => setMembersAnchorEl(null)}
+            anchorOrigin={{
+              vertical: "bottom",
+              horizontal: "right",
+            }}
+            transformOrigin={{
+              vertical: "top",
+              horizontal: "right",
+            }}
+          >
+            <Box sx={{ p: 2, maxHeight: 300, overflowY: "auto" }}>
+              <Typography variant="h6" gutterBottom>
+                Members
+              </Typography>
+              {members.length > 0 ? (
+                <List dense>
+                  {members.map((member) => (
+                    <ListItem key={member.anonymous_id}>
+                      <ListItemText
+                        primary={member.username || "Anonymous"}
+                        secondary={member.role || "Member"}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              ) : (
+                <Typography>No members found.</Typography>
               )}
             </Box>
-
-            <Box
-              className="zoom-controls"
-              sx={{
-                position: "absolute",
-                bottom: 16,
-                right: 16,
-                zIndex: 1100,
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-                backgroundColor: "background.paper",
-                borderRadius: 1,
-                padding: "4px",
-              }}
-            >
-              <IconButton
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleZoomButton("out");
-                }}
-                size="small"
-                aria-label="Zoom out"
-              >
-                <RemoveIcon sx={{ color: "text.primary" }} />
-              </IconButton>
-              <Typography variant="body2">
-                {Math.round(scale * 100)}%
-              </Typography>
-              <IconButton
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleZoomButton("in");
-                }}
-                size="small"
-                aria-label="Zoom in"
-              >
-                <AddIcon sx={{ color: "text.primary" }} />
-              </IconButton>
-            </Box>
-
-            <Box
-              className="board-top-controls"
-              sx={{
-                position: "absolute",
-                top: 16,
-                right: 16,
-                zIndex: 1100,
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-                backgroundColor: "background.paper",
-                borderRadius: 1,
-                padding: "4px",
-              }}
-            >
-              <Tooltip title="Board Visibility">
-                <IconButton aria-label="Board visibility">
-                  {boardData?.is_public ? (
-                    <PublicIcon sx={{ color: "#3E435D" }} />
-                  ) : (
-                    <LockIcon sx={{ color: "#990000" }} />
-                  )}
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Members">
-                <IconButton
-                  onClick={(e) => setMembersAnchorEl(e.currentTarget)}
-                  aria-label="View members"
-                >
-                  <Badge badgeContent={onlineUsers} color="primary">
-                    <PeopleIcon sx={{ color: "text.primary" }} />
-                  </Badge>
-                </IconButton>
-              </Tooltip>
-              <Tooltip title={boardData?.is_liked ? "Unlike Board" : "Like Board"}>
-                <IconButton onClick={onLike} aria-label="Like or unlike board">
-                  {boardData?.is_liked ? (
-                    <FavoriteIcon sx={{ color: "red" }} />
-                  ) : (
-                    <FavoriteBorderIcon sx={{ color: "text.primary" }} />
-                  )}
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Share Board">
-                <IconButton aria-label="Share board">
-                  <ShareIcon sx={{ color: "text.primary" }} />
-                </IconButton>
-              </Tooltip>
-            </Box>
-
-            <Popover
-              open={Boolean(membersAnchorEl)}
-              anchorEl={membersAnchorEl}
-              onClose={() => setMembersAnchorEl(null)}
-              anchorOrigin={{
-                vertical: "bottom",
-                horizontal: "right",
-              }}
-              transformOrigin={{
-                vertical: "top",
-                horizontal: "right",
-              }}
-            >
-              <Box sx={{ p: 2, maxHeight: 300, overflowY: "auto" }}>
-                <Typography variant="h6" gutterBottom>
-                  Members
-                </Typography>
-                {members.length > 0 ? (
-                  <List dense>
-                    {members.map((member) => (
-                      <ListItem key={member.anonymous_id}>
-                        <ListItemText
-                          primary={member.username || "Anonymous"}
-                          secondary={member.role || "Member"}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                ) : (
-                  <Typography>No members found.</Typography>
-                )}
-              </Box>
-            </Popover>
-          </Box>
+          </Popover>
         </Box>
       </Box>
+    </Box>
   );
 };
 
@@ -546,7 +585,6 @@ Board.propTypes = {
   members: PropTypes.array.isRequired,
   boardTitle: PropTypes.string.isRequired,
   onLike: PropTypes.func.isRequired,
-  onStatusUpdate: PropTypes.func.isRequired,
 };
 
 export default Board;

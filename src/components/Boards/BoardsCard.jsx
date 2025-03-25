@@ -8,6 +8,7 @@ const BoardCard = ({
   handleLike,
   setEditingBoard,
   setBoardToDelete,
+  setDeleteDialogOpen,
   navigate,
 }) => {
   // Обчислення загальної довжини контенту для визначення span
@@ -69,6 +70,7 @@ const BoardCard = ({
           onClick={(e) => {
             e.stopPropagation();
             setBoardToDelete(board.board_id);
+            setDeleteDialogOpen(true)
           }}
           sx={{ p: 1, color: "error.dark" }}
         >

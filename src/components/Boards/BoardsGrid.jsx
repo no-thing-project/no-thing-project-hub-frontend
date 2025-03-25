@@ -4,9 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import BoardCard from "./BoardsCard";
 
 const containerVariants = {
-  hidden: { opacity: 0, height: 0 },
-  visible: { opacity: 1, height: "auto" },
-  exit: { opacity: 0, height: 0 },
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
 };
 
 const leftColumnVariants = {
@@ -20,6 +19,7 @@ const BoardsGrid = ({
   handleLike,
   setEditingBoard,
   setBoardToDelete,
+  setDeleteDialogOpen,
   navigate,
 }) => (
   <AnimatePresence exitBeforeEnter>
@@ -29,7 +29,6 @@ const BoardsGrid = ({
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        exit="exit"
         transition={{ duration: 0.3 }}
       >
         <Box
@@ -97,6 +96,7 @@ const BoardsGrid = ({
               handleLike={handleLike}
               setEditingBoard={setEditingBoard}
               setBoardToDelete={setBoardToDelete}
+              setDeleteDialogOpen={setDeleteDialogOpen}
               navigate={navigate}
             />
           ))}

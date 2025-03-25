@@ -1,5 +1,4 @@
-// hooks/useBoard.js
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 export const BOARD_SIZE = 10000;
 const ZOOM_MIN = 0.1;
@@ -14,68 +13,112 @@ export const useBoardInteraction = (boardRef) => {
   const dragStart = useRef(null);
   const isDragging = useRef(false);
 
+  // Refs для відстеження поточних значень масштабу та зсуву
+  const scaleRef = useRef(scale);
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+  const offsetRef = useRef(offset);
+
+  // Оновлення refs при зміні стану
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+
+  useEffect(() => {
+    offsetRef.current = offset;
+  }, [offset]);
+
+  // Центрування борди
   const centerBoard = useCallback(() => {
-    if (boardRef.current) {
-      const { clientWidth, clientHeight } = boardRef.current;
-      setOffset({
-        x: clientWidth / 2 - (BOARD_SIZE * scale) / 2,
-        y: clientHeight / 2 - (BOARD_SIZE * scale) / 2,
-      });
-    }
-  }, [boardRef, scale]);
+    setOffset({
+      x: window.innerWidth / 2 - (BOARD_SIZE * scaleRef.current) / 2,
+      y: window.innerHeight / 2 - (BOARD_SIZE * scaleRef.current) / 2,
+    });
+  }, []);
 
-  // Adjust the offset when zooming to keep the cursor position fixed
-  const adjustOffsetForZoom = useCallback(
-    (cursorX, cursorY, oldScale, newScale) => {
-      if (!boardRef.current) return;
-      const rect = boardRef.current.getBoundingClientRect();
-      const relativeX = cursorX - rect.left;
-      const relativeY = cursorY - rect.top;
-      const boardX = (relativeX - offset.x) / oldScale;
-      const boardY = (relativeY - offset.y) / oldScale;
-      setOffset({
-        x: relativeX - boardX * newScale,
-        y: relativeY - boardY * newScale,
-      });
-    },
-    [offset, boardRef]
-  );
+  // Масштабування відносно позиції курсора
+  const handleZoom = useCallback((delta, mouseX, mouseY) => {
+    setScale((prevScale) => {
+      const currentScale = scaleRef.current;
+      const currentOffset = offsetRef.current;
+      const newScale = Math.min(
+        ZOOM_MAX,
+        Math.max(ZOOM_MIN, currentScale + delta)
+      );
 
-  // Handle zooming in or out
-  const handleZoom = useCallback(
-    (cursorX, cursorY, delta) => {
-      setScale((prev) => {
-        const newScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, prev + delta));
-        adjustOffsetForZoom(cursorX, cursorY, prev, newScale);
-        return newScale;
-      });
-    },
-    [adjustOffsetForZoom]
-  );
+      if (mouseX !== undefined && mouseY !== undefined) {
+        // Розрахунок нових координат зсуву
+        const boardX = (mouseX - currentOffset.x) / currentScale;
+        const boardY = (mouseY - currentOffset.y) / currentScale;
+        const newOffsetX = mouseX - boardX * newScale;
+        const newOffsetY = mouseY - boardY * newScale;
+        setOffset({ x: newOffsetX, y: newOffsetY });
+      } else {
+        // Центрування при відсутності курсора (кнопки)
+        setOffset({
+          x: window.innerWidth / 2 - (BOARD_SIZE * newScale) / 2,
+          y: window.innerHeight / 2 - (BOARD_SIZE * newScale) / 2,
+        });
+      }
 
-  // Handle zoom buttons (in/out)
+      return newScale;
+    });
+  }, []);
+
+  // Функція для плавної анімації
+  function easeOutCubic(t) {
+    return --t * t * t + 1;
+  }
+
   const handleZoomButton = useCallback(
     (direction) => {
-      if (!boardRef.current) return;
-      const rect = boardRef.current.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-      handleZoom(centerX, centerY, direction === "in" ? ZOOM_STEP : -ZOOM_STEP);
+      if (direction === "reset") {
+        const startScale = scaleRef.current;
+        const targetScale = 1;
+        const duration = 1000; // Тривалість анімації в мілісекундах
+        const startTime = performance.now();
+
+        const animate = (currentTime) => {
+          const elapsed = currentTime - startTime;
+          if (elapsed >= duration) {
+            // Фінальний крок для точного досягнення цільового масштабу
+            const delta = targetScale - scaleRef.current;
+            handleZoom(delta, window.innerWidth / 2, window.innerHeight / 2);
+            return;
+          }
+
+          const progress = elapsed / duration;
+          const easedProgress = easeOutCubic(progress);
+          const newScale =
+            startScale + (targetScale - startScale) * easedProgress;
+          const currentScale = scaleRef.current;
+          const delta = newScale - currentScale;
+
+          handleZoom(delta, window.innerWidth / 2, window.innerHeight / 2);
+          requestAnimationFrame(animate);
+        };
+
+        requestAnimationFrame(animate);
+      } else {
+        const delta = direction === "in" ? ZOOM_STEP : -ZOOM_STEP;
+        handleZoom(delta, window.innerWidth / 2, window.innerHeight / 2);
+      }
     },
-    [boardRef, handleZoom]
+    [handleZoom]
   );
 
-  // Handle mouse wheel for zooming
+  // Обробник колеса миші
   const handleWheel = useCallback(
     (e) => {
       e.preventDefault();
-      if (!boardRef.current) return;
       const delta = -e.deltaY * ZOOM_SENSITIVITY;
-      handleZoom(e.clientX, e.clientY, delta);
+      handleZoom(delta, e.clientX, e.clientY);
     },
-    [boardRef, handleZoom]
+    [handleZoom]
   );
 
+  // Початок перетягування дошки
   const handleMouseDown = useCallback(
     (e) => {
       if (
@@ -84,6 +127,7 @@ export const useBoardInteraction = (boardRef) => {
         )
       )
         return;
+
       dragStart.current = {
         x: e.clientX,
         y: e.clientY,
@@ -96,35 +140,38 @@ export const useBoardInteraction = (boardRef) => {
     [offset]
   );
 
-  const handleMouseMove = useCallback(
-    (e) => {
-      if (!dragStart.current) return;
-      const dx = (e.clientX - dragStart.current.x) / scale;
-      const dy = (e.clientY - dragStart.current.y) / scale;
-      if (!isDragging.current && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
-        isDragging.current = true;
-        setDragging(true);
-      }
-      if (isDragging.current) {
-        setOffset({
-          x: dragStart.current.offsetX + dx * scale,
-          y: dragStart.current.offsetY + dy * scale,
-        });
-      }
-    },
-    [scale]
-  );
+  // Перетягування дошки
+  const handleMouseMove = useCallback((e) => {
+    if (!dragStart.current) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    if (!isDragging.current && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+      isDragging.current = true;
+      setDragging(true);
+    }
+    if (isDragging.current) {
+      setOffset({
+        x: dragStart.current.offsetX + dx,
+        y: dragStart.current.offsetY + dy,
+      });
+    }
+  }, []);
 
+  // Завершення перетягування + обробка кліка для створення твіта
   const handleMouseUp = useCallback(
     (e, onClick) => {
-      if (!isDragging.current && dragStart.current && onClick && boardRef.current) {
+      if (
+        !isDragging.current &&
+        dragStart.current &&
+        onClick &&
+        boardRef.current
+      ) {
         const boardRect = boardRef.current.getBoundingClientRect();
         const clickX = e.clientX - boardRect.left;
         const clickY = e.clientY - boardRect.top;
         const tweetX = (clickX - offset.x) / scale;
         const tweetY = (clickY - offset.y) / scale;
 
-        // Ensure the tweet is within the board boundaries
         if (
           tweetX >= 0 &&
           tweetX <= BOARD_SIZE &&
@@ -145,7 +192,7 @@ export const useBoardInteraction = (boardRef) => {
     scale,
     offset,
     setOffset,
-    dragging,
+    dragging: isDragging.current,
     centerBoard,
     handleZoomButton,
     handleWheel,

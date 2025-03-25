@@ -189,6 +189,7 @@ const BoardsPage = () => {
         handleLike={handleLike}
         setEditingBoard={setEditingBoard}
         setBoardToDelete={setBoardToDelete}
+        setDeleteDialogOpen={setDeleteDialogOpen}
         navigate={navigate}
       />
 
