@@ -1,8 +1,8 @@
+// src/hooks/useAuth.js
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import api from "../api/apiClient";
 import { handleApiError } from "../api/apiClient";
 
-// Винести decodeToken за межі хука, бо вона не залежить від стану
 const decodeToken = (token) => {
   try {
     const base64Url = token.split(".")[1];
@@ -47,7 +47,6 @@ const useAuth = (navigate) => {
 
   const isInitialValidationComplete = useRef(false);
   const refreshInProgress = useRef(false);
-  // Додаємо прапорець, щоб логаут виконувався лише один раз
   const isLoggingOut = useRef(false);
 
   const handleLogout = useCallback((message) => {
@@ -59,7 +58,8 @@ const useAuth = (navigate) => {
     setAuthData(null);
     localStorage.clear();
     setError(message || "Logged out successfully.");
-  }, []);
+    if (navigate) navigate('/login');
+  }, [navigate]);
 
   const refreshAccessToken = useCallback(async () => {
     if (!refreshToken || refreshInProgress.current) {
@@ -129,19 +129,19 @@ const useAuth = (navigate) => {
     const responseInterceptor = api.interceptors.response.use(
       (response) => response,
       async (error) => {
-        if (error.response?.status === 401 && !refreshInProgress.current) {
+        const status = error.response?.status;
+        if (status === 401 && !refreshInProgress.current) {
           const refreshed = await refreshAccessToken();
           if (refreshed) {
             error.config.headers.Authorization = `Bearer ${token}`;
             return api.request(error.config);
           }
-        } else if (error.response?.status === 403) {
-          // Викликаємо logout, лише якщо ще не було викликано
+        } else if (status === 403) {
           if (!isLoggingOut.current) {
             handleLogout("Access denied. Please log in again.");
           }
         }
-        handleApiError(error, setError);
+        // Пропускаємо помилки, які не є 401/403! (Бути уважним з цим)
         return Promise.reject(error);
       }
     );

@@ -36,7 +36,6 @@ import { useWebSocket } from "../../../hooks/useWebSocket";
 import { BOARD_SIZE, useBoardInteraction } from "../../../hooks/useBoard";
 import LoadingSpinner from "../../Layout/LoadingSpinner";
 import ErrorMessage from "../../Layout/ErrorMessage";
-import ErrorBoundary from "../../Layout/ErrorBoudary";
 
 const ErrorFallback = ({ error }) => (
   <ErrorMessage message={error.message || "Something went wrong in the Board"} />
@@ -276,7 +275,6 @@ const Board = ({
   }
 
   return (
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
       <Box
         sx={{
           display: "flex",
@@ -536,7 +534,6 @@ const Board = ({
           </Box>
         </Box>
       </Box>
-    </ErrorBoundary>
   );
 };
 

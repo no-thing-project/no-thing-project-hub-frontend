@@ -1,26 +1,27 @@
 // src/hooks/useProfile.js
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from 'react';
 import {
   fetchProfile,
   updateProfile,
   deleteProfile,
   fetchPointsHistory,
-} from "../api/profileApi";
+} from '../api/profileApi';
 
 const useProfile = (token, currentUser, onLogout, navigate, updateAuthData) => {
   const [profileData, setProfileData] = useState(null);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [pointsHistory, setPointsHistory] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(null); // Залишаємо для критичних помилок
 
   const handleAuthError = useCallback(
     (err) => {
       if (err.status === 401 || err.status === 403) {
-        onLogout("Your session has expired. Please log in again.");
-        navigate("/login");
+        onLogout('Your session has expired. Please log in again.');
+        navigate('/login');
+        throw new Error('Session expired');
       }
-      setError(err.message || "An error occurred.");
+      throw err;
     },
     [onLogout, navigate]
   );
@@ -36,16 +37,13 @@ const useProfile = (token, currentUser, onLogout, navigate, updateAuthData) => {
   const fetchProfileData = useCallback(
     async (anonymous_id, signal) => {
       if (!token || !currentUser?.anonymous_id) {
-        setError("Authentication required.");
-        return null;
+        throw new Error('Authentication required');
       }
       if (!anonymous_id) {
-        setError("Profile ID is required.");
-        return null;
+        throw new Error('Profile ID is required');
       }
 
       setLoading(true);
-      setError(null);
       try {
         const profile = await fetchProfile(anonymous_id, token, signal);
         const isOwn = anonymous_id === currentUser.anonymous_id;
@@ -56,7 +54,9 @@ const useProfile = (token, currentUser, onLogout, navigate, updateAuthData) => {
         }
         return { profileData: profile, isOwnProfile: isOwn };
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
+        if (err.name !== 'AbortError') {
+          handleAuthError(err);
+        }
         return null;
       } finally {
         setLoading(false);
@@ -68,41 +68,41 @@ const useProfile = (token, currentUser, onLogout, navigate, updateAuthData) => {
   const updateProfileData = useCallback(
     async (updates, signal) => {
       if (!token) {
-        setError("Token missing.");
-        return null;
+        throw new Error('Token missing');
       }
       setLoading(true);
-      setError(null);
       try {
         const updatedProfile = await updateProfile(updates, token, signal);
         setProfileData(updatedProfile);
         if (isOwnProfile) updateAuthData(updatedProfile);
         return updatedProfile;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
+        if (err.name !== 'AbortError') {
+          throw err
+        }
         return null;
       } finally {
         setLoading(false);
       }
     },
-    [token, isOwnProfile, updateAuthData, handleAuthError]
+    [token, isOwnProfile, updateAuthData]
   );
 
   const deleteProfileData = useCallback(
     async (signal) => {
       if (!token) {
-        setError("Authentication required.");
-        return;
+        throw new Error('Authentication required');
       }
       setLoading(true);
-      setError(null);
       try {
         await deleteProfile(token, signal);
         clearProfileState();
-        onLogout("Your profile has been deleted.");
-        navigate("/");
+        onLogout('Your profile has been deleted.');
+        navigate('/');
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
+        if (err.name !== 'AbortError') {
+          handleAuthError(err);
+        }
       } finally {
         setLoading(false);
       }
@@ -113,17 +113,17 @@ const useProfile = (token, currentUser, onLogout, navigate, updateAuthData) => {
   const fetchProfilePointsHistory = useCallback(
     async (signal) => {
       if (!token) {
-        setError("Authentication required.");
-        return [];
+        throw new Error('Authentication required');
       }
       setLoading(true);
-      setError(null);
       try {
         const history = await fetchPointsHistory(token, signal);
         setPointsHistory(history);
         return history;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
+        if (err.name !== 'AbortError') {
+          handleAuthError(err);
+        }
         return [];
       } finally {
         setLoading(false);

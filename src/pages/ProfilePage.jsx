@@ -1,17 +1,17 @@
 // src/pages/ProfilePage.jsx
-import React, { useEffect, useState, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Box, Button, Snackbar, Alert } from "@mui/material";
-import { Edit } from "@mui/icons-material";
-import AppLayout from "../components/Layout/AppLayout";
-import LoadingSpinner from "../components/Layout/LoadingSpinner";
-import ErrorMessage from "../components/Layout/ErrorMessage";
-import ProfileCard from "../components/Cards/ProfileCard";
-import ProfileHeader from "../components/Headers/ProfileHeader";
-import useAuth from "../hooks/useAuth";
-import useProfile from "../hooks/useProfile";
-import { actionButtonStyles } from "../styles/BaseStyles";
-import { normalizeUserData } from "../utils/profileUtils";
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Box, Button } from '@mui/material';
+import { Edit } from '@mui/icons-material';
+import AppLayout from '../components/Layout/AppLayout';
+import LoadingSpinner from '../components/Layout/LoadingSpinner';
+import ProfileCard from '../components/Cards/ProfileCard';
+import ProfileHeader from '../components/Headers/ProfileHeader';
+import useAuth from '../hooks/useAuth';
+import useProfile from '../hooks/useProfile';
+import { actionButtonStyles } from '../styles/BaseStyles';
+import { normalizeUserData } from '../utils/profileUtils';
+import { useNotification } from '../context/NotificationContext';
 
 // Функція для порівняння об’єктів і повернення лише змінених полів
 const getChangedFields = (original, updated) => {
@@ -21,7 +21,7 @@ const getChangedFields = (original, updated) => {
       const originalValue = original[key];
       const updatedValue = updated[key];
 
-      if (typeof updatedValue === "object" && updatedValue !== null && !Array.isArray(updatedValue)) {
+      if (typeof updatedValue === 'object' && updatedValue !== null && !Array.isArray(updatedValue)) {
         const nestedChanges = getChangedFields(originalValue || {}, updatedValue);
         if (Object.keys(nestedChanges).length > 0) {
           changes[key] = nestedChanges;
@@ -42,23 +42,22 @@ const ProfilePage = () => {
     profileData: fetchedProfileData,
     pointsHistory,
     loading: profileLoading,
-    error: profileError,
     fetchProfileData,
     fetchProfilePointsHistory,
     updateProfileData,
     clearProfileState,
   } = useProfile(token, currentUser, handleLogout, navigate, updateAuthData);
+  const { showNotification } = useNotification();
 
   const [isEditing, setIsEditing] = useState(false);
   const [userData, setUserData] = useState(() => normalizeUserData(currentUser || fetchedProfileData));
-  const [success, setSuccess] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     if (authLoading) return;
     if (!isAuthenticated || !currentUser || !token) {
       clearProfileState();
-      navigate("/login");
+      showNotification('Please log in to view your profile.', 'error');
+      navigate('/login');
       return;
     }
 
@@ -67,7 +66,8 @@ const ProfilePage = () => {
 
     const loadData = async () => {
       if (!anonymous_id) {
-        handleLogout("Anonymous ID is missing. Please log in again.");
+        handleLogout('Anonymous ID is missing. Please log in again.');
+        showNotification('Anonymous ID is missing.', 'error');
         return;
       }
 
@@ -83,12 +83,21 @@ const ProfilePage = () => {
         }
         await Promise.all(promises);
 
-        setUserData(normalizeUserData(isOwnProfile ? currentUser : fetchedProfileData));
+        const normalizedData = normalizeUserData(isOwnProfile ? currentUser : fetchedProfileData);
+        if (!normalizedData) {
+          showNotification('Profile not found. Please try again or check the profile ID.', 'error');
+          navigate('/not-found', { state: { message: `Profile with ID ${anonymous_id} not found.` } });
+          return;
+        }
+        setUserData(normalizedData);
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Error loading profile data in ProfilePage:", err);
-          if (err.message === "Profile not found") {
-            navigate("/not-found", { state: { message: `Profile with ID ${anonymous_id} not found.` } });
+        if (err.name !== 'AbortError') {
+          console.error('Error loading profile data in ProfilePage:', err);
+          if (err.message === 'Profile not found') {
+            showNotification(`Profile with ID ${anonymous_id} not found.`, 'error');
+            navigate('/not-found', { state: { message: `Profile with ID ${anonymous_id} not found.` } });
+          } else {
+            showNotification(err.message || 'Failed to load profile data', 'error');
           }
         }
       }
@@ -109,6 +118,7 @@ const ProfilePage = () => {
     handleLogout,
     clearProfileState,
     fetchedProfileData,
+    showNotification,
   ]);
 
   const isOwnProfile = anonymous_id === currentUser?.anonymous_id;
@@ -121,7 +131,7 @@ const ProfilePage = () => {
     const changes = getChangedFields(normalizeUserData(currentUser), userData);
 
     if (Object.keys(changes).length === 0) {
-      setSuccess("No changes to save.");
+      showNotification('No changes to save.', 'info');
       setIsEditing(false);
       return;
     }
@@ -129,40 +139,33 @@ const ProfilePage = () => {
     try {
       const updatedProfile = await updateProfileData(changes);
       if (updatedProfile) {
-        setSuccess("Profile updated successfully!");
-        setIsEditing(false);
         const normalizedProfile = normalizeUserData(updatedProfile);
         setUserData(normalizedProfile);
-        updateAuthData(normalizedProfile); // Явно оновлюємо currentUser
+        updateAuthData(normalizedProfile);
+        showNotification('Profile updated successfully!', 'success');
+        setIsEditing(false);
       } else {
-        setErrorMessage("Failed to update profile");
+        throw new Error('Failed to update profile');
       }
     } catch (err) {
-      setErrorMessage(err.message || "Failed to update profile");
-      console.error("Error updating profile:", err);
+      showNotification(err.message || 'Failed to update profile', 'error');
     }
-  }, [userData, currentUser, updateProfileData, updateAuthData]);
+  }, [userData, currentUser, updateProfileData, updateAuthData, showNotification]);
 
   const handleCancelEdit = () => {
     setUserData(normalizeUserData(currentUser));
     setIsEditing(false);
   };
 
-  const handleCloseSnackbar = () => {
-    setSuccess("");
-    setErrorMessage("");
-  };
-
   const isLoading = authLoading || (!isOwnProfile && profileLoading);
-  const error = profileError;
 
   if (isLoading) return <LoadingSpinner />;
-  if (error) return <ErrorMessage message={error} />;
-  if (!userData) return <ErrorMessage message="Profile not found. Please try again or check the profile ID." />;
+
+  if (!userData) return null;
 
   return (
     <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token} headerTitle="Profile">
-      <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
+      <Box sx={{ maxWidth: 1500, margin: '0 auto', p: 2 }}>
         <ProfileHeader user={userData} isOwnProfile={isOwnProfile}>
           {isOwnProfile && (
             <>
@@ -204,27 +207,6 @@ const ProfilePage = () => {
           setUserData={setUserData}
         />
       </Box>
-
-      <Snackbar
-        open={!!success}
-        autoHideDuration={3000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
-          {success}
-        </Alert>
-      </Snackbar>
-      <Snackbar
-        open={!!errorMessage}
-        autoHideDuration={3000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert onClose={handleCloseSnackbar} severity="error" sx={{ width: "100%" }}>
-          {errorMessage}
-        </Alert>
-      </Snackbar>
     </AppLayout>
   );
 };

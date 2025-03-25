@@ -21,7 +21,6 @@ import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import ErrorMessage from "../components/Layout/ErrorMessage";
 import Board from "../components/social-features/Board/Board";
 import { useBoards } from "../hooks/useBoards";
-import ErrorBoundary from "../components/Layout/ErrorBoudary";
 import useAuth from "../hooks/useAuth";
 
 const ErrorFallback = ({ error }) => (
@@ -170,7 +169,6 @@ const BoardPage = () => {
   if (!boardData) return <ErrorMessage message="Board not found" />;
 
   return (
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
         <Box sx={{ position: "relative", width: "100%", height: "100vh" }}>
           <Box
@@ -307,7 +305,6 @@ const BoardPage = () => {
           </Snackbar>
         </Box>
       </AppLayout>
-    </ErrorBoundary>
   );
 };
 
