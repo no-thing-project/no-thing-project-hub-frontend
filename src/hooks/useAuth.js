@@ -125,14 +125,13 @@ const useAuth = (navigate) => {
       (response) => response,
       async (error) => {
         const status = error.response?.status;
-        const errorMessage = error.response?.data?.errors?.[0] || error.message;
         if (status === 401 && !refreshInProgress.current) {
           const refreshed = await refreshAccessToken();
           if (refreshed) {
             error.config.headers.Authorization = `Bearer ${token}`;
             return api.request(error.config);
           }
-        } else if (status === 403 && errorMessage !== "Insufficient points") {
+        } else if (status === 403) {
           if (!isLoggingOut.current) {
             handleLogout("Access denied. Please log in again.");
           }

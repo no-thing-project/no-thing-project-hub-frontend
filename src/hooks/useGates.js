@@ -24,12 +24,11 @@ export const useGates = (token, onLogout, navigate) => {
 
   const handleAuthError = useCallback(
     (err) => {
-      const errorMessage = err.response?.data?.errors?.[0] || err.message;
-      if ((err.status === 401 || err.status === 403) && errorMessage !== "Insufficient points") {
+      if (err.status === 401 || err.status === 403) {
         onLogout("Your session has expired. Please log in again.");
         navigate("/login");
       }
-      throw err;
+      setError(err.message || "An error occurred.");
     },
     [onLogout, navigate]
   );
