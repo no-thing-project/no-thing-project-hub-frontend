@@ -9,16 +9,14 @@ import PublicIcon from "@mui/icons-material/Public";
 import RemoveIcon from "@mui/icons-material/Remove";
 import ShareIcon from "@mui/icons-material/Share";
 import {
-  Avatar,
   Badge,
   Box,
   IconButton,
   List,
   ListItem,
-  ListItemText,
   Popover,
   Tooltip,
-  Typography,
+  Typography
 } from "@mui/material";
 import { AnimatePresence, motion } from "framer-motion";
 import PropTypes from "prop-types";
@@ -31,26 +29,18 @@ import React, {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { BOARD_SIZE, useBoardInteraction } from "../../../hooks/useBoard";
+import usePoints from "../../../hooks/usePoints";
 import { useTweets } from "../../../hooks/useTweets";
 import { useWebSocket } from "../../../hooks/useWebSocket";
+import {
+  ProfileAvatar
+} from "../../../utils/avatarUtils";
+import { formatPoints } from "../../../utils/formatPoints";
 import ErrorMessage from "../../Layout/ErrorMessage";
 import LoadingSpinner from "../../Layout/LoadingSpinner";
 import DraggableTweet from "../Tweet/Tweet";
 import TweetContent from "../Tweet/TweetContent";
 import TweetPopup from "../Tweet/TweetPopup";
-import { formatPoints } from "../../../utils/formatPoints";
-import usePoints from "../../../hooks/usePoints";
-import {
-  ProfileAvatar,
-  stringAvatar,
-  StyledBadge,
-} from "../../../utils/avatarUtils";
-
-const ErrorFallback = ({ error }) => (
-  <ErrorMessage
-    message={error.message || "Something went wrong in the Board"}
-  />
-);
 
 const Board = ({
   token,
@@ -62,12 +52,9 @@ const Board = ({
   boardTitle,
   onLike,
   setEditingBoard,
+  errorMessage
 }) => {
   const navigate = useNavigate();
-
-  const statusColor = { online: "green", offline: "red", anonymous: "grey" }[
-    "offline"
-  ];
 
   const boardMainRef = useRef(null);
   const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0 });
@@ -290,7 +277,7 @@ const Board = ({
   }
 
   if (tweetsError) {
-    return <ErrorMessage message={tweetsError} />;
+    errorMessage=tweetsError;
   }
 
   return (

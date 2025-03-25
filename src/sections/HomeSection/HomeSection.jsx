@@ -15,6 +15,7 @@ import StatsCard from "../../components/Cards/StatsCard/StatsCard";
 import BarChart from "../../components/Charts/BarChart";
 import { chartColors } from "../../constants/colors";
 import { containerStyles, statsGridStyles, chartsGridStyles } from "../../styles/HomeSectionStyles";
+import ProfileHeader from "../../components/Headers/ProfileHeader";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -70,9 +71,9 @@ const HomeSection = ({ profileData, isOwnProfile }) => {
 
   return (
     <Box sx={containerStyles} role="main">
-      <UserHeader
-        username={profileData.username || "Unknown User"}
-        accessLevel={profileData.access_level || 0}
+      <ProfileHeader
+        user={profileData}
+        isOwnProfile={true}
       />
       {isOwnProfile ? (
         <>

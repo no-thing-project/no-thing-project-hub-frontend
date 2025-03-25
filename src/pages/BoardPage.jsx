@@ -1,8 +1,4 @@
-import {
-  Alert,
-  Box,
-  Snackbar
-} from "@mui/material";
+import { Alert, Box, Snackbar } from "@mui/material";
 import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ErrorMessage from "../components/Layout/ErrorMessage";
@@ -10,12 +6,7 @@ import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import Board from "../components/social-features/Board/Board";
 import useAuth from "../hooks/useAuth";
 import { useBoards } from "../hooks/useBoards";
-
-const ErrorFallback = ({ error }) => (
-  <ErrorMessage
-    message={error.message || "Something went wrong in BoardPage"}
-  />
-);
+import BoardFormDialog from "../components/Dialogs/BoardFormDialog";
 
 const BoardPage = () => {
   const navigate = useNavigate();
@@ -35,12 +26,36 @@ const BoardPage = () => {
     fetchBoardMembersList,
     likeBoardById,
     unlikeBoardById,
+    updateExistingBoard,
+    fetchBoardsList,
     loading: boardLoading,
     error: boardError,
   } = useBoards(token, handleLogout, navigate);
 
   const [success, setSuccess] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [editingBoard, setEditingBoard] = useState(null);
+
+  const handleUpdateBoard = useCallback(async () => {
+    if (!editingBoard?.name.trim()) {
+      setErrorMessage("Board name is required!");
+      return;
+    }
+    try {
+      await updateExistingBoard(editingBoard.board_id, null, null, {
+        name: editingBoard.name,
+        description: editingBoard.description,
+        is_public: editingBoard.visibility === "Public",
+      });
+      setSuccess("Board updated successfully!");
+      setEditingBoard(null);
+      await fetchBoardsList();
+    } catch (err) {
+      setErrorMessage(
+        err.response?.data?.errors?.[0] || "Failed to update board"
+      );
+    }
+  }, [editingBoard, updateExistingBoard, fetchBoardsList]);
 
   const loadBoardData = useCallback(async () => {
     const controller = new AbortController();
@@ -118,31 +133,39 @@ const BoardPage = () => {
         members={members}
         boardTitle={boardData.name || "Untitled Board"}
         onLike={handleLike}
+        setEditingBoard={setEditingBoard}
+        errorMessage={errorMessage}
       />
+
+      {editingBoard && (
+        <BoardFormDialog
+          open={Boolean(editingBoard)}
+          title="Edit Board"
+          board={editingBoard}
+          setBoard={setEditingBoard}
+          onSave={handleUpdateBoard}
+          onCancel={() => setEditingBoard(null)}
+          errorMessage={errorMessage}
+        />
+      )}
 
       <Snackbar
         open={!!success}
         autoHideDuration={3000}
         onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity="success"
-          sx={{ width: "100%" }}
-        >
+        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
           {success}
         </Alert>
       </Snackbar>
       <Snackbar
-        open={!!errorMessage}
+        open={Boolean(errorMessage)}
         autoHideDuration={3000}
         onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity="error"
-          sx={{ width: "100%" }}
-        >
+        <Alert onClose={handleCloseSnackbar} severity="error" sx={{ width: "100%" }} role="alert">
           {errorMessage}
         </Alert>
       </Snackbar>

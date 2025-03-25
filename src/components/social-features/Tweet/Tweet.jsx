@@ -14,7 +14,6 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser }) => {
   useEffect(() => {
     if (!dragging && !justDroppedRef.current) {
       setLocalPosition({ x: tweet.x || 0, y: tweet.y || 0 });
-      console.log("Updated tweet position:", { tweet_id: tweet.tweet_id, x: tweet.x, y: tweet.y }); // Debug log
     }
   }, [tweet.x, tweet.y, dragging]);
 

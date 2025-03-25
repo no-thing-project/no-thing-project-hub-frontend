@@ -146,7 +146,7 @@ const BoardsPage = () => {
         setLocalLikes({});
       } catch (err) {
         setLocalLikes((prev) => ({ ...prev, [board_id]: isLiked }));
-        setErrorMessage(`Failed to ${isLiked ? "unlike" : "like"} board`);
+        setErrorMessage(`Failed to ${isLiked ? "dislike" : "like"} board`);
       }
     },
     [likeBoardById, unlikeBoardById, fetchBoardsList]

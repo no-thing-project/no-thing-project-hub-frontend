@@ -1,21 +1,18 @@
 // src/components/Layout/Header/Header.jsx
+import { AppBar, Box, Toolbar, Typography } from "@mui/material";
 import React from "react";
-import { AppBar, Toolbar, Typography, Box, Avatar } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { useUserExtras } from "../../../hooks/useUserExtras";
-import { formatPoints } from "../../../utils/formatPoints";
 import {
-  ProfileAvatar,
-  stringAvatar,
-  StyledBadge,
+  ProfileAvatar
 } from "../../../utils/avatarUtils";
+import { formatPoints } from "../../../utils/formatPoints";
 
 const Header = ({ currentUser, token, title }) => {
   const navigate = useNavigate();
   const { randomPrediction } = useUserExtras(token);
 
   const userName = currentUser?.username || "Someone";
-  const userAvatar = currentUser?.profile_picture || "";
   const userPoints = currentUser?.total_points || 0;
 
   const formatDate = () => {
@@ -84,6 +81,7 @@ const Header = ({ currentUser, token, title }) => {
               user={currentUser}
               badgeSize={10}
               status={currentUser?.online_status}
+              onClicEvent={handleAvatarClick}
             />
           </Box>
         </Box>

@@ -9,7 +9,7 @@ import ProfileCard from '../components/Cards/ProfileCard';
 import ProfileHeader from '../components/Headers/ProfileHeader';
 import useAuth from '../hooks/useAuth';
 import useProfile from '../hooks/useProfile';
-import { actionButtonStyles } from '../styles/BaseStyles';
+import { actionButtonStyles, cancelButtonStyle } from '../styles/BaseStyles';
 import { normalizeUserData } from '../utils/profileUtils';
 import { useNotification } from '../context/NotificationContext';
 
@@ -188,9 +188,9 @@ const ProfilePage = () => {
                     Save
                   </Button>
                   <Button
-                    variant="outlined"
+                    variant="contained"
                     onClick={handleCancelEdit}
-                    sx={actionButtonStyles}
+                    sx={cancelButtonStyle}
                   >
                     Cancel
                   </Button>

@@ -85,7 +85,7 @@ export const StyledBadge = styled(Badge, {
 });
 
 // Об'єднаний компонент аватара з бейджем
-export const ProfileAvatar = ({ user, badgeSize = 10, status = "online" }) => {
+export const ProfileAvatar = ({ user, badgeSize = 10, status = "online", onClicEvent }) => {
   return (
     <StyledBadge
       overlap="circular"
@@ -98,6 +98,7 @@ export const ProfileAvatar = ({ user, badgeSize = 10, status = "online" }) => {
         src={user.profile_picture || undefined}
         alt={user.username}
         className="user-avatar"
+        onClick={onClicEvent}
         sx={{
           backgroundColor: user.profile_picture ? "transparent" : "text.primary",
           display: "flex",
@@ -105,10 +106,7 @@ export const ProfileAvatar = ({ user, badgeSize = 10, status = "online" }) => {
           justifyContent: "center",
           fontSize: "1.3rem",
           lineHeight: 1,
-          cursor: "pointer",
-          // При потребі можна додати розміри, наприклад:
-          // width: 40,
-          // height: 40,
+          cursor: "pointer"
         }}
         aria-label={`Profile of ${user.username}`}
         {...stringAvatar(user.username)}
