@@ -1,4 +1,4 @@
-import { Edit, RestartAlt } from "@mui/icons-material";
+import { Edit, RestartAlt, Toll } from "@mui/icons-material";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import FavoriteIcon from "@mui/icons-material/Favorite";
@@ -9,6 +9,7 @@ import PublicIcon from "@mui/icons-material/Public";
 import RemoveIcon from "@mui/icons-material/Remove";
 import ShareIcon from "@mui/icons-material/Share";
 import {
+  Avatar,
   Badge,
   Box,
   IconButton,
@@ -37,6 +38,13 @@ import LoadingSpinner from "../../Layout/LoadingSpinner";
 import DraggableTweet from "../Tweet/Tweet";
 import TweetContent from "../Tweet/TweetContent";
 import TweetPopup from "../Tweet/TweetPopup";
+import { formatPoints } from "../../../utils/formatPoints";
+import usePoints from "../../../hooks/usePoints";
+import {
+  ProfileAvatar,
+  stringAvatar,
+  StyledBadge,
+} from "../../../utils/avatarUtils";
 
 const ErrorFallback = ({ error }) => (
   <ErrorMessage
@@ -53,9 +61,14 @@ const Board = ({
   members,
   boardTitle,
   onLike,
-  setEditingBoard
+  setEditingBoard,
 }) => {
   const navigate = useNavigate();
+
+  const statusColor = { online: "green", offline: "red", anonymous: "grey" }[
+    "offline"
+  ];
+
   const boardMainRef = useRef(null);
   const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0 });
   const [tweetDraft, setTweetDraft] = useState("");
@@ -76,6 +89,8 @@ const Board = ({
     error: tweetsError,
   } = useTweets(token, boardId, currentUser, onLogout, navigate);
 
+  const { pointsData, getPoints } = usePoints(token, onLogout, navigate);
+
   const socketRef = useWebSocket(
     token,
     boardId,
@@ -92,6 +107,7 @@ const Board = ({
       const signal = controller.signal;
       const loadTweets = async () => {
         try {
+          await getPoints(signal);
           await fetchTweets({ signal });
         } catch (err) {
           if (err.name !== "AbortError") {
@@ -127,6 +143,7 @@ const Board = ({
           socketRef.current.boards.emit("newTweet", { boardId, ...newTweet });
         }
         setReplyTweet(null);
+        await getPoints();
       } catch (err) {
         console.error("Error creating tweet:", err);
       }
@@ -146,6 +163,7 @@ const Board = ({
             timestamp: new Date().toISOString(),
           });
         }
+        await getPoints();
       } catch (err) {
         console.error("Error updating tweet:", err);
       }
@@ -163,6 +181,7 @@ const Board = ({
             ...updatedTweet,
           });
         }
+        await getPoints();
       } catch (err) {
         console.error("Error toggling like:", err);
       }
@@ -180,6 +199,7 @@ const Board = ({
             tweet_id: id,
           });
         }
+        await getPoints();
       } catch (err) {
         console.error("Error deleting tweet:", err);
       }
@@ -407,6 +427,33 @@ const Board = ({
           </Box>
 
           <Box
+            className="user_points"
+            sx={{
+              position: "absolute",
+              bottom: 16,
+              left: 16,
+              zIndex: 1100,
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              borderRadius: 1,
+              padding: "4px",
+              backgroundColor: "rgba(255, 255, 255, 0)",
+              backdropFilter: "blur(10px)",
+              borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
+            }}
+          >
+            <Tooltip title="Available points">
+              <IconButton size="small" aria-label="Zoom out">
+                <Toll sx={{ color: "text.primary" }} />
+              </IconButton>
+            </Tooltip>
+            <Typography variant="body2">
+              {formatPoints(pointsData?.total_points)}
+            </Typography>
+          </Box>
+
+          <Box
             className="zoom-controls"
             sx={{
               position: "absolute",
@@ -558,10 +605,23 @@ const Board = ({
                 <List dense>
                   {members.map((member) => (
                     <ListItem key={member.anonymous_id}>
-                      <ListItemText
-                        primary={member.username || "Anonymous"}
-                        secondary={member.role || "Member"}
-                      />
+                      <Box
+                        sx={{ display: "flex", gap: 1, alignItems: "center", mb: 2 }}
+                      >
+                        <ProfileAvatar
+                          user={member}
+                          badgeSize={10}
+                          status={member.status}
+                        />
+                        <Box sx={{ display: "flex", flexDirection: "column" }}>
+                          <Typography variant="body2">
+                            {member.username || "Anonymous"}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                            {member.role || "Member"}
+                          </Typography>
+                        </Box>
+                      </Box>
                     </ListItem>
                   ))}
                 </List>

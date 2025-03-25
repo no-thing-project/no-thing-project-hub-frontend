@@ -2,6 +2,7 @@
 import React, { useCallback } from "react";
 import { Paper, TextField, Button, Box } from "@mui/material";
 import theme from "../../../Theme";
+import { actionButtonStyles, cancelButtonStyle, inputStyles } from "../../../styles/BaseStyles";
 
 const TweetPopup = ({ x, y, draft, onDraftChange, onSubmit, onClose }) => {
   const handleSubmit = useCallback(() => {
@@ -44,73 +45,20 @@ const TweetPopup = ({ x, y, draft, onDraftChange, onSubmit, onClose }) => {
         maxRows={4}
         margin="dense"
         InputProps={{ notched: false }}
-        sx={{
-          marginBottom: 3,
-          "& .MuiFormLabel-root.MuiInputLabel-shrink": {
-            backgroundColor: "background.paper",
-            padding: "0 5px",
-          },
-          "& .MuiInputLabel-root": {
-            color: "text.secondary",
-            fontWeight: 200
-          },
-          "& .MuiInputLabel-root.Mui-focused": {
-            color: "text.primary",
-          },
-          "& .MuiOutlinedInput-root": {
-            borderRadius: theme.shape.borderRadiusSmall,
-            "&:hover fieldset": {
-              borderColor: "background.button",
-            },
-            "&.Mui-focused fieldset": {
-              borderColor: "background.button",
-            },
-          },
-          "& .MuiInputBase-input::placeholder": {
-            color: theme.palette.text.secondary
-          },
-        }}
+        sx={inputStyles}
       />
-      <Box sx={{ display: "flex", justifyContent: "space-evenly" }}>
+      <Box sx={{ display: "flex", justifyContent: "space-evenly", mt: theme.spacing(2) }}>
         <Button
           onClick={handleSubmit}
           variant="contained"
-          sx={{
-            textTransform: "uppercase",
-            fontWeight: 500,
-            borderRadius: 0.8,
-            boxShadow: "none",
-            backgroundColor: "background.button",
-            color: "#fff",
-            padding: "10px 20px",
-            transition: "all 0.5s ease",
-            ":hover": {
-              boxShadow: "none",
-              opacity: 0.8,
-              transition: "all 0.5s ease",
-            },
-          }}
+          sx={actionButtonStyles}
         >
           Add post
         </Button>
         <Button
           onClick={onClose}
           variant="contained"
-          sx={{
-            textTransform: "uppercase",
-            fontWeight: 500,
-            borderRadius: 0.8,
-            boxShadow: "none",
-            color: "#3E435D",
-            padding: "10px 20px",
-            transition: "all 0.5s ease",
-            ":hover": {
-              boxShadow: "none",
-              backgroundColor: "background.button",
-              color: "#fff",
-              transition: "all 0.5s ease",
-            },
-          }}
+          sx={cancelButtonStyle}
         >
           Cancel
         </Button>

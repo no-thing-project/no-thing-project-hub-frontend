@@ -123,7 +123,7 @@ export const useBoardInteraction = (boardRef) => {
     (e) => {
       if (
         e.target.closest(
-          ".tweet-card, .tweet-popup, .return-button, .zoom-controls, .board-top-controls"
+          ".tweet-card, .tweet-popup, .return-button, .user_points, .zoom-controls, .board-top-controls"
         )
       )
         return;
