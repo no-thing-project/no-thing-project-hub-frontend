@@ -1,3 +1,4 @@
+// src/hooks/useGates.js
 import { useState, useCallback } from "react";
 import {
   fetchGates,
@@ -23,11 +24,12 @@ export const useGates = (token, onLogout, navigate) => {
 
   const handleAuthError = useCallback(
     (err) => {
-      if (err.status === 401 || err.status === 403) {
+      const errorMessage = err.response?.data?.errors?.[0] || err.message;
+      if ((err.status === 401 || err.status === 403) && errorMessage !== "Insufficient points") {
         onLogout("Your session has expired. Please log in again.");
         navigate("/login");
       }
-      setError(err.message || "An error occurred.");
+      throw err;
     },
     [onLogout, navigate]
   );
@@ -90,7 +92,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGates((prev) => [...prev, newGate]);
         return newGate;
       } catch (err) {
-        handleAuthError(err);
+        if (err.name !== "AbortError") handleAuthError(err);
         return null;
       } finally {
         setLoading(false);
@@ -113,7 +115,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGate(updatedGate);
         return updatedGate;
       } catch (err) {
-        handleAuthError(err);
+        if (err.name !== "AbortError") handleAuthError(err);
         return null;
       } finally {
         setLoading(false);
@@ -136,7 +138,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGate(updatedGate);
         return updatedGate;
       } catch (err) {
-        handleAuthError(err);
+        if (err.name !== "AbortError") handleAuthError(err);
         return null;
       } finally {
         setLoading(false);
@@ -158,7 +160,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGates((prev) => prev.filter((g) => g.gate_id !== gateId));
         setGate(null);
       } catch (err) {
-        handleAuthError(err);
+        if (err.name !== "AbortError") handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -179,7 +181,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGate(updatedGate);
         return updatedGate;
       } catch (err) {
-        handleAuthError(err);
+        if (err.name !== "AbortError") handleAuthError(err);
         return null;
       } finally {
         setLoading(false);
@@ -201,7 +203,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGate(updatedGate);
         return updatedGate;
       } catch (err) {
-        handleAuthError(err);
+        if (err.name !== "AbortError") handleAuthError(err);
         return null;
       } finally {
         setLoading(false);
@@ -223,7 +225,7 @@ export const useGates = (token, onLogout, navigate) => {
         setMembers(membersData);
         return membersData;
       } catch (err) {
-        handleAuthError(err);
+        if (err.name !== "AbortError") handleAuthError(err);
         return [];
       } finally {
         setLoading(false);
@@ -246,7 +248,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         return updatedGate;
       } catch (err) {
-        handleAuthError(err);
+        if (err.name !== "AbortError") handleAuthError(err);
         return null;
       } finally {
         setLoading(false);
@@ -269,7 +271,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         return updatedGate;
       } catch (err) {
-        handleAuthError(err);
+        if (err.name !== "AbortError") handleAuthError(err);
         return null;
       } finally {
         setLoading(false);

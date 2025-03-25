@@ -27,12 +27,8 @@ const decodeToken = (token) => {
 };
 
 const useAuth = (navigate) => {
-  const [token, setToken] = useState(
-    () => localStorage.getItem("token") || null
-  );
-  const [refreshToken, setRefreshToken] = useState(
-    () => localStorage.getItem("refreshToken") || null
-  );
+  const [token, setToken] = useState(() => localStorage.getItem("token") || null);
+  const [refreshToken, setRefreshToken] = useState(() => localStorage.getItem("refreshToken") || null);
   const [authData, setAuthData] = useState(() => {
     try {
       const storedAuthData = localStorage.getItem("authData");
@@ -68,8 +64,7 @@ const useAuth = (navigate) => {
     refreshInProgress.current = true;
     try {
       const response = await api.post("/api/v1/auth/refresh", { refreshToken });
-      const { accessToken: newToken, refreshToken: newRefreshToken } =
-        response.data.content || response.data;
+      const { accessToken: newToken, refreshToken: newRefreshToken } = response.data.content || response.data;
       setToken(newToken);
       setRefreshToken(newRefreshToken);
       localStorage.setItem("token", newToken);
@@ -130,18 +125,18 @@ const useAuth = (navigate) => {
       (response) => response,
       async (error) => {
         const status = error.response?.status;
+        const errorMessage = error.response?.data?.errors?.[0] || error.message;
         if (status === 401 && !refreshInProgress.current) {
           const refreshed = await refreshAccessToken();
           if (refreshed) {
             error.config.headers.Authorization = `Bearer ${token}`;
             return api.request(error.config);
           }
-        } else if (status === 403) {
+        } else if (status === 403 && errorMessage !== "Insufficient points") {
           if (!isLoggingOut.current) {
             handleLogout("Access denied. Please log in again.");
           }
         }
-        // Пропускаємо помилки, які не є 401/403! (Бути уважним з цим)
         return Promise.reject(error);
       }
     );
