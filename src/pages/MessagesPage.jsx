@@ -1,11 +1,9 @@
-// src/pages/MessagesPage.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
 import useMessages from "../hooks/useMessages";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
-import ErrorMessage from "../components/Layout/ErrorMessage";
 import {
   Container,
   Typography,
@@ -16,14 +14,15 @@ import {
   TextField,
   Button,
   Alert,
-  Snackbar,
 } from "@mui/material";
 import { inputStyles } from "../styles/BaseStyles";
 import { containerStyles } from "../styles/ProfileStyles";
 import { buttonStyles } from "../styles/BoardSectionStyles";
+import { useNotification } from "../context/NotificationContext";
 
 const MessagesPage = () => {
   const navigate = useNavigate();
+  const { showNotification } = useNotification();
   const { token, authData, isAuthenticated, handleLogout, loading: authLoading } = useAuth(navigate);
   const {
     messages,
@@ -38,21 +37,19 @@ const MessagesPage = () => {
   const [newMessage, setNewMessage] = useState("");
   const [recipientId, setRecipientId] = useState("");
   const [success, setSuccess] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
 
-  // Додаємо useEffect для початкового завантаження повідомлень
   useEffect(() => {
     if (!authLoading && isAuthenticated && token && authData) {
       fetchMessagesList().catch((err) => {
         console.error("Failed to fetch messages:", err);
-        setErrorMessage(err.message || "Failed to load messages");
+        showNotification(err.message || "Failed to load messages", "error");
       });
     }
-  }, [authLoading, isAuthenticated, token, authData, fetchMessagesList]);
+  }, [authLoading, isAuthenticated, token, authData, fetchMessagesList, showNotification]);
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !recipientId.trim()) {
-      setErrorMessage("Recipient ID and message content are required!");
+      showNotification("Recipient ID and message content are required!", "error");
       return;
     }
 
@@ -66,15 +63,14 @@ const MessagesPage = () => {
       setSuccess("Message sent successfully!");
       setNewMessage("");
       setRecipientId("");
-      await fetchMessagesList(); // Оновлюємо список після відправки
+      await fetchMessagesList();
     } catch (err) {
-      setErrorMessage(err.message || "Failed to send message");
+      showNotification(err.message || "Failed to send message", "error");
     }
   };
 
   const handleCloseSnackbar = () => {
     setSuccess("");
-    setErrorMessage("");
   };
 
   const isLoading = authLoading || messagesLoading;
@@ -85,7 +81,7 @@ const MessagesPage = () => {
     return null;
   }
   if (messagesError === "User not found") {
-    return <ErrorMessage message="Profile not found. Please try again or check your profile ID." />;
+    showNotification("Profile not found. Please try again or check your profile ID.", "error");
   }
 
   return (
@@ -102,7 +98,6 @@ const MessagesPage = () => {
 
         {messagesError && <Alert severity="error">{messagesError}</Alert>}
 
-        {/* Форма для відправки повідомлення */}
         <Box sx={{ mb: 4 }}>
           <TextField
             label="Recipient ID"
@@ -127,7 +122,6 @@ const MessagesPage = () => {
           </Button>
         </Box>
 
-        {/* Список повідомлень */}
         <Box>
           <Typography variant="h6">Your Messages</Typography>
           <List>
@@ -163,28 +157,6 @@ const MessagesPage = () => {
             )}
           </List>
         </Box>
-
-        {/* Повідомлення про успіх або помилку */}
-        <Snackbar
-          open={!!success}
-          autoHideDuration={3000}
-          onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        >
-          <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
-            {success}
-          </Alert>
-        </Snackbar>
-        <Snackbar
-          open={!!errorMessage}
-          autoHideDuration={3000}
-          onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        >
-          <Alert onClose={handleCloseSnackbar} severity="error" sx={{ width: "100%" }}>
-            {errorMessage}
-          </Alert>
-        </Snackbar>
       </Container>
     </AppLayout>
   );

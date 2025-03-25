@@ -1,19 +1,18 @@
-// src/pages/GatePage.jsx
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
-import ErrorMessage from "../components/Layout/ErrorMessage";
 import GateSection from "../sections/GateSection/GateSection";
 import CreateModal from "../components/Modals/CreateModal";
 import UpdateModal from "../components/Modals/UpdateModal";
 import { useGates } from "../hooks/useGates";
 import { useClasses } from "../hooks/useClasses";
-import { Snackbar, Alert } from "@mui/material";
 import useAuth from "../hooks/useAuth";
+import { useNotification } from "../context/NotificationContext";
 
 const GatePage = () => {
   const navigate = useNavigate();
+  const { showNotification } = useNotification();
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
   const { gate_id } = useParams();
 
@@ -42,14 +41,13 @@ const GatePage = () => {
   const [openCreateModal, setOpenCreateModal] = useState(false);
   const [openUpdateModal, setOpenUpdateModal] = useState(false);
   const [success, setSuccess] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
 
   const loadGateData = useCallback(async () => {
     const controller = new AbortController();
     const signal = controller.signal;
 
     if (!gate_id || !token) {
-      setErrorMessage("Gate ID or authentication missing.");
+      showNotification("Gate ID or authentication missing.", "error");
       return;
     }
 
@@ -64,12 +62,12 @@ const GatePage = () => {
     } catch (err) {
       if (err.name !== "AbortError") {
         console.error("Error loading gate data:", err);
-        setErrorMessage(err.message || "Failed to load gate data.");
+        showNotification(err.message || "Failed to load gate data.", "error");
       }
     }
 
     return () => controller.abort();
-  }, [gate_id, token, fetchGate, fetchGateMembersList]);
+  }, [gate_id, token, fetchGate, fetchGateMembersList, showNotification]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -83,13 +81,13 @@ const GatePage = () => {
         if (newClass) {
           setSuccess("Class created successfully!");
           setOpenCreateModal(false);
-          await loadGateData(); // Оновлюємо дані гейта, щоб отримати оновлений список класів
+          await loadGateData();
         }
       } catch (err) {
-        setErrorMessage("Failed to create class.");
+        showNotification("Failed to create class.", "error");
       }
     },
-    [gate_id, createNewClassInGate, loadGateData]
+    [gate_id, createNewClassInGate, loadGateData, showNotification]
   );
 
   const handleUpdateGate = useCallback(
@@ -101,10 +99,10 @@ const GatePage = () => {
           setOpenUpdateModal(false);
         }
       } catch (err) {
-        setErrorMessage("Failed to update gate.");
+        showNotification("Failed to update gate.", "error");
       }
     },
-    [gate_id, updateExistingGate]
+    [gate_id, updateExistingGate, showNotification]
   );
 
   const handleDeleteGate = useCallback(async () => {
@@ -113,9 +111,9 @@ const GatePage = () => {
       setSuccess("Gate deleted successfully!");
       navigate("/gates");
     } catch (err) {
-      setErrorMessage("Failed to delete gate.");
+      showNotification("Failed to delete gate.", "error");
     }
-  }, [deleteExistingGate, gate_id, navigate]);
+  }, [deleteExistingGate, gate_id, navigate, showNotification]);
 
   const handleLike = useCallback(
     async (isLiked) => {
@@ -125,10 +123,10 @@ const GatePage = () => {
           setSuccess(`Gate ${isLiked ? "unliked" : "liked"} successfully!`);
         }
       } catch (err) {
-        setErrorMessage(`Failed to ${isLiked ? "unlike" : "like"} gate`);
+        showNotification(`Failed to ${isLiked ? "unlike" : "like"} gate`, "error");
       }
     },
-    [likeGateById, unlikeGateById, gate_id]
+    [likeGateById, unlikeGateById, gate_id, showNotification]
   );
 
   const handleStatusUpdate = useCallback(
@@ -138,10 +136,10 @@ const GatePage = () => {
         setSuccess("Gate status updated successfully!");
         await fetchGate(gate_id);
       } catch (err) {
-        setErrorMessage("Failed to update gate status.");
+        showNotification("Failed to update gate status.", "error");
       }
     },
-    [gate_id, updateGateStatusById, fetchGate]
+    [gate_id, updateGateStatusById, fetchGate, showNotification]
   );
 
   const handleAddMember = useCallback(
@@ -151,10 +149,10 @@ const GatePage = () => {
         setSuccess("Member added successfully!");
         await fetchGateMembersList(gate_id);
       } catch (err) {
-        setErrorMessage("Failed to add member.");
+        showNotification("Failed to add member.", "error");
       }
     },
-    [gate_id, addMemberToGate, fetchGateMembersList]
+    [gate_id, addMemberToGate, fetchGateMembersList, showNotification]
   );
 
   const handleRemoveMember = useCallback(
@@ -164,38 +162,37 @@ const GatePage = () => {
         setSuccess("Member removed successfully!");
         await fetchGateMembersList(gate_id);
       } catch (err) {
-        setErrorMessage("Failed to remove member.");
+        showNotification("Failed to remove member.", "error");
       }
     },
-    [gate_id, removeMemberFromGate, fetchGateMembersList]
+    [gate_id, removeMemberFromGate, fetchGateMembersList, showNotification]
   );
 
   const handleCloseSnackbar = () => {
     setSuccess("");
-    setErrorMessage("");
   };
 
   const isLoading = authLoading || gateLoading || classesLoading;
-  const error = gateError || classesError || errorMessage;
+  const error = gateError || classesError;
 
   if (isLoading) return <LoadingSpinner />;
   if (!isAuthenticated) {
     navigate("/login");
     return null;
   }
-  if (error) return <ErrorMessage message={error} />;
-  if (!gateData) return <ErrorMessage message="Gate not found" />;
+  if (error) showNotification(error, "error");
+  if (!gateData) showNotification("Gate not found", "error");
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <GateSection
         currentUser={authData}
         gateData={gateData}
-        classes={gateData.classes || []} // Використовуємо classes із gateData
+        classes={gateData.classes || []}
         members={members}
         token={token}
         onCreate={() => setOpenCreateModal(true)}
-        onUpdate={() => setOpenUpdateModal(true)}
+        onUpdate={() => setOpenUpdateModal(false)}
         onDelete={handleDeleteGate}
         onLike={handleLike}
         onStatusUpdate={handleStatusUpdate}
@@ -222,16 +219,6 @@ const GatePage = () => {
         onLogout={handleLogout}
         navigate={navigate}
       />
-      <Snackbar open={!!success} autoHideDuration={3000} onClose={handleCloseSnackbar}>
-        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
-          {success}
-        </Alert>
-      </Snackbar>
-      <Snackbar open={!!errorMessage} autoHideDuration={3000} onClose={handleCloseSnackbar}>
-        <Alert onClose={handleCloseSnackbar} severity="error" sx={{ width: "100%" }}>
-          {errorMessage}
-        </Alert>
-      </Snackbar>
     </AppLayout>
   );
 };

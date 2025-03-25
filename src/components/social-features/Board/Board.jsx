@@ -36,7 +36,6 @@ import {
   ProfileAvatar
 } from "../../../utils/avatarUtils";
 import { formatPoints } from "../../../utils/formatPoints";
-import ErrorMessage from "../../Layout/ErrorMessage";
 import LoadingSpinner from "../../Layout/LoadingSpinner";
 import DraggableTweet from "../Tweet/Tweet";
 import TweetContent from "../Tweet/TweetContent";

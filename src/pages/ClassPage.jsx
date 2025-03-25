@@ -1,19 +1,18 @@
-// src/pages/ClassPage.jsx
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import AppLayout from "../components/Layout/AppLayout";
 import ClassSection from "../sections/ClassSection/ClassSection";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
-import ErrorMessage from "../components/Layout/ErrorMessage";
 import CreateModal from "../components/Modals/CreateModal";
 import UpdateModal from "../components/Modals/UpdateModal";
 import { useClasses } from "../hooks/useClasses";
 import { useBoards } from "../hooks/useBoards";
-import { Snackbar, Alert } from "@mui/material";
 import useAuth from "../hooks/useAuth";
+import { useNotification } from "../context/NotificationContext";
 
 const ClassPage = () => {
   const navigate = useNavigate();
+  const { showNotification } = useNotification();
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
   const { class_id } = useParams();
 
@@ -39,14 +38,13 @@ const ClassPage = () => {
   const [openCreateModal, setOpenCreateModal] = useState(false);
   const [openUpdateModal, setOpenUpdateModal] = useState(false);
   const [success, setSuccess] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
 
   const loadClassData = useCallback(async () => {
     const controller = new AbortController();
     const signal = controller.signal;
 
     if (!class_id || !token) {
-      setErrorMessage("Class ID or authentication missing.");
+      showNotification("Class ID or authentication missing.", "error");
       return;
     }
 
@@ -61,12 +59,12 @@ const ClassPage = () => {
     } catch (err) {
       if (err.name !== "AbortError") {
         console.error("Error loading class data:", err);
-        setErrorMessage(err.message || "Failed to load class data.");
+        showNotification(err.message || "Failed to load class data.", "error");
       }
     }
 
     return () => controller.abort();
-  }, [class_id, token, fetchClass, fetchClassMembersList]);
+  }, [class_id, token, fetchClass, fetchClassMembersList, showNotification]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -80,13 +78,13 @@ const ClassPage = () => {
         if (newBoard) {
           setSuccess("Board created successfully!");
           setOpenCreateModal(false);
-          await loadClassData(); // Оновлюємо classData, щоб отримати оновлений список дощок
+          await loadClassData();
         }
       } catch (err) {
-        setErrorMessage("Failed to create board.");
+        showNotification("Failed to create board.", "error");
       }
     },
-    [class_id, createNewBoardInClass, loadClassData]
+    [class_id, createNewBoardInClass, loadClassData, showNotification]
   );
 
   const handleUpdateClass = useCallback(
@@ -98,10 +96,10 @@ const ClassPage = () => {
           setOpenUpdateModal(false);
         }
       } catch (err) {
-        setErrorMessage("Failed to update class.");
+        showNotification("Failed to update class.", "error");
       }
     },
-    [class_id, updateExistingClass]
+    [class_id, updateExistingClass, showNotification]
   );
 
   const handleDeleteClass = useCallback(async () => {
@@ -110,9 +108,9 @@ const ClassPage = () => {
       setSuccess("Class deleted successfully!");
       navigate("/classes");
     } catch (err) {
-      setErrorMessage("Failed to delete class.");
+      showNotification("Failed to delete class.", "error");
     }
-  }, [class_id, deleteExistingClass, navigate]);
+  }, [class_id, deleteExistingClass, navigate, showNotification]);
 
   const handleStatusUpdate = useCallback(
     async (statusData) => {
@@ -122,34 +120,33 @@ const ClassPage = () => {
         setSuccess("Class status updated successfully!");
         await fetchClass(class_id);
       } catch (err) {
-        setErrorMessage("Failed to update class status.");
+        showNotification("Failed to update class status.", "error");
       }
     },
-    [class_id, gateInfo, updateClassStatusById, fetchClass]
+    [class_id, gateInfo, updateClassStatusById, fetchClass, showNotification]
   );
 
   const handleCloseSnackbar = () => {
     setSuccess("");
-    setErrorMessage("");
   };
 
   const isLoading = authLoading || classLoading || boardsLoading;
-  const error = classError || boardsError || errorMessage;
+  const error = classError || boardsError;
 
   if (isLoading) return <LoadingSpinner />;
   if (!isAuthenticated) {
     navigate("/login");
     return null;
   }
-  if (error) return <ErrorMessage message={error} />;
-  if (!classData) return <ErrorMessage message="Class not found" />;
+  if (error) showNotification(error, "error");
+  if (!classData) showNotification("Class not found", "error");
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <ClassSection
         currentUser={authData}
         classData={classData}
-        boards={classData.boards || []} // Використовуємо boards із classData
+        boards={classData.boards || []}
         members={members}
         gateInfo={gateInfo}
         token={token}
@@ -178,16 +175,6 @@ const ClassPage = () => {
         onLogout={handleLogout}
         navigate={navigate}
       />
-      <Snackbar open={!!success} autoHideDuration={3000} onClose={handleCloseSnackbar}>
-        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
-          {success}
-        </Alert>
-      </Snackbar>
-      <Snackbar open={!!errorMessage} autoHideDuration={3000} onClose={handleCloseSnackbar}>
-        <Alert onClose={handleCloseSnackbar} severity="error" sx={{ width: "100%" }}>
-          {errorMessage}
-        </Alert>
-      </Snackbar>
     </AppLayout>
   );
 };

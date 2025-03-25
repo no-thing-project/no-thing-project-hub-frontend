@@ -1,15 +1,15 @@
-// src/pages/HomePage.jsx
 import React, { useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import AppLayout from "../components/Layout/AppLayout";
 import HomeSection from "../sections/HomeSection/HomeSection";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
-import ErrorMessage from "../components/Layout/ErrorMessage";
 import useAuth from "../hooks/useAuth";
 import useProfile from "../hooks/useProfile";
+import { useNotification } from "../context/NotificationContext";
 
 const HomePage = () => {
   const navigate = useNavigate();
+  const { showNotification } = useNotification();
   const { anonymous_id } = useParams();
   const { token, authData: currentUser, isAuthenticated, handleLogout, updateAuthData, loading: authLoading } = useAuth(navigate);
   
@@ -48,7 +48,6 @@ const HomePage = () => {
 
       const targetId = anonymous_id || initialAnonymousIdRef.current;
 
-      // Якщо anonymous_id є і він не дорівнює поточному користувачу, завантажуємо профіль
       if (anonymous_id && anonymous_id !== initialAnonymousIdRef.current) {
         try {
           console.log("Fetching profile for targetId:", targetId);
@@ -65,6 +64,8 @@ const HomePage = () => {
             console.error("Error loading profile in HomePage:", err);
             if (err.message === "Profile not found") {
               navigate("/not-found", { state: { message: `Profile with ID ${targetId} not found.` } });
+            } else {
+              showNotification(err.message || "Failed to load profile", "error");
             }
           }
         }
@@ -74,16 +75,15 @@ const HomePage = () => {
     loadProfile();
 
     return () => controller.abort();
-  }, [anonymous_id, currentUser, token, isAuthenticated, authLoading, navigate, fetchProfileData, handleLogout, clearProfileState]);
+  }, [anonymous_id, currentUser, token, isAuthenticated, authLoading, navigate, fetchProfileData, handleLogout, clearProfileState, showNotification]);
 
-  // Використовуємо currentUser, якщо це власний профіль і немає anonymous_id
   const isOwnProfile = !anonymous_id || anonymous_id === initialAnonymousIdRef.current;
   const profileData = isOwnProfile ? currentUser : fetchedProfileData;
 
   const isLoading = authLoading || (anonymous_id && anonymous_id !== initialAnonymousIdRef.current && profileLoading);
   if (isLoading) return <LoadingSpinner />;
-  if (profileError) return <ErrorMessage message={profileError} />;
-  if (!profileData) return <ErrorMessage message="Profile not found. Please try again or check the profile ID." />;
+  if (profileError) showNotification(profileError, "error");
+  if (!profileData) showNotification("Profile not found. Please try again or check the profile ID.", "error");
 
   console.log("Rendering HomePage with profileData:", profileData);
   return (
