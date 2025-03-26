@@ -1,11 +1,10 @@
 import React from "react";
 import { Box, Typography, IconButton } from "@mui/material";
-import { Edit, Delete, Favorite, FavoriteBorder, Public, Lock } from "@mui/icons-material";
+import { Edit, Delete, Public, Lock } from "@mui/icons-material";
 
 const ClassCard = ({
   classItem,
   localLikes,
-  handleLike,
   setEditingClass,
   setClassToDelete,
   setDeleteDialogOpen,
@@ -18,8 +17,6 @@ const ClassCard = ({
   } else if (totalLength > 40) {
     span = 2;
   }
-  const isLiked =
-    localLikes[classItem.class_id] !== undefined ? localLikes[classItem.class_id] : classItem.is_liked;
 
   return (
     <Box
@@ -53,15 +50,6 @@ const ClassCard = ({
           sx={{ p: 1, color: "text.primary" }}
         >
           <Edit />
-        </IconButton>
-        <IconButton
-          onClick={(e) => {
-            e.stopPropagation();
-            handleLike(classItem.class_id, isLiked);
-          }}
-          sx={{ p: 1, color: "text.primary" }}
-        >
-          {isLiked ? <Favorite color="text.primary" /> : <FavoriteBorder />}
         </IconButton>
         <IconButton
           onClick={(e) => {

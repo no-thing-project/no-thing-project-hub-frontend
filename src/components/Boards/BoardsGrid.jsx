@@ -77,14 +77,14 @@ const BoardsGrid = ({
             style={{ gridColumn: "1 / 2" }}
           >
             <Typography variant="h3" sx={{ fontWeight: 700, mb: 2 }}>
-              Monetize your content.
+              Boards
             </Typography>
             <Typography variant="h5" sx={{ color: "text.secondary", mb: 4 }}>
-              Wherever you create.
+              Where Thoughts Come Alive
             </Typography>
             <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
-              Create boards, share knowledge, and captivate your audience. Keep support at the
-              heart of your mission. Wishing you success on your journey from nothing.
+              Boards are discussion spaces for sharing and debating ideas. 
+              Tied to Classes, they’re where opinions flow, insights emerge, and conversations thrive.
             </Typography>
           </motion.div>
           {/* Картки дошок */}

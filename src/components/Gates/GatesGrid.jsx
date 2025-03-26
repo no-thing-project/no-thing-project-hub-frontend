@@ -76,14 +76,15 @@ const GatesGrid = ({
             style={{ gridColumn: "1 / 2" }}
           >
             <Typography variant="h3" sx={{ fontWeight: 700, mb: 2 }}>
-              Organize your classes.
+              Gates
             </Typography>
             <Typography variant="h5" sx={{ color: "text.secondary", mb: 4 }}>
-              Wherever you teach.
+              Your Space for Big Ideas
             </Typography>
             <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
-              Create gates, manage classes, and engage your students. Keep education at the
-              heart of your mission. Wishing you success in your teaching journey.
+              Gates are like forum topics, starting points for broad discussions. 
+              Create a Gate to spark a conversation or join one to explore shared interests. 
+              It’s where communities form and ideas take root.
             </Typography>
           </motion.div>
           {filteredGates.map((gate) => (

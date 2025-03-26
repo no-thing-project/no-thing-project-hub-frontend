@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Button } from "@mui/material";
+import { Box, Button, Snackbar, Alert } from "@mui/material";
 import { Add } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
@@ -8,7 +8,7 @@ import { useClasses } from "../hooks/useClasses";
 import useAuth from "../hooks/useAuth";
 import ProfileHeader from "../components/Headers/ProfileHeader";
 import { actionButtonStyles } from "../styles/BaseStyles";
-import ClassFormDialog from "../components/Dialogs/ClassFormDialog"; // Передбачається, що цей компонент існує
+import ClassFormDialog from "../components/Dialogs/ClassFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
 import ClassesFilters from "../components/Classes/ClassesFilters";
 import ClassesGrid from "../components/Classes/ClassesGrid";
@@ -25,11 +25,9 @@ const ClassesPage = () => {
     createNewClass,
     updateExistingClass,
     deleteExistingClass,
-    // Додаємо методи для лайків, якщо вони є в API
-    // likeClassById,
-    // unlikeClassById,
   } = useClasses(token, handleLogout, navigate);
 
+  const [isLoading, setIsLoading] = useState(true);
   const [editingClass, setEditingClass] = useState(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [popupClass, setPopupClass] = useState({
@@ -40,15 +38,32 @@ const ClassesPage = () => {
   const [success, setSuccess] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [classToDelete, setClassToDelete] = useState(null);
-
   const [quickFilter, setQuickFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [localLikes, setLocalLikes] = useState({});
 
+  const loadClassesData = useCallback(async () => {
+    if (!isAuthenticated || !token) {
+      showNotification("Authentication missing.", "error");
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await fetchClassesList();
+      console.log("Classes loaded successfully");
+    } catch (err) {
+      const errorMsg = err.response?.data?.errors?.[0] || err.message || "Failed to load classes";
+      showNotification(errorMsg, "error");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, token, fetchClassesList, showNotification]);
+
   useEffect(() => {
-    if (!isAuthenticated) return;
-    fetchClassesList();
-  }, [isAuthenticated, fetchClassesList]);
+    loadClassesData();
+  }, [loadClassesData]);
 
   const filteredClasses = classes.filter((classItem) => {
     const matchesSearch = classItem.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -107,11 +122,11 @@ const ClassesPage = () => {
       });
       setSuccess("Class updated successfully!");
       setEditingClass(null);
-      await fetchClassesList();
+      await loadClassesData();
     } catch (err) {
       showNotification(err.response?.data?.errors?.[0] || "Failed to update class", "error");
     }
-  }, [editingClass, updateExistingClass, fetchClassesList, showNotification]);
+  }, [editingClass, updateExistingClass, loadClassesData, showNotification]);
 
   const handleDeleteClass = useCallback(async () => {
     if (!classToDelete) return;
@@ -120,42 +135,19 @@ const ClassesPage = () => {
       setSuccess("Class deleted successfully!");
       setDeleteDialogOpen(false);
       setClassToDelete(null);
-      await fetchClassesList();
+      await loadClassesData();
     } catch (err) {
       showNotification(err.response?.data?.errors?.[0] || "Failed to delete class", "error");
       setDeleteDialogOpen(false);
       setClassToDelete(null);
     }
-  }, [classToDelete, deleteExistingClass, fetchClassesList, showNotification]);
-
-  const handleLike = useCallback(
-    async (class_id, isLiked) => {
-      const optimisticLiked = !isLiked;
-      setLocalLikes((prev) => ({ ...prev, [class_id]: optimisticLiked }));
-      try {
-        // Якщо у вас є методи likeClassById та unlikeClassById, розкоментуйте їх
-        // if (isLiked) {
-        //   await unlikeClassById(class_id);
-        // } else {
-        //   await likeClassById(class_id);
-        // }
-        setSuccess(`Class ${isLiked ? "unliked" : "liked"} successfully!`);
-        await fetchClassesList();
-        setLocalLikes({});
-      } catch (err) {
-        setLocalLikes((prev) => ({ ...prev, [class_id]: isLiked }));
-        showNotification(`Failed to ${isLiked ? "unlike" : "like"} class`, "error");
-      }
-    },
-    [fetchClassesList, showNotification] // Додайте likeClassById, unlikeClassById, якщо вони будуть
-  );
+  }, [classToDelete, deleteExistingClass, loadClassesData, showNotification]);
 
   const handleCloseSnackbar = () => {
     setSuccess("");
   };
 
-  const isLoading = authLoading || classesLoading;
-  if (isLoading) return <LoadingSpinner />;
+  if (isLoading || authLoading || classesLoading) return <LoadingSpinner />;
   if (!isAuthenticated) {
     navigate("/login");
     return null;
@@ -181,7 +173,6 @@ const ClassesPage = () => {
       <ClassesGrid
         filteredClasses={filteredClasses}
         localLikes={localLikes}
-        handleLike={handleLike}
         setEditingClass={setEditingClass}
         setClassToDelete={setClassToDelete}
         setDeleteDialogOpen={setDeleteDialogOpen}
@@ -213,6 +204,17 @@ const ClassesPage = () => {
         onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDeleteClass}
       />
+
+      <Snackbar
+        open={!!success}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
+          {success}
+        </Alert>
+      </Snackbar>
     </AppLayout>
   );
 };

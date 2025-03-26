@@ -29,6 +29,7 @@ const GatesPage = () => {
     unlikeGateById,
   } = useGates(token, handleLogout, navigate);
 
+  const [isLoading, setIsLoading] = useState(true);
   const [editingGate, setEditingGate] = useState(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [popupGate, setPopupGate] = useState({
@@ -39,15 +40,32 @@ const GatesPage = () => {
   const [success, setSuccess] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [gateToDelete, setGateToDelete] = useState(null);
-
   const [quickFilter, setQuickFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [localLikes, setLocalLikes] = useState({});
 
+  const loadGatesData = useCallback(async () => {
+    if (!isAuthenticated || !token) {
+      showNotification("Authentication missing.", "error");
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await fetchGatesList();
+      console.log("Gates loaded successfully");
+    } catch (err) {
+      const errorMsg = err.response?.data?.errors?.[0] || err.message || "Failed to load gates";
+      showNotification(errorMsg, "error");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, token, fetchGatesList, showNotification]);
+
   useEffect(() => {
-    if (!isAuthenticated) return;
-    fetchGatesList();
-  }, [isAuthenticated, fetchGatesList]);
+    loadGatesData();
+  }, [loadGatesData]);
 
   const filteredGates = gates.filter((gate) => {
     const matchesSearch = gate.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -106,11 +124,11 @@ const GatesPage = () => {
       });
       setSuccess("Gate updated successfully!");
       setEditingGate(null);
-      await fetchGatesList();
+      await loadGatesData();
     } catch (err) {
       showNotification(err.response?.data?.errors?.[0] || "Failed to update gate", "error");
     }
-  }, [editingGate, updateExistingGate, fetchGatesList, showNotification]);
+  }, [editingGate, updateExistingGate, loadGatesData, showNotification]);
 
   const handleDeleteGate = useCallback(async () => {
     if (!gateToDelete) return;
@@ -119,13 +137,13 @@ const GatesPage = () => {
       setSuccess("Gate deleted successfully!");
       setDeleteDialogOpen(false);
       setGateToDelete(null);
-      await fetchGatesList();
+      await loadGatesData();
     } catch (err) {
       showNotification(err.response?.data?.errors?.[0] || "Failed to delete gate", "error");
       setDeleteDialogOpen(false);
       setGateToDelete(null);
     }
-  }, [gateToDelete, deleteExistingGate, fetchGatesList, showNotification]);
+  }, [gateToDelete, deleteExistingGate, loadGatesData, showNotification]);
 
   const handleLike = useCallback(
     async (gate_id, isLiked) => {
@@ -138,22 +156,21 @@ const GatesPage = () => {
           await likeGateById(gate_id);
         }
         setSuccess(`Gate ${isLiked ? "unliked" : "liked"} successfully!`);
-        await fetchGatesList();
+        await loadGatesData();
         setLocalLikes({});
       } catch (err) {
         setLocalLikes((prev) => ({ ...prev, [gate_id]: isLiked }));
         showNotification(`Failed to ${isLiked ? "unlike" : "like"} gate`, "error");
       }
     },
-    [likeGateById, unlikeGateById, fetchGatesList, showNotification]
+    [likeGateById, unlikeGateById, loadGatesData, showNotification]
   );
 
   const handleCloseSnackbar = () => {
     setSuccess("");
   };
 
-  const isLoading = authLoading || gatesLoading;
-  if (isLoading) return <LoadingSpinner />;
+  if (isLoading || authLoading || gatesLoading) return <LoadingSpinner />;
   if (!isAuthenticated) {
     navigate("/login");
     return null;

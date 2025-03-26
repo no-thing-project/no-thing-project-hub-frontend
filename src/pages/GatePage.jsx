@@ -34,6 +34,7 @@ const GatePage = () => {
     unlikeGateById,
     addMemberToGate,
     removeMemberFromGate,
+    loading: gatesLoading,
   } = useGates(token, handleLogout, navigate);
 
   const {
@@ -42,9 +43,10 @@ const GatePage = () => {
     createNewClassInGate,
     updateExistingClass,
     deleteExistingClass,
+    loading: classesLoading,
   } = useClasses(token, handleLogout, navigate);
 
-  const [isLoading, setIsLoading] = useState(true); // Локальний стан завантаження
+  const [isLoading, setIsLoading] = useState(true);
   const [editingGate, setEditingGate] = useState(null);
   const [createClassDialogOpen, setCreateClassDialogOpen] = useState(false);
   const [popupClass, setPopupClass] = useState({
@@ -86,7 +88,7 @@ const GatePage = () => {
         showNotification(err.message || "Failed to load gate data.", "error");
       }
     } finally {
-      setIsLoading(false); // Завжди скидаємо loading
+      setIsLoading(false);
     }
 
     return () => controller.abort();
@@ -134,33 +136,31 @@ const GatePage = () => {
       setSuccess("Class created successfully!");
       setCreateClassDialogOpen(false);
       setPopupClass({ name: "", description: "", visibility: "Public" });
+      navigate(`/class/${newClass.class_id}`); // Перенаправлення на сторінку нового класу
+    } catch (err) {
+      const errorMsg = err.response?.data?.errors?.[0] || err.message || "Failed to create class";
+      showNotification(errorMsg, "error");
+    }
+  }, [gate_id, popupClass, createNewClassInGate, navigate, showNotification]);
+
+  const handleUpdateGate = useCallback(async () => {
+    if (!editingGate?.name.trim()) {
+      showNotification("Gate name is required!", "error");
+      return;
+    }
+    try {
+      await updateExistingGate(editingGate.gate_id, {
+        name: editingGate.name,
+        description: editingGate.description,
+        is_public: editingGate.visibility === "Public",
+      });
+      setSuccess("Gate updated successfully!");
+      setEditingGate(null);
       await loadGateData();
     } catch (err) {
-      showNotification("Failed to create class.", "error");
+      showNotification(err.response?.data?.errors?.[0] || "Failed to update gate", "error");
     }
-  }, [gate_id, popupClass, createNewClassInGate, loadGateData, showNotification]);
-
-  const handleUpdateGate = useCallback(
-    async () => {
-      if (!editingGate?.name.trim()) {
-        showNotification("Gate name is required!", "error");
-        return;
-      }
-      try {
-        const updatedGate = await updateExistingGate(gate_id, {
-          name: editingGate.name,
-          description: editingGate.description,
-          is_public: editingGate.visibility === "Public",
-        });
-        setSuccess("Gate updated successfully!");
-        setEditingGate(null);
-        await loadGateData();
-      } catch (err) {
-        showNotification("Failed to update gate.", "error");
-      }
-    },
-    [gate_id, editingGate, updateExistingGate, loadGateData, showNotification]
-  );
+  }, [editingGate, updateExistingGate, loadGateData, showNotification]);
 
   const handleDeleteGate = useCallback(async () => {
     try {
@@ -168,7 +168,7 @@ const GatePage = () => {
       setSuccess("Gate deleted successfully!");
       navigate("/gates");
     } catch (err) {
-      showNotification("Failed to delete gate.", "error");
+      showNotification(err.response?.data?.errors?.[0] || "Failed to delete gate", "error");
     }
   }, [deleteExistingGate, gate_id, navigate, showNotification]);
 
@@ -176,7 +176,11 @@ const GatePage = () => {
     async (isLiked) => {
       const optimisticLiked = !isLiked;
       try {
-        const updatedGate = isLiked ? await unlikeGateById(gate_id) : await likeGateById(gate_id);
+        if (isLiked) {
+          await unlikeGateById(gate_id);
+        } else {
+          await likeGateById(gate_id);
+        }
         setSuccess(`Gate ${isLiked ? "unliked" : "liked"} successfully!`);
         await loadGateData();
       } catch (err) {
@@ -191,12 +195,12 @@ const GatePage = () => {
       try {
         await updateGateStatusById(gate_id, statusData);
         setSuccess("Gate status updated successfully!");
-        await fetchGate(gate_id);
+        await loadGateData();
       } catch (err) {
         showNotification("Failed to update gate status.", "error");
       }
     },
-    [gate_id, updateGateStatusById, fetchGate, showNotification]
+    [gate_id, updateGateStatusById, loadGateData, showNotification]
   );
 
   const handleAddMember = useCallback(
@@ -204,12 +208,12 @@ const GatePage = () => {
       try {
         await addMemberToGate(gate_id, memberData);
         setSuccess("Member added successfully!");
-        await fetchGateMembersList(gate_id);
+        await loadGateData();
       } catch (err) {
         showNotification("Failed to add member.", "error");
       }
     },
-    [gate_id, addMemberToGate, fetchGateMembersList, showNotification]
+    [gate_id, addMemberToGate, loadGateData, showNotification]
   );
 
   const handleRemoveMember = useCallback(
@@ -217,12 +221,12 @@ const GatePage = () => {
       try {
         await removeMemberFromGate(gate_id, memberId);
         setSuccess("Member removed successfully!");
-        await fetchGateMembersList(gate_id);
+        await loadGateData();
       } catch (err) {
         showNotification("Failed to remove member.", "error");
       }
     },
-    [gate_id, removeMemberFromGate, fetchGateMembersList, showNotification]
+    [gate_id, removeMemberFromGate, loadGateData, showNotification]
   );
 
   const handleUpdateClass = useCallback(async () => {
@@ -264,6 +268,12 @@ const GatePage = () => {
       const optimisticLiked = !isLiked;
       setLocalLikes((prev) => ({ ...prev, [class_id]: optimisticLiked }));
       try {
+        // Якщо у вас є методи likeClassById та unlikeClassById, додайте їх до useClasses і розкоментуйте
+        // if (isLiked) {
+        //   await unlikeClassById(class_id);
+        // } else {
+        //   await likeClassById(class_id);
+        // }
         setSuccess(`Class ${isLiked ? "unliked" : "liked"} successfully!`);
         await loadGateData();
         setLocalLikes({});
@@ -279,7 +289,7 @@ const GatePage = () => {
     setSuccess("");
   };
 
-  if (isLoading) return <LoadingSpinner />;
+  if (isLoading || authLoading || gatesLoading || classesLoading) return <LoadingSpinner />;
   if (!isAuthenticated) {
     navigate("/login");
     return null;
@@ -290,7 +300,7 @@ const GatePage = () => {
   }
 
   return (
-    <AppLayout currentUser={authData} onLogout={handleLogout} token={token} headerTitle={gateData?.name || "Gate"}>
+    <AppLayout currentUser={authData} onLogout={handleLogout} token={token} headerTitle={gateData.name || "Gate"}>
       <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
         <ProfileHeader user={authData} isOwnProfile={true}>
           <Button variant="contained" onClick={handleOpenCreateClass} startIcon={<Add />} sx={actionButtonStyles}>

@@ -16,7 +16,6 @@ const leftColumnVariants = {
 const ClassesGrid = ({
   filteredClasses,
   localLikes,
-  handleLike,
   setEditingClass,
   setClassToDelete,
   setDeleteDialogOpen,
@@ -76,14 +75,14 @@ const ClassesGrid = ({
             style={{ gridColumn: "1 / 2" }}
           >
             <Typography variant="h3" sx={{ fontWeight: 700, mb: 2 }}>
-              Teach your way.
+                Classes
             </Typography>
             <Typography variant="h5" sx={{ color: "text.secondary", mb: 4 }}>
-              Wherever you are.
+                Focus Within Your Topics
             </Typography>
             <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
-              Create classes, share knowledge, and inspire your students. Keep learning at the
-              heart of your mission. Wishing you success in your educational journey.
+                Classes are subtopics under Gates, breaking ideas into manageable parts. 
+                Use them to dive deeper, organize thoughts, and collaborate on specific aspects of a larger theme.
             </Typography>
           </motion.div>
           {filteredClasses.map((classItem) => (
@@ -91,7 +90,6 @@ const ClassesGrid = ({
               key={classItem.class_id}
               classItem={classItem}
               localLikes={localLikes}
-              handleLike={handleLike}
               setEditingClass={setEditingClass}
               setClassToDelete={setClassToDelete}
               setDeleteDialogOpen={setDeleteDialogOpen}
