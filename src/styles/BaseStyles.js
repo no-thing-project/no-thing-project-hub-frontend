@@ -1,4 +1,3 @@
-import { Opacity } from "@mui/icons-material";
 import theme from "../Theme";
 
 export const actionButtonStyles = {
