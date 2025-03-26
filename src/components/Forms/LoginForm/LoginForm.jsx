@@ -1,4 +1,3 @@
-// src/components/Login/LoginForm.js
 import React, { useState, useEffect } from "react";
 import {
   Container,
@@ -20,7 +19,7 @@ import { Visibility, VisibilityOff } from "@mui/icons-material";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import config from "../../../config";
-import { inputStyles } from "../../../styles/BaseStyles";
+import { inputStyles, actionButtonStyles } from "../../../styles/BaseStyles";
 
 const LoginForm = ({ theme, onLogin }) => {
   const [email, setEmail] = useState("");
@@ -37,7 +36,8 @@ const LoginForm = ({ theme, onLogin }) => {
 
   const validateInputs = () => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
 
     if (!email) return "Email is required";
     if (!emailRegex.test(email)) return "Please enter a valid email address";
@@ -52,7 +52,8 @@ const LoginForm = ({ theme, onLogin }) => {
   const validateForgotEmail = () => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!forgotEmail) return "Email is required";
-    if (!emailRegex.test(forgotEmail)) return "Please enter a valid email address";
+    if (!emailRegex.test(forgotEmail))
+      return "Please enter a valid email address";
     if (forgotEmail.length > 255) return "Email cannot exceed 255 characters";
     return null;
   };
@@ -71,10 +72,13 @@ const LoginForm = ({ theme, onLogin }) => {
     }
 
     try {
-      const res = await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/auth/login`, {
-        email,
-        password,
-      });
+      const res = await axios.post(
+        `${config.REACT_APP_HUB_API_URL}/api/v1/auth/login`,
+        {
+          email,
+          password,
+        }
+      );
       const { token, profile } = res.data;
       if (!token || !profile) {
         throw new Error("Invalid login response: Missing token or profile");
@@ -106,9 +110,10 @@ const LoginForm = ({ theme, onLogin }) => {
     }
 
     try {
-      await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/auth/forgot-password`, {
-        email: forgotEmail,
-      });
+      await axios.post(
+        `${config.REACT_APP_HUB_API_URL}/api/v1/auth/forgot-password`,
+        { email: forgotEmail }
+      );
       setSuccess("An email with a password reset link has been sent!");
       setTimeout(() => handleCloseModal(), 2000);
     } catch (err) {
@@ -143,7 +148,7 @@ const LoginForm = ({ theme, onLogin }) => {
   return (
     <ThemeProvider theme={theme}>
       <Container
-        maxWidth="xs"
+        maxWidth="sm"
         sx={{
           display: "flex",
           flexDirection: "column",
@@ -160,7 +165,7 @@ const LoginForm = ({ theme, onLogin }) => {
               borderRadius: theme.shape.borderRadiusMedium,
               backgroundColor: "background.paper",
               boxShadow: "0 8px 24px rgba(0, 0, 0, 0.1)",
-              width: theme.custom.loginPaperWidth,
+              width: "100%",
               maxWidth: theme.custom.loginPaperMaxWidth,
               textAlign: "center",
             }}
@@ -183,8 +188,8 @@ const LoginForm = ({ theme, onLogin }) => {
             <Box
               component="form"
               onSubmit={handleSubmit}
-              sx={{ mt: theme.spacing(2), textAlign: "left" }}
               noValidate
+              sx={{ mt: theme.spacing(2), textAlign: "left" }}
               aria-label="Login form"
             >
               <TextField
@@ -220,7 +225,7 @@ const LoginForm = ({ theme, onLogin }) => {
                         }
                         sx={{ color: "text.primary" }}
                       >
-                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                        {showPassword ? <Visibility /> : <VisibilityOff />}
                       </IconButton>
                     </InputAdornment>
                   ),
@@ -234,73 +239,64 @@ const LoginForm = ({ theme, onLogin }) => {
                 }
               />
 
-              <Button
-                type="submit"
-                variant="contained"
-                fullWidth
-                disabled={isSubmitting}
+              <Box
                 sx={{
+                  display: "flex",
+                  flexDirection: "column",
                   mt: theme.spacing(3),
-                  minHeight: theme.custom.loginButtonHeight,
-                  borderRadius: theme.shape.borderRadiusSmall,
-                  backgroundColor: "background.button",
-                  color: "background.default",
-                  textTransform: "none",
-                  fontSize: theme.custom.loginButtonFontSize,
-                  boxShadow: "0 4px 12px rgba(33, 37, 41, 0.2)",
-                  transition: "all 0.3s ease-in-out",
-                  "&:hover": {
-                    backgroundColor: "background.button",
-                    opacity: 0.9,
-                    boxShadow: "0 6px 16px rgba(33, 37, 41, 0.3)",
-                  },
-                  "&:disabled": {
-                    opacity: 0.6,
-                    cursor: "not-allowed",
-                  },
+                  gap: theme.spacing(3),
+                  alignItems: "center",
                 }}
-                aria-label="Sign in"
               >
-                {isSubmitting ? "Signing In..." : "Sign In"}
-              </Button>
-            </Box>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  fullWidth
+                  disabled={isSubmitting}
+                  sx={actionButtonStyles}
+                  aria-label="Sign in"
+                >
+                  {isSubmitting ? "Signing In..." : "Sign In"}
+                </Button>
+              </Box>
 
-            <Box sx={{ mt: theme.spacing(2), textAlign: "center" }}>
-              <Button
-                variant="text"
-                sx={{
-                  color: "text.primary",
-                  textTransform: "none",
-                  fontSize: "16px",
-                  "&:hover": {
-                    textDecoration: "underline",
-                  },
-                }}
-                onClick={handleOpenModal}
-                aria-label="Forgot password"
-              >
-                Forgot password?
-              </Button>
-            </Box>
-
-            <Box sx={{ mt: theme.spacing(2), textAlign: "center" }}>
-              <Typography variant="body1" sx={{ color: "text.secondary" }}>
-                Don’t have an account?{" "}
-                <Link
-                  href={registrationLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              <Box sx={{ mt: theme.spacing(2), textAlign: "center" }}>
+                <Button
+                  variant="text"
                   sx={{
                     color: "text.primary",
-                    textDecoration: "none",
-                    fontWeight: 500,
+                    textTransform: "none",
+                    fontSize: "16px",
+                    padding: "8px 20px",
+                    borderRadius: "20px",
                     "&:hover": { textDecoration: "underline" },
                   }}
-                  aria-label="Sign up"
+                  onClick={handleOpenModal}
+                  aria-label="Forgot password"
                 >
-                  Sign Up
-                </Link>
-              </Typography>
+                  Forgot password?
+                </Button>
+              </Box>
+
+              <Box sx={{ mt: theme.spacing(2), textAlign: "center" }}>
+                <Typography variant="body1" sx={{ color: "text.secondary" }}>
+                  Don’t have an account?{" "}
+                  <Link
+                    href={registrationLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    sx={{
+                      color: "text.primary",
+                      textDecoration: "none",
+                      fontWeight: 500,
+                      "&:hover": { textDecoration: "underline" },
+                    }}
+                    aria-label="Sign up"
+                  >
+                    Sign Up
+                  </Link>
+                </Typography>
+              </Box>
             </Box>
           </Paper>
         </Fade>
@@ -320,8 +316,8 @@ const LoginForm = ({ theme, onLogin }) => {
               sx={{
                 backgroundColor: "background.paper",
                 borderRadius: theme.shape.borderRadiusMedium,
-                boxShadow: 24,
-                p: theme.spacing(4),
+                boxShadow: "0 8px 24px rgba(0, 0, 0, 0.1)",
+                p: theme.spacing(5),
                 width: "100%",
                 maxWidth: theme.custom.loginPaperMaxWidth,
               }}
@@ -351,22 +347,7 @@ const LoginForm = ({ theme, onLogin }) => {
                 variant="contained"
                 fullWidth
                 onClick={handleForgotPassword}
-                sx={{
-                  mt: theme.spacing(2),
-                  backgroundColor: "background.button",
-                  color: "background.default",
-                  borderRadius: theme.shape.borderRadiusSmall,
-                  textTransform: "none",
-                  fontSize: theme.custom.loginButtonFontSize,
-                  minHeight: theme.custom.loginButtonHeight,
-                  boxShadow: "0 4px 12px rgba(33, 37, 41, 0.2)",
-                  transition: "all 0.3s ease-in-out",
-                  "&:hover": {
-                    backgroundColor: "background.button",
-                    opacity: 0.9,
-                    boxShadow: "0 6px 16px rgba(33, 37, 41, 0.3)",
-                  },
-                }}
+                sx={actionButtonStyles}
                 aria-label="Send password recovery email"
               >
                 Send Email

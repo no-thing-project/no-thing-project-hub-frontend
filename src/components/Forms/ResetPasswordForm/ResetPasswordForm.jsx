@@ -1,4 +1,3 @@
-// src/components/Forms/ResetPasswordForm/ResetPasswordForm.js
 import React, { useState, useEffect } from "react";
 import {
   Container,
@@ -17,6 +16,7 @@ import { Visibility, VisibilityOff } from "@mui/icons-material";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import config from "../../../config";
+import { inputStyles, actionButtonStyles } from "../../../styles/BaseStyles";
 
 const ResetPasswordForm = ({ theme, onLogin }) => {
   const [newPassword, setNewPassword] = useState("");
@@ -32,29 +32,38 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
   useEffect(() => {
     try {
       const searchParams = new URLSearchParams(window.location.search);
-      const hashParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
-      const tokenFromUrl = searchParams.get("token") || hashParams.get("token");
+      const hashParams = new URLSearchParams(
+        window.location.hash.split("?")[1] || ""
+      );
+      const tokenFromUrl =
+        searchParams.get("token") || hashParams.get("token");
 
       if (tokenFromUrl) {
         setToken(tokenFromUrl);
         console.log("Token extracted from URL:", tokenFromUrl);
       } else {
-        setError("No reset token found in the URL. Please check the link or request a new one.");
+        setError(
+          "No reset token found in the URL. Please check the link or request a new one."
+        );
         console.error("No token found in URL");
       }
     } catch (err) {
-      setError("Invalid URL format. Please check the link or request a new one.");
+      setError(
+        "Invalid URL format. Please check the link or request a new one."
+      );
       console.error("Error parsing URL:", err);
     }
   }, []);
 
   const validateInputs = () => {
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
 
     if (!newPassword) return "New password is required";
     if (!passwordRegex.test(newPassword))
       return "Password must contain at least 8 characters, uppercase, lowercase, and a number";
-    if (newPassword.length > 128) return "Password cannot exceed 128 characters";
+    if (newPassword.length > 128)
+      return "Password cannot exceed 128 characters";
     if (newPassword !== confirmPassword) return "Passwords do not match";
     if (!token) return "Reset token is missing";
     return null;
@@ -74,23 +83,34 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
     }
 
     try {
-      console.log("Sending reset password request with:", { token, newPassword });
-      const response = await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/auth/set-password`, {
+      console.log("Sending reset password request with:", {
         token,
         newPassword,
       });
+      const response = await axios.post(
+        `${config.REACT_APP_HUB_API_URL}/api/v1/auth/set-password`,
+        {
+          token,
+          newPassword,
+        }
+      );
       console.log("Response from server:", response.data);
 
-      const { token: jwtToken, profile } = response.data; // Adjusted to expect refreshToken
+      const { token: jwtToken, profile } = response.data;
       if (!jwtToken || !profile) {
-        throw new Error("Invalid reset password response: Missing token, refresh token, or profile");
+        throw new Error(
+          "Invalid reset password response: Missing token or profile"
+        );
       }
 
-      onLogin(jwtToken, profile); // Pass refreshToken to onLogin
+      onLogin(jwtToken, profile);
       localStorage.setItem("token", jwtToken);
       setSuccess("Password successfully changed! Logging you in...");
     } catch (err) {
-      console.error("Error during reset password:", err.response?.data || err);
+      console.error(
+        "Error during reset password:",
+        err.response?.data || err
+      );
       const errorMessage =
         err.response?.status === 400
           ? "Invalid or expired reset token. Please request a new one."
@@ -108,7 +128,6 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
     setSuccess("");
   };
 
-  // Redirect after successful password reset
   useEffect(() => {
     if (success) {
       const timer = setTimeout(() => navigate("/home"), 3000);
@@ -128,27 +147,36 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
         }}
       >
         <Paper
-          elevation={3}
+          elevation={6}
           sx={{
-            p: 4,
-            borderRadius: 3,
-            width: "100%",
-            maxWidth: theme.custom.loginPaperMaxWidth,
+            p: theme.spacing(5),
+            borderRadius: theme.shape.borderRadiusMedium,
             backgroundColor: "background.paper",
             boxShadow: "0 8px 24px rgba(0, 0, 0, 0.1)",
+            width: "100%",
+            maxWidth: theme.custom.loginPaperMaxWidth,
+            textAlign: "center",
           }}
         >
-          <Typography
-            variant="h5"
-            sx={{ textAlign: "center", mb: 3, color: "text.primary", fontWeight: 600 }}
-          >
-            Create Password
-          </Typography>
+          <Box sx={{ textAlign: "center", mb: theme.spacing(3) }}>
+            <Typography
+              variant="h4"
+              sx={{ color: "text.primary", fontWeight: 600 }}
+            >
+              Create Password
+            </Typography>
+            <Typography
+              variant="body1"
+              sx={{ color: "text.secondary", mt: theme.spacing(1) }}
+            >
+              Start your journey from here
+            </Typography>
+          </Box>
           <Box
             component="form"
             onSubmit={handleSubmit}
             noValidate
-            sx={{ textAlign: "left" }}
+            sx={{ mt: theme.spacing(2), textAlign: "left" }}
             aria-label="Reset password form"
           >
             <TextField
@@ -164,38 +192,26 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
                     <IconButton
                       onClick={() => setShowNewPassword(!showNewPassword)}
                       edge="end"
-                      aria-label={showNewPassword ? "Hide new password" : "Show new password"}
+                      aria-label={
+                        showNewPassword
+                          ? "Hide new password"
+                          : "Show new password"
+                      }
+                      sx={{ color: "text.primary" }}
                     >
-                      {showNewPassword ? <VisibilityOff /> : <Visibility />}
+                      {showNewPassword ? <Visibility /> : <VisibilityOff />}
                     </IconButton>
                   </InputAdornment>
                 ),
               }}
               required
               error={!!error && error.includes("password")}
-              helperText={error && error.includes("password") ? error : ""}
-              aria-describedby={error && error.includes("password") ? "new-password-error" : undefined}
-              sx={{
-                "& .MuiFormLabel-root.MuiInputLabel-shrink": {
-                  backgroundColor: "background.paper",
-                  padding: "0 5px",
-                },
-                "& .MuiInputLabel-root": {
-                  color: "text.secondary",
-                },
-                "& .MuiInputLabel-root.Mui-focused": {
-                  color: "text.primary",
-                },
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: theme.shape.borderRadiusSmall,
-                  "&:hover fieldset": {
-                    borderColor: "background.button",
-                  },
-                  "&.Mui-focused fieldset": {
-                    borderColor: "background.button",
-                  },
-                },
-              }}
+              aria-describedby={
+                error && error.includes("password")
+                  ? "new-password-error"
+                  : undefined
+              }
+              sx={inputStyles}
             />
             <TextField
               label="Confirm Password"
@@ -208,81 +224,67 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
                 endAdornment: (
                   <InputAdornment position="end">
                     <IconButton
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
                       edge="end"
-                      aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                      aria-label={
+                        showConfirmPassword
+                          ? "Hide confirm password"
+                          : "Show confirm password"
+                      }
+                      sx={{ color: "text.primary" }}
                     >
-                      {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                      {showConfirmPassword ? <Visibility /> : <VisibilityOff />}
                     </IconButton>
                   </InputAdornment>
                 ),
               }}
               required
               error={!!error && error.includes("Passwords do not match")}
-              helperText={error && error.includes("Passwords do not match") ? error : ""}
-              aria-describedby={error && error.includes("Passwords do not match") ? "confirm-password-error" : undefined}
-              sx={{
-                "& .MuiFormLabel-root.MuiInputLabel-shrink": {
-                  backgroundColor: "background.paper",
-                  padding: "0 5px",
-                },
-                "& .MuiInputLabel-root": {
-                  color: "text.secondary",
-                },
-                "& .MuiInputLabel-root.Mui-focused": {
-                  color: "text.primary",
-                },
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: theme.shape.borderRadiusSmall,
-                  "&:hover fieldset": {
-                    borderColor: "background.button",
-                  },
-                  "&.Mui-focused fieldset": {
-                    borderColor: "background.button",
-                  },
-                },
-              }}
+              aria-describedby={
+                error && error.includes("Passwords do not match")
+                  ? "confirm-password-error"
+                  : undefined
+              }
+              sx={inputStyles}
             />
-            <Button
-              type="submit"
-              variant="contained"
-              fullWidth
-              disabled={isSubmitting}
+
+            <Box
               sx={{
-                mt: 2,
-                py: 1.5,
-                borderRadius: "8px",
-                textTransform: "none",
-                backgroundColor: "background.button",
-                color: "background.default",
-                boxShadow: "0 4px 12px rgba(33, 37, 41, 0.2)",
-                transition: "all 0.3s ease-in-out",
-                "&:hover": {
-                  transition: "all 0.3s ease-in-out",
-                  backgroundColor: "background.button",
-                  opacity: 0.9,
-                  boxShadow: "0 6px 16px rgba(33, 37, 41, 0.3)",
-                },
-                "&:disabled": {
-                  opacity: 0.6,
-                  cursor: "not-allowed",
-                },
+                display: "flex",
+                flexDirection: "column",
+                mt: theme.spacing(3),
+                gap: theme.spacing(3),
+                alignItems: "center",
               }}
-              aria-label="Change password"
             >
-              {isSubmitting ? "Changing Password..." : "Change Password"}
-            </Button>
-          </Box>
-          <Box sx={{ mt: 2, textAlign: "center" }}>
-            <Button
-              variant="text"
-              color="primary"
-              onClick={handleBackToLogin}
-              sx={{ textTransform: "none", fontSize: "14px" }}
-              aria-label="Back to login"
-            >
-              Back to Login
-            </Button>
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={isSubmitting}
+                fullWidth
+                sx={actionButtonStyles}
+                aria-label="Change password"
+              >
+                {isSubmitting ? "Changing Password..." : "Change Password"}
+              </Button>
+              <Button
+                variant="text"
+                onClick={handleBackToLogin}
+                sx={{
+                  color: "text.primary",
+                  textTransform: "none",
+                  fontSize: "16px",
+                  padding: "8px 20px",
+                  borderRadius: "20px",
+                  "&:hover": { textDecoration: "underline" },
+                }}
+                aria-label="Back to login"
+              >
+                Back to Login
+              </Button>
+            </Box>
           </Box>
         </Paper>
       </Container>

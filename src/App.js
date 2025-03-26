@@ -29,20 +29,15 @@ const PrivateRoute = ({ element, isAuthenticated }) => {
 
 const AppContent = () => {
   const navigate = useNavigate();
-  const { token, authData, isAuthenticated, handleLogin, handleLogout, loading, error, clearError } = useAuth(navigate);
+  const { isAuthenticated, handleLogin, handleLogout, loading, error } = useAuth(navigate);
   const { showNotification } = useNotification();
 
   useEffect(() => {
-    if (!isAuthenticated && window.location.pathname !== '/login' && !loading) {
+    if (!isAuthenticated && window.location.pathname !== '/login' && window.location.pathname !== '/reset-password' && !loading) {
       showNotification('Please log in to continue.', 'error');
       navigate('/login', { replace: true });
     }
   }, [isAuthenticated, loading, navigate, showNotification]);
-
-  const handleRetry = useCallback(() => {
-    clearError();
-    handleLogin(token, authData?.refreshToken, authData); // Retry authentication
-  }, [clearError, handleLogin, token, authData]);
 
   useEffect(() => {
     if (error) {
