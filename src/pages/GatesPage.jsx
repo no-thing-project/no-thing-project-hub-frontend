@@ -1,7 +1,6 @@
-// src/pages/GatesPage.jsx
 import React, { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Button, Snackbar, Alert } from "@mui/material";
+import { Box, Button } from "@mui/material";
 import { Add } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
@@ -13,9 +12,11 @@ import GateFormDialog from "../components/Dialogs/GateFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
 import GatesFilters from "../components/Gates/GatesFilters";
 import GatesGrid from "../components/Gates/GatesGrid";
+import { useNotification } from "../context/NotificationContext";
 
 const GatesPage = () => {
   const navigate = useNavigate();
+  const { showNotification } = useNotification();
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
   const {
     gates,
@@ -36,7 +37,6 @@ const GatesPage = () => {
     visibility: "Public",
   });
   const [success, setSuccess] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [gateToDelete, setGateToDelete] = useState(null);
 
@@ -65,18 +65,16 @@ const GatesPage = () => {
 
   const handleOpenCreateGate = () => {
     setPopupGate({ name: "", description: "", visibility: "Public" });
-    setErrorMessage("");
     setCreateDialogOpen(true);
   };
 
   const handleCancelCreateGate = () => {
     setCreateDialogOpen(false);
-    setErrorMessage("");
   };
 
   const handleCreateGate = useCallback(async () => {
     if (!popupGate.name.trim()) {
-      setErrorMessage("Gate name is required!");
+      showNotification("Gate name is required!", "error");
       return;
     }
     try {
@@ -90,15 +88,14 @@ const GatesPage = () => {
       setPopupGate({ name: "", description: "", visibility: "Public" });
       navigate(`/gate/${createdGate.gate_id}`);
     } catch (err) {
-      // Витягуємо точне повідомлення з помилки
       const errorMsg = err.response?.data?.errors?.[0] || err.message || "Failed to create gate";
-      setErrorMessage(errorMsg);
+      showNotification(errorMsg, "error");
     }
-  }, [popupGate, createNewGate, navigate]);
+  }, [popupGate, createNewGate, navigate, showNotification]);
 
   const handleUpdateGate = useCallback(async () => {
     if (!editingGate?.name.trim()) {
-      setErrorMessage("Gate name is required!");
+      showNotification("Gate name is required!", "error");
       return;
     }
     try {
@@ -111,9 +108,9 @@ const GatesPage = () => {
       setEditingGate(null);
       await fetchGatesList();
     } catch (err) {
-      setErrorMessage(err.response?.data?.errors?.[0] || "Failed to update gate");
+      showNotification(err.response?.data?.errors?.[0] || "Failed to update gate", "error");
     }
-  }, [editingGate, updateExistingGate, fetchGatesList]);
+  }, [editingGate, updateExistingGate, fetchGatesList, showNotification]);
 
   const handleDeleteGate = useCallback(async () => {
     if (!gateToDelete) return;
@@ -124,11 +121,11 @@ const GatesPage = () => {
       setGateToDelete(null);
       await fetchGatesList();
     } catch (err) {
-      setErrorMessage(err.response?.data?.errors?.[0] || "Failed to delete gate");
+      showNotification(err.response?.data?.errors?.[0] || "Failed to delete gate", "error");
       setDeleteDialogOpen(false);
       setGateToDelete(null);
     }
-  }, [gateToDelete, deleteExistingGate, fetchGatesList]);
+  }, [gateToDelete, deleteExistingGate, fetchGatesList, showNotification]);
 
   const handleLike = useCallback(
     async (gate_id, isLiked) => {
@@ -145,15 +142,14 @@ const GatesPage = () => {
         setLocalLikes({});
       } catch (err) {
         setLocalLikes((prev) => ({ ...prev, [gate_id]: isLiked }));
-        setErrorMessage(`Failed to ${isLiked ? "unlike" : "like"} gate`);
+        showNotification(`Failed to ${isLiked ? "unlike" : "like"} gate`, "error");
       }
     },
-    [likeGateById, unlikeGateById, fetchGatesList]
+    [likeGateById, unlikeGateById, fetchGatesList, showNotification]
   );
 
   const handleCloseSnackbar = () => {
     setSuccess("");
-    setErrorMessage("");
   };
 
   const isLoading = authLoading || gatesLoading;
@@ -197,7 +193,6 @@ const GatesPage = () => {
         setGate={setPopupGate}
         onSave={handleCreateGate}
         onCancel={handleCancelCreateGate}
-        errorMessage={errorMessage}
       />
 
       {editingGate && (
@@ -208,7 +203,6 @@ const GatesPage = () => {
           setGate={setEditingGate}
           onSave={handleUpdateGate}
           onCancel={() => setEditingGate(null)}
-          errorMessage={errorMessage}
         />
       )}
 
@@ -217,27 +211,6 @@ const GatesPage = () => {
         onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDeleteGate}
       />
-
-      <Snackbar
-        open={!!success}
-        autoHideDuration={3000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
-          {success}
-        </Alert>
-      </Snackbar>
-      <Snackbar
-        open={Boolean(errorMessage)}
-        autoHideDuration={3000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert onClose={handleCloseSnackbar} severity="error" sx={{ width: "100%" }} role="alert">
-          {errorMessage}
-        </Alert>
-      </Snackbar>
     </AppLayout>
   );
 };

@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Button, TextField } from "@mui/material";
 import { inputStylesWhite } from "../../styles/BaseStyles";
 
-const GatesFilters = ({ quickFilter, setQuickFilter, searchQuery, setSearchQuery }) => (
+const ClassesFilters = ({ quickFilter, setQuickFilter, searchQuery, setSearchQuery }) => (
   <Box
     sx={{
       maxWidth: 1500,
@@ -71,4 +71,4 @@ const GatesFilters = ({ quickFilter, setQuickFilter, searchQuery, setSearchQuery
   </Box>
 );
 
-export default GatesFilters;
+export default ClassesFilters;

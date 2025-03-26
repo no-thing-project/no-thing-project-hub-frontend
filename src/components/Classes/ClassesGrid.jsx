@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Typography } from "@mui/material";
 import { motion, AnimatePresence } from "framer-motion";
-import GateCard from "./GateCard";
+import ClassCard from "./ClassCard";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -13,19 +13,19 @@ const leftColumnVariants = {
   visible: { opacity: 1 },
 };
 
-const GatesGrid = ({
-  filteredGates,
+const ClassesGrid = ({
+  filteredClasses,
   localLikes,
   handleLike,
-  setEditingGate,
-  setGateToDelete,
+  setEditingClass,
+  setClassToDelete,
   setDeleteDialogOpen,
   navigate,
 }) => (
   <AnimatePresence exitBeforeEnter>
-    {filteredGates.length === 0 ? (
+    {filteredClasses.length === 0 ? (
       <motion.div
-        key="no-gates"
+        key="no-classes"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
@@ -42,13 +42,13 @@ const GatesGrid = ({
           }}
         >
           <Typography variant="body2">
-            No gates found. Create a new gate to get started!
+            No classes found. Create a new class to get started!
           </Typography>
         </Box>
       </motion.div>
     ) : (
       <motion.div
-        key="gates-grid"
+        key="classes-grid"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
@@ -76,24 +76,24 @@ const GatesGrid = ({
             style={{ gridColumn: "1 / 2" }}
           >
             <Typography variant="h3" sx={{ fontWeight: 700, mb: 2 }}>
-              Organize your classes.
+              Teach your way.
             </Typography>
             <Typography variant="h5" sx={{ color: "text.secondary", mb: 4 }}>
-              Wherever you teach.
+              Wherever you are.
             </Typography>
             <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
-              Create gates, manage classes, and engage your students. Keep education at the
-              heart of your mission. Wishing you success in your teaching journey.
+              Create classes, share knowledge, and inspire your students. Keep learning at the
+              heart of your mission. Wishing you success in your educational journey.
             </Typography>
           </motion.div>
-          {filteredGates.map((gate) => (
-            <GateCard
-              key={gate.gate_id}
-              gate={gate}
+          {filteredClasses.map((classItem) => (
+            <ClassCard
+              key={classItem.class_id}
+              classItem={classItem}
               localLikes={localLikes}
               handleLike={handleLike}
-              setEditingGate={setEditingGate}
-              setGateToDelete={setGateToDelete}
+              setEditingClass={setEditingClass}
+              setClassToDelete={setClassToDelete}
               setDeleteDialogOpen={setDeleteDialogOpen}
               navigate={navigate}
             />
@@ -104,4 +104,4 @@ const GatesGrid = ({
   </AnimatePresence>
 );
 
-export default GatesGrid;
+export default ClassesGrid;
