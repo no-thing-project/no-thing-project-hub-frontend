@@ -1,4 +1,3 @@
-// src/hooks/useSocial.js
 import { useState, useCallback } from "react";
 import {
   addFriend,
@@ -7,6 +6,7 @@ import {
   removeFriend,
   fetchFriends,
   fetchPendingRequests,
+  fetchUsersByUsername,
 } from "../api/socialApi";
 
 export const useSocial = (token, onLogout, navigate) => {
@@ -28,6 +28,29 @@ export const useSocial = (token, onLogout, navigate) => {
     [onLogout, navigate]
   );
 
+  // Пошук користувачів за username
+  const searchUsersByUsername = useCallback(
+    async (username, options = { limit: 10 }) => {
+      if (!token || !username.trim()) {
+        setError("Authentication or username missing");
+        return [];
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchUsersByUsername(username, token, options);
+        return data.users || [];
+      } catch (err) {
+        handleAuthError(err);
+        return [];
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, handleAuthError]
+  );
+
+  // Додавання друга за anonymous_id (отримуємо його з пошуку за username)
   const addNewFriend = useCallback(
     async (friendId) => {
       if (!token || !friendId) {
@@ -38,7 +61,7 @@ export const useSocial = (token, onLogout, navigate) => {
       setError(null);
       try {
         const data = await addFriend(friendId, token);
-        return data; // Повертаємо дані, але не оновлюємо стан локально
+        return data;
       } catch (err) {
         handleAuthError(err);
         throw err;
@@ -171,6 +194,7 @@ export const useSocial = (token, onLogout, navigate) => {
     removeExistingFriend,
     getFriends,
     getPendingRequests,
+    searchUsersByUsername,
   };
 };
 

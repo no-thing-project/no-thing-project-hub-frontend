@@ -1,24 +1,17 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import useAuth from "../hooks/useAuth";
-import useSocial from "../hooks/useSocial";
+import { Box, Button, Typography, Alert, Snackbar } from "@mui/material";
+import { Add } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
-import {
-  Container,
-  Typography,
-  Box,
-  List,
-  ListItem,
-  ListItemText,
-  TextField,
-  Button,
-  Alert,
-} from "@mui/material";
-import { inputStyles } from "../styles/BaseStyles";
-import { containerStyles } from "../styles/ProfileStyles";
-import { buttonStyles } from "../styles/BoardSectionStyles";
+import useAuth from "../hooks/useAuth";
+import useSocial from "../hooks/useSocial";
 import { useNotification } from "../context/NotificationContext";
+import { actionButtonStyles } from "../styles/BaseStyles";
+import ProfileHeader from "../components/Headers/ProfileHeader";
+import FriendFormDialog from "../components/Dialogs/FriendFormDialog";
+import FriendsList from "../components/Friends/FriendsList";
+import PendingRequestsList from "../components/Friends/PendingRequestsList";
 
 const FriendsPage = () => {
   const navigate = useNavigate();
@@ -35,39 +28,90 @@ const FriendsPage = () => {
     acceptFriend,
     rejectFriend,
     removeExistingFriend,
+    searchUsersByUsername,
   } = useSocial(token, handleLogout, navigate);
 
-  const [friendId, setFriendId] = useState("");
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [username, setUsername] = useState(""); // Змінюємо friendId на username
   const [success, setSuccess] = useState("");
 
-  useEffect(() => {
-    if (!authLoading && isAuthenticated && token && authData) {
-      Promise.all([
-        getFriends().catch((err) => {
-          console.error("Failed to fetch friends:", err);
-          showNotification(err.message || "Failed to load friends", "error");
-        }),
-        getPendingRequests().catch((err) => {
-          console.error("Failed to fetch pending requests:", err);
-          showNotification(err.message || "Failed to load pending requests", "error");
-        }),
-      ]);
-    }
-  }, [authLoading, isAuthenticated, token, authData, getFriends, getPendingRequests, showNotification]);
-
-  const handleAddFriend = async () => {
-    if (!friendId.trim()) {
-      showNotification("Friend ID is required!", "error");
+  const loadFriendsData = useCallback(async () => {
+    if (!isAuthenticated || !token) {
+      showNotification("Authentication missing.", "error");
       return;
     }
-
     try {
+      await Promise.all([getFriends(), getPendingRequests()]);
+    } catch (err) {
+      showNotification(err.message || "Failed to load friends data", "error");
+    }
+  }, [isAuthenticated, token, getFriends, getPendingRequests, showNotification]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      loadFriendsData();
+    }
+  }, [authLoading, loadFriendsData]);
+
+  const handleOpenAddFriend = () => {
+    setUsername("");
+    setCreateDialogOpen(true);
+  };
+
+  const handleCancelAddFriend = () => {
+    setCreateDialogOpen(false);
+  };
+
+  const handleAddFriend = async () => {
+    if (!username.trim()) {
+      showNotification("Username is required!", "error");
+      return;
+    }
+    try {
+      // Шукаємо користувача за username
+      const users = await searchUsersByUsername(username);
+      if (!users.length) {
+        showNotification("User not found!", "error");
+        return;
+      }
+      const friendId = users[0].anonymous_id; // Беремо перший результат
       await addNewFriend(friendId);
       setSuccess("Friend request sent successfully!");
-      setFriendId("");
+      setCreateDialogOpen(false);
+      setUsername("");
       await getPendingRequests();
     } catch (err) {
       showNotification(err.message || "Failed to send friend request", "error");
+    }
+  };
+
+  const handleAcceptFriend = async (friendId) => {
+    try {
+      await acceptFriend(friendId);
+      setSuccess("Friend request accepted!");
+      await Promise.all([getFriends(), getPendingRequests()]);
+    } catch (err) {
+      showNotification(err.message || "Failed to accept friend request", "error");
+    }
+  };
+
+  const handleRejectFriend = async (friendId) => {
+    try {
+      await rejectFriend(friendId);
+      setSuccess("Friend request rejected!");
+      await getPendingRequests();
+    } catch (err) {
+      showNotification(err.message || "Failed to reject friend request", "error");
+    }
+  };
+
+  const handleRemoveFriend = async (friendId) => {
+    try {
+      await removeExistingFriend(friendId);
+      setSuccess("Friend removed successfully!");
+      await getFriends();
+    } catch (err) {
+      showNotification(err.message || "Failed to remove friend", "error");
     }
   };
 
@@ -75,95 +119,61 @@ const FriendsPage = () => {
     setSuccess("");
   };
 
-  const isLoading = authLoading || socialLoading;
-
-  if (isLoading) return <LoadingSpinner />;
-  if (!isAuthenticated || !authData) {
+  if (authLoading || socialLoading) return <LoadingSpinner />;
+  if (!isAuthenticated) {
     navigate("/login");
     return null;
   }
-  if (socialError === "User not found") {
-    showNotification("Profile not found. Please try again or check your profile ID.", "error");
-  }
 
   return (
-    <AppLayout
-      currentUser={authData}
-      onLogout={handleLogout}
-      token={token}
-      headerTitle="Friends"
-    >
-      <Container sx={containerStyles}>
-        <Typography variant="h4" gutterBottom>
-          Friends
-        </Typography>
-
-        {socialError && <Alert severity="error">{socialError}</Alert>}
-
-        <Box sx={{ mb: 4 }}>
-          <TextField
-            label="Friend ID"
-            value={friendId}
-            onChange={(e) => setFriendId(e.target.value)}
-            sx={inputStyles}
-            fullWidth
-            margin="normal"
-          />
-          <Button sx={buttonStyles} onClick={handleAddFriend}>
+    <AppLayout currentUser={authData} onLogout={handleLogout} token={token} headerTitle="Friends">
+      <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
+        <ProfileHeader user={authData} isOwnProfile={true}>
+          <Button
+            variant="contained"
+            onClick={handleOpenAddFriend}
+            startIcon={<Add />}
+            sx={actionButtonStyles}
+          >
             Add Friend
           </Button>
+        </ProfileHeader>
+
+        {socialError && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {socialError}
+          </Alert>
+        )}
+
+        <Box sx={{ my: 4 }}>
+          <FriendsList friends={friends} onRemoveFriend={handleRemoveFriend} />
+          <PendingRequestsList
+            pendingRequests={pendingRequests}
+            onAcceptFriend={handleAcceptFriend}
+            onRejectFriend={handleRejectFriend}
+          />
         </Box>
 
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h6">Your Friends</Typography>
-          <List>
-            {friends.length > 0 ? (
-              friends.map((friend) => (
-                <ListItem key={friend.anonymous_id}>
-                  <ListItemText primary={friend.username || friend.anonymous_id} />
-                  <Button
-                    sx={buttonStyles}
-                    onClick={() => removeExistingFriend(friend.anonymous_id)}
-                  >
-                    Remove
-                  </Button>
-                </ListItem>
-              ))
-            ) : (
-              <Typography>No friends yet.</Typography>
-            )}
-          </List>
-        </Box>
+        <FriendFormDialog
+          open={createDialogOpen}
+          title="Add a New Friend"
+          username={username} // Змінюємо friendId на username
+          setUsername={setUsername}
+          onSave={handleAddFriend}
+          onCancel={handleCancelAddFriend}
+        />
 
-        <Box>
-          <Typography variant="h6">Pending Friend Requests</Typography>
-          <List>
-            {pendingRequests.length > 0 ? (
-              pendingRequests.map((request) => (
-                <ListItem key={request.anonymous_id}>
-                  <ListItemText primary={request.username || request.anonymous_id} />
-                  <Box>
-                    <Button
-                      sx={{ ...buttonStyles, mr: 1 }}
-                      onClick={() => acceptFriend(request.anonymous_id).then(() => getFriends())}
-                    >
-                      Accept
-                    </Button>
-                    <Button
-                      sx={buttonStyles}
-                      onClick={() => rejectFriend(request.anonymous_id).then(() => getPendingRequests())}
-                    >
-                      Reject
-                    </Button>
-                  </Box>
-                </ListItem>
-              ))
-            ) : (
-              <Typography>No pending requests.</Typography>
-            )}
-          </List>
-        </Box>
-      </Container>
+        <Snackbar
+          open={!!success}
+          autoHideDuration={3000}
+          onClose={handleCloseSnackbar}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        >
+          <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
+            {success}
+          </Alert>
+        </Snackbar>
+      </Box>
     </AppLayout>
   );
 };

@@ -90,3 +90,17 @@ export const fetchPendingRequests = async (token, options = { page: 1, limit: 20
     return handleApiError(err);
   }
 };
+
+// Fetch users by username
+export const fetchUsersByUsername = async (username, token, options = { page: 1, limit: 10 }) => {
+  try {
+    const { page, limit } = options;
+    const response = await api.get(`/api/v1/social/users/search`, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { username, page, limit },
+    });
+    return response.data.content || { users: [], pagination: {} };
+  } catch (err) {
+    return handleApiError(err);
+  }
+};

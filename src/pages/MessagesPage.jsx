@@ -1,24 +1,17 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import useAuth from "../hooks/useAuth";
-import useMessages from "../hooks/useMessages";
+import { Box, Button, Typography, Alert, Snackbar } from "@mui/material";
+import { Add } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
-import {
-  Container,
-  Typography,
-  Box,
-  List,
-  ListItem,
-  ListItemText,
-  TextField,
-  Button,
-  Alert,
-} from "@mui/material";
-import { inputStyles } from "../styles/BaseStyles";
-import { containerStyles } from "../styles/ProfileStyles";
-import { buttonStyles } from "../styles/BoardSectionStyles";
+import useAuth from "../hooks/useAuth";
+import useMessages from "../hooks/useMessages";
+import useSocial from "../hooks/useSocial";
 import { useNotification } from "../context/NotificationContext";
+import { actionButtonStyles } from "../styles/BaseStyles";
+import ProfileHeader from "../components/Headers/ProfileHeader";
+import MessageFormDialog from "../components/Dialogs/MessageFormDialog";
+import MessagesList from "../components/Messages/MessagesList";
 
 const MessagesPage = () => {
   const navigate = useNavigate();
@@ -33,34 +26,54 @@ const MessagesPage = () => {
     markMessageRead,
     deleteExistingMessage,
   } = useMessages(token, authData?.anonymous_id, handleLogout, navigate);
+  const { friends, getFriends, loading: socialLoading } = useSocial(token, handleLogout, navigate);
 
-  const [newMessage, setNewMessage] = useState("");
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [recipientId, setRecipientId] = useState("");
+  const [newMessage, setNewMessage] = useState("");
   const [success, setSuccess] = useState("");
 
-  useEffect(() => {
-    if (!authLoading && isAuthenticated && token && authData) {
-      fetchMessagesList().catch((err) => {
-        console.error("Failed to fetch messages:", err);
-        showNotification(err.message || "Failed to load messages", "error");
-      });
+  const loadData = useCallback(async () => {
+    if (!isAuthenticated || !token) {
+      showNotification("Authentication missing.", "error");
+      return;
     }
-  }, [authLoading, isAuthenticated, token, authData, fetchMessagesList, showNotification]);
+    try {
+      await Promise.all([fetchMessagesList(), getFriends()]);
+    } catch (err) {
+      showNotification(err.message || "Failed to load data", "error");
+    }
+  }, [isAuthenticated, token, fetchMessagesList, getFriends, showNotification]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      loadData();
+    }
+  }, [authLoading, loadData]);
+
+  const handleOpenSendMessage = () => {
+    setRecipientId("");
+    setNewMessage("");
+    setCreateDialogOpen(true);
+  };
+
+  const handleCancelSendMessage = () => {
+    setCreateDialogOpen(false);
+  };
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !recipientId.trim()) {
-      showNotification("Recipient ID and message content are required!", "error");
+      showNotification("Recipient and message content are required!", "error");
       return;
     }
-
     const messageData = {
       recipientId,
       content: newMessage.trim(),
     };
-
     try {
       await sendNewMessage(messageData);
       setSuccess("Message sent successfully!");
+      setCreateDialogOpen(false);
       setNewMessage("");
       setRecipientId("");
       await fetchMessagesList();
@@ -69,95 +82,88 @@ const MessagesPage = () => {
     }
   };
 
+  const handleMarkRead = async (messageId) => {
+    try {
+      await markMessageRead(messageId);
+      setSuccess("Message marked as read!");
+      await fetchMessagesList();
+    } catch (err) {
+      showNotification(err.message || "Failed to mark message as read", "error");
+    }
+  };
+
+  const handleDeleteMessage = async (messageId) => {
+    try {
+      await deleteExistingMessage(messageId);
+      setSuccess("Message deleted successfully!");
+      await fetchMessagesList();
+    } catch (err) {
+      showNotification(err.message || "Failed to delete message", "error");
+    }
+  };
+
   const handleCloseSnackbar = () => {
     setSuccess("");
   };
 
-  const isLoading = authLoading || messagesLoading;
-
-  if (isLoading) return <LoadingSpinner />;
-  if (!isAuthenticated || !authData) {
+  if (authLoading || messagesLoading || socialLoading) return <LoadingSpinner />;
+  if (!isAuthenticated) {
     navigate("/login");
     return null;
   }
-  if (messagesError === "User not found") {
-    showNotification("Profile not found. Please try again or check your profile ID.", "error");
-  }
 
   return (
-    <AppLayout
-      currentUser={authData}
-      onLogout={handleLogout}
-      token={token}
-      headerTitle="Messages"
-    >
-      <Container sx={containerStyles}>
-        <Typography variant="h4" gutterBottom>
-          Messages
-        </Typography>
-
-        {messagesError && <Alert severity="error">{messagesError}</Alert>}
-
-        <Box sx={{ mb: 4 }}>
-          <TextField
-            label="Recipient ID"
-            value={recipientId}
-            onChange={(e) => setRecipientId(e.target.value)}
-            sx={inputStyles}
-            fullWidth
-            margin="normal"
-          />
-          <TextField
-            label="New Message"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            sx={inputStyles}
-            fullWidth
-            multiline
-            rows={3}
-            margin="normal"
-          />
-          <Button sx={buttonStyles} onClick={handleSendMessage}>
-            Send
+    <AppLayout currentUser={authData} onLogout={handleLogout} token={token} headerTitle="Messages">
+      <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
+        <ProfileHeader user={authData} isOwnProfile={true}>
+          <Button
+            variant="contained"
+            onClick={handleOpenSendMessage}
+            startIcon={<Add />}
+            sx={actionButtonStyles}
+          >
+            New Message
           </Button>
+        </ProfileHeader>
+
+        {messagesError && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {messagesError}
+          </Alert>
+        )}
+
+        <Box sx={{ my: 4 }}>
+          <MessagesList
+            messages={messages}
+            currentUserId={authData.anonymous_id}
+            onMarkRead={handleMarkRead}
+            onDeleteMessage={handleDeleteMessage}
+          />
         </Box>
 
-        <Box>
-          <Typography variant="h6">Your Messages</Typography>
-          <List>
-            {messages.length > 0 ? (
-              messages.map((msg) => (
-                <ListItem key={msg.message_id}>
-                  <ListItemText
-                    primary={msg.content}
-                    secondary={`From: ${msg.sender_id} | To: ${msg.receiver_id} | ${
-                      msg.is_read ? "Read" : "Unread"
-                    }`}
-                  />
-                  <Box>
-                    {!msg.is_read && (
-                      <Button
-                        sx={{ ...buttonStyles, mr: 1 }}
-                        onClick={() => markMessageRead(msg.message_id)}
-                      >
-                        Mark as Read
-                      </Button>
-                    )}
-                    <Button
-                      sx={buttonStyles}
-                      onClick={() => deleteExistingMessage(msg.message_id)}
-                    >
-                      Delete
-                    </Button>
-                  </Box>
-                </ListItem>
-              ))
-            ) : (
-              <Typography>No messages yet.</Typography>
-            )}
-          </List>
-        </Box>
-      </Container>
+        <MessageFormDialog
+          open={createDialogOpen}
+          title="Send a New Message"
+          recipientId={recipientId}
+          setRecipientId={setRecipientId}
+          newMessage={newMessage}
+          setNewMessage={setNewMessage}
+          friends={friends}
+          onSave={handleSendMessage}
+          onCancel={handleCancelSendMessage}
+        />
+
+        <Snackbar
+          open={!!success}
+          autoHideDuration={3000}
+          onClose={handleCloseSnackbar}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        >
+          <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
+            {success}
+          </Alert>
+        </Snackbar>
+      </Box>
     </AppLayout>
   );
 };
