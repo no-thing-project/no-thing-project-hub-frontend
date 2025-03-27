@@ -47,7 +47,7 @@ const GateCard = ({
               gate_id: gate.gate_id,
               name: gate.name,
               description: gate.description || "",
-              visibility: gate.is_public ? "Public" : "Private",
+              visibility: gate.access.is_public ? "Public" : "Private",
             });
           }}
           sx={{ p: 1, color: "text.primary" }}
@@ -85,7 +85,7 @@ const GateCard = ({
         )}
       </Box>
       <Box sx={{ width: "100%", mt: 1 }} onClick={() => navigate(`/gate/${gate.gate_id}`)}>
-        {gate.is_public ? (
+        {gate.access.is_public ? (
           <Box
             sx={{
               display: "flex",
