@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Button, Typography, Alert, Snackbar } from "@mui/material";
+import { Box, Button, Alert, Snackbar, Typography } from "@mui/material";
 import { Add } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
@@ -10,8 +10,8 @@ import useSocial from "../hooks/useSocial";
 import { useNotification } from "../context/NotificationContext";
 import { actionButtonStyles } from "../styles/BaseStyles";
 import ProfileHeader from "../components/Headers/ProfileHeader";
-import MessageFormDialog from "../components/Dialogs/MessageFormDialog";
-import MessagesList from "../components/Messages/MessagesList";
+import ConversationsList from "../components/Messages/ConversationsList";
+import ChatView from "../components/Messages/ChatView";
 
 const MessagesPage = () => {
   const navigate = useNavigate();
@@ -28,9 +28,7 @@ const MessagesPage = () => {
   } = useMessages(token, authData?.anonymous_id, handleLogout, navigate);
   const { friends, getFriends, loading: socialLoading } = useSocial(token, handleLogout, navigate);
 
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [recipientId, setRecipientId] = useState("");
-  const [newMessage, setNewMessage] = useState("");
+  const [selectedConversationId, setSelectedConversationId] = useState(null);
   const [success, setSuccess] = useState("");
 
   const loadData = useCallback(async () => {
@@ -50,37 +48,6 @@ const MessagesPage = () => {
       loadData();
     }
   }, [authLoading, loadData]);
-
-  const handleOpenSendMessage = () => {
-    setRecipientId("");
-    setNewMessage("");
-    setCreateDialogOpen(true);
-  };
-
-  const handleCancelSendMessage = () => {
-    setCreateDialogOpen(false);
-  };
-
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() || !recipientId.trim()) {
-      showNotification("Recipient and message content are required!", "error");
-      return;
-    }
-    const messageData = {
-      recipientId,
-      content: newMessage.trim(),
-    };
-    try {
-      await sendNewMessage(messageData);
-      setSuccess("Message sent successfully!");
-      setCreateDialogOpen(false);
-      setNewMessage("");
-      setRecipientId("");
-      await fetchMessagesList();
-    } catch (err) {
-      showNotification(err.message || "Failed to send message", "error");
-    }
-  };
 
   const handleMarkRead = async (messageId) => {
     try {
@@ -102,9 +69,7 @@ const MessagesPage = () => {
     }
   };
 
-  const handleCloseSnackbar = () => {
-    setSuccess("");
-  };
+  const handleCloseSnackbar = () => setSuccess("");
 
   if (authLoading || messagesLoading || socialLoading) return <LoadingSpinner />;
   if (!isAuthenticated) {
@@ -115,43 +80,39 @@ const MessagesPage = () => {
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token} headerTitle="Messages">
       <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
-        <ProfileHeader user={authData} isOwnProfile={true}>
-          <Button
-            variant="contained"
-            onClick={handleOpenSendMessage}
-            startIcon={<Add />}
-            sx={actionButtonStyles}
-          >
-            New Message
-          </Button>
-        </ProfileHeader>
-
-        {messagesError && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {messagesError}
-          </Alert>
-        )}
-
-        <Box sx={{ my: 4 }}>
-          <MessagesList
-            messages={messages}
-            currentUserId={authData.anonymous_id}
-            onMarkRead={handleMarkRead}
-            onDeleteMessage={handleDeleteMessage}
-          />
+        <ProfileHeader user={authData} isOwnProfile={true} />
+        {messagesError && <Alert severity="error" sx={{ mt: 2 }}>{messagesError}</Alert>}
+        <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+          <Box sx={{ flex: "1 1 30%", maxWidth: "400px" }}>
+            <ConversationsList
+              messages={messages}
+              friends={friends}
+              currentUserId={authData.anonymous_id}
+              onSelectConversation={setSelectedConversationId}
+              selectedConversationId={selectedConversationId}
+            />
+          </Box>
+          <Box sx={{ flex: "1 1 70%" }}>
+            {selectedConversationId ? (
+              <ChatView
+                messages={messages.filter((msg) =>
+                  [msg.sender_id, msg.receiver_id].includes(selectedConversationId)
+                )}
+                currentUserId={authData.anonymous_id}
+                recipient={friends.find((f) => f.anonymous_id === selectedConversationId)}
+                onSendMessage={sendNewMessage}
+                onMarkRead={handleMarkRead}
+                onDeleteMessage={handleDeleteMessage}
+                token={token}
+                fetchMessagesList={fetchMessagesList}
+              />
+            ) : (
+              <Typography variant="h6" color="text.secondary" sx={{ mt: 4 }}>
+                Select a friend to start chatting
+              </Typography>
+            )}
+          </Box>
         </Box>
-
-        <MessageFormDialog
-          open={createDialogOpen}
-          title="Send a New Message"
-          recipientId={recipientId}
-          setRecipientId={setRecipientId}
-          newMessage={newMessage}
-          setNewMessage={setNewMessage}
-          friends={friends}
-          onSave={handleSendMessage}
-          onCancel={handleCancelSendMessage}
-        />
 
         <Snackbar
           open={!!success}

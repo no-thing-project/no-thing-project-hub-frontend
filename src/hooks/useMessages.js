@@ -1,11 +1,5 @@
-// src/hooks/useMessages.js
 import { useState, useCallback } from "react";
-import {
-  sendMessage,
-  fetchMessages,
-  markMessageAsRead,
-  deleteMessage,
-} from "../api/messagesApi";
+import { sendMessage, fetchMessages, markMessageAsRead, deleteMessage } from "../api/messagesApi";
 
 export const useMessages = (token, userId, onLogout, navigate) => {
   const [messages, setMessages] = useState([]);
@@ -33,12 +27,11 @@ export const useMessages = (token, userId, onLogout, navigate) => {
       setError(null);
       try {
         const data = await fetchMessages(token, {}, signal);
-        setMessages(data || []);
+        setMessages(
+          (data || []).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+        );
       } catch (err) {
-        if (err.name === "AbortError") {
-          console.log("Fetch aborted");
-          return;
-        }
+        if (err.name === "AbortError") return;
         handleAuthError(err);
       } finally {
         setLoading(false);
@@ -57,7 +50,8 @@ export const useMessages = (token, userId, onLogout, navigate) => {
       setError(null);
       try {
         const newMessage = await sendMessage(messageData, token);
-        return newMessage; // Повертаємо нове повідомлення, але не оновлюємо стан локально
+        setMessages((prev) => [...prev, newMessage].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
+        return newMessage;
       } catch (err) {
         handleAuthError(err);
         throw err;
