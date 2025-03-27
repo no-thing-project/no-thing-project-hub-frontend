@@ -203,6 +203,7 @@ const ClassesPage = () => {
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDeleteClass}
+        message="Are you sure you want to delete this class? This action cannot be undone."
       />
 
       <Snackbar

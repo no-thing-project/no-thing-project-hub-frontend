@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Box, Button, Snackbar, Alert } from "@mui/material";
-import { Add } from "@mui/icons-material";
+import { Add, Edit } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import { useClasses } from "../hooks/useClasses";
@@ -9,7 +9,7 @@ import { useBoards } from "../hooks/useBoards";
 import useAuth from "../hooks/useAuth";
 import { useNotification } from "../context/NotificationContext";
 import ProfileHeader from "../components/Headers/ProfileHeader";
-import { actionButtonStyles } from "../styles/BaseStyles";
+import { actionButtonStyles, deleteButtonStyle } from "../styles/BaseStyles";
 import ClassFormDialog from "../components/Dialogs/ClassFormDialog";
 import BoardFormDialog from "../components/Dialogs/BoardFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
@@ -19,7 +19,13 @@ import BoardsGrid from "../components/Boards/BoardsGrid";
 const ClassPage = () => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
-  const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
+  const {
+    token,
+    authData,
+    handleLogout,
+    isAuthenticated,
+    loading: authLoading,
+  } = useAuth(navigate);
   const { class_id } = useParams();
 
   const {
@@ -89,7 +95,14 @@ const ClassPage = () => {
     }
 
     return () => controller.abort();
-  }, [class_id, token, fetchClass, fetchClassMembersList, fetchBoardsByClass, showNotification]);
+  }, [
+    class_id,
+    token,
+    fetchClass,
+    fetchClassMembersList,
+    fetchBoardsByClass,
+    showNotification,
+  ]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -97,14 +110,18 @@ const ClassPage = () => {
   }, [loadClassData, isAuthenticated]);
 
   const filteredBoards = boards.filter((board) => {
-    const matchesSearch = board.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = board.name
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
     if (quickFilter === "all") return true;
     if (quickFilter === "public") return board.is_public;
     if (quickFilter === "private") return !board.is_public;
     if (quickFilter === "liked") {
       const isLiked =
-        localLikes[board.board_id] !== undefined ? localLikes[board.board_id] : board.is_liked;
+        localLikes[board.board_id] !== undefined
+          ? localLikes[board.board_id]
+          : board.is_liked;
       return isLiked;
     }
     return true;
@@ -135,7 +152,10 @@ const ClassPage = () => {
       setPopupBoard({ name: "", description: "", visibility: "Public" });
       navigate(`/board/${newBoard.board_id}`);
     } catch (err) {
-      const errorMsg = err.response?.data?.errors?.[0] || err.message || "Failed to create board";
+      const errorMsg =
+        err.response?.data?.errors?.[0] ||
+        err.message ||
+        "Failed to create board";
       showNotification(errorMsg, "error");
     }
   }, [class_id, popupBoard, createNewBoardInClass, navigate, showNotification]);
@@ -155,7 +175,10 @@ const ClassPage = () => {
       setEditingClass(null);
       await loadClassData();
     } catch (err) {
-      showNotification(err.response?.data?.errors?.[0] || "Failed to update class", "error");
+      showNotification(
+        err.response?.data?.errors?.[0] || "Failed to update class",
+        "error"
+      );
     }
   }, [editingClass, updateExistingClass, loadClassData, showNotification]);
 
@@ -165,7 +188,10 @@ const ClassPage = () => {
       setSuccess("Class deleted successfully!");
       navigate("/classes");
     } catch (err) {
-      showNotification(err.response?.data?.errors?.[0] || "Failed to delete class", "error");
+      showNotification(
+        err.response?.data?.errors?.[0] || "Failed to delete class",
+        "error"
+      );
     }
   }, [deleteExistingClass, class_id, navigate, showNotification]);
 
@@ -184,9 +210,18 @@ const ClassPage = () => {
       setEditingBoard(null);
       await loadClassData();
     } catch (err) {
-      showNotification(err.response?.data?.errors?.[0] || "Failed to update board", "error");
+      showNotification(
+        err.response?.data?.errors?.[0] || "Failed to update board",
+        "error"
+      );
     }
-  }, [editingBoard, updateExistingBoard, class_id, loadClassData, showNotification]);
+  }, [
+    editingBoard,
+    updateExistingBoard,
+    class_id,
+    loadClassData,
+    showNotification,
+  ]);
 
   const handleDeleteBoard = useCallback(async () => {
     if (!boardToDelete) return;
@@ -197,11 +232,20 @@ const ClassPage = () => {
       setBoardToDelete(null);
       await loadClassData();
     } catch (err) {
-      showNotification(err.response?.data?.errors?.[0] || "Failed to delete board", "error");
+      showNotification(
+        err.response?.data?.errors?.[0] || "Failed to delete board",
+        "error"
+      );
       setDeleteDialogOpen(false);
       setBoardToDelete(null);
     }
-  }, [boardToDelete, deleteExistingBoard, class_id, loadClassData, showNotification]);
+  }, [
+    boardToDelete,
+    deleteExistingBoard,
+    class_id,
+    loadClassData,
+    showNotification,
+  ]);
 
   const handleLikeBoard = useCallback(
     async (board_id, isLiked) => {
@@ -218,7 +262,10 @@ const ClassPage = () => {
         setLocalLikes({});
       } catch (err) {
         setLocalLikes((prev) => ({ ...prev, [board_id]: isLiked }));
-        showNotification(`Failed to ${isLiked ? "unlike" : "like"} board`, "error");
+        showNotification(
+          `Failed to ${isLiked ? "unlike" : "like"} board`,
+          "error"
+        );
       }
     },
     [likeBoardById, unlikeBoardById, loadClassData, showNotification]
@@ -228,7 +275,8 @@ const ClassPage = () => {
     setSuccess("");
   };
 
-  if (isLoading || authLoading || classesLoading || boardsLoading) return <LoadingSpinner />;
+  if (isLoading || authLoading || classesLoading || boardsLoading)
+    return <LoadingSpinner />;
   if (!isAuthenticated) {
     navigate("/login");
     return null;
@@ -239,34 +287,47 @@ const ClassPage = () => {
   }
 
   return (
-    <AppLayout currentUser={authData} onLogout={handleLogout} token={token} headerTitle={classData.name || "Class"}>
+    <AppLayout
+      currentUser={authData}
+      onLogout={handleLogout}
+      token={token}
+      headerTitle={classData.name || "Class"}
+    >
       <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
         <ProfileHeader user={authData} isOwnProfile={true}>
-          <Button variant="contained" onClick={handleOpenCreateBoard} startIcon={<Add />} sx={actionButtonStyles}>
-            Create Board
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={() =>
-              setEditingClass({
-                class_id: classData.class_id,
-                name: classData.name,
-                description: classData.description || "",
-                visibility: classData.is_public ? "Public" : "Private",
-              })
-            }
-            sx={{ ...actionButtonStyles, ml: 2 }}
-          >
-            Edit Class
-          </Button>
-          <Button
-            variant="outlined"
-            color="error"
-            onClick={handleDeleteClass}
-            sx={{ ...actionButtonStyles, ml: 2 }}
-          >
-            Delete Class
-          </Button>
+          <Box sx={{ display: "flex", gap: 2 }}>
+            <Button
+              variant="contained"
+              onClick={handleOpenCreateBoard}
+              startIcon={<Add />}
+              sx={actionButtonStyles}
+            >
+              Create Board
+            </Button>
+            <Button
+              variant="contained"
+              onClick={() =>
+                setEditingClass({
+                  class_id: classData.class_id,
+                  name: classData.name,
+                  description: classData.description || "",
+                  visibility: classData.is_public ? "Public" : "Private",
+                })
+              }
+              startIcon={<Edit />}
+              sx={actionButtonStyles}
+            >
+              Edit Class
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleDeleteClass}
+              sx={deleteButtonStyle}
+            >
+              Delete Class
+            </Button>
+          </Box>
         </ProfileHeader>
       </Box>
 
@@ -322,6 +383,7 @@ const ClassPage = () => {
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDeleteBoard}
+        message="Are you sure you want to delete this board? This action cannot be undone."
       />
 
       <Snackbar
@@ -330,7 +392,11 @@ const ClassPage = () => {
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity="success"
+          sx={{ width: "100%" }}
+        >
           {success}
         </Alert>
       </Snackbar>

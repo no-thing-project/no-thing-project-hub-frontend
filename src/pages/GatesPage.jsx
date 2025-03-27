@@ -227,6 +227,7 @@ const GatesPage = () => {
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDeleteGate}
+        message="Are you sure you want to delete this gate? This action cannot be undone."
       />
     </AppLayout>
   );

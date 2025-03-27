@@ -18,6 +18,14 @@ import PeopleRoundedIcon from "@mui/icons-material/PeopleRounded"; // Іконк
 import MessageRoundedIcon from "@mui/icons-material/MessageRounded"; // Іконка для "Повідомлень"
 import ExitToAppRoundedIcon from "@mui/icons-material/ExitToAppRounded";
 
+const isActiveRoute = (route, subroute, currentPath) => {
+  if (currentPath === route) return true;
+  const regexPattern = "^" + subroute.replace(/:[^/]+/g, "[^/]+") + "$";
+  const regex = new RegExp(regexPattern);
+  return regex.test(currentPath);
+};
+
+
 const LeftDrawer = ({ onLogout }) => {
   const location = useLocation();
   const currentPath = location.pathname;
@@ -123,7 +131,7 @@ const LeftDrawer = ({ onLogout }) => {
                   minWidth: 0,
                   justifyContent: "center",
                   color:
-                    currentPath === "/gates"
+                  isActiveRoute("/gates", "/gate/:gate_id", currentPath)
                       ? "var(--color-icon-hover)"
                       : "var(--color-icon-default)",
                 }}
@@ -150,7 +158,7 @@ const LeftDrawer = ({ onLogout }) => {
                   minWidth: 0,
                   justifyContent: "center",
                   color:
-                    currentPath === "/classes"
+                  isActiveRoute("/classes", "/class/:class_id", currentPath)
                       ? "var(--color-icon-hover)"
                       : "var(--color-icon-default)",
                 }}

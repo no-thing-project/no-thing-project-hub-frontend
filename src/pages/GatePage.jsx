@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Box, Button } from "@mui/material";
-import { Add } from "@mui/icons-material";
+import { Add, Edit } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import { useGates } from "../hooks/useGates";
@@ -9,7 +9,7 @@ import { useClasses } from "../hooks/useClasses";
 import useAuth from "../hooks/useAuth";
 import { useNotification } from "../context/NotificationContext";
 import ProfileHeader from "../components/Headers/ProfileHeader";
-import { actionButtonStyles } from "../styles/BaseStyles";
+import { actionButtonStyles, deleteButtonStyle } from "../styles/BaseStyles";
 import GateFormDialog from "../components/Dialogs/GateFormDialog";
 import ClassFormDialog from "../components/Dialogs/ClassFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
@@ -19,7 +19,13 @@ import ClassesGrid from "../components/Classes/ClassesGrid";
 const GatePage = () => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
-  const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
+  const {
+    token,
+    authData,
+    handleLogout,
+    isAuthenticated,
+    loading: authLoading,
+  } = useAuth(navigate);
   const { gate_id } = useParams();
 
   const {
@@ -92,7 +98,14 @@ const GatePage = () => {
     }
 
     return () => controller.abort();
-  }, [gate_id, token, fetchGate, fetchGateMembersList, fetchClassesByGate, showNotification]);
+  }, [
+    gate_id,
+    token,
+    fetchGate,
+    fetchGateMembersList,
+    fetchClassesByGate,
+    showNotification,
+  ]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -100,14 +113,18 @@ const GatePage = () => {
   }, [loadGateData, isAuthenticated]);
 
   const filteredClasses = classes.filter((classItem) => {
-    const matchesSearch = classItem.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = classItem.name
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
     if (quickFilter === "all") return true;
     if (quickFilter === "public") return classItem.is_public;
     if (quickFilter === "private") return !classItem.is_public;
     if (quickFilter === "liked") {
       const isLiked =
-        localLikes[classItem.class_id] !== undefined ? localLikes[classItem.class_id] : classItem.is_liked;
+        localLikes[classItem.class_id] !== undefined
+          ? localLikes[classItem.class_id]
+          : classItem.is_liked;
       return isLiked;
     }
     return true;
@@ -138,7 +155,10 @@ const GatePage = () => {
       setPopupClass({ name: "", description: "", visibility: "Public" });
       navigate(`/class/${newClass.class_id}`); // Перенаправлення на сторінку нового класу
     } catch (err) {
-      const errorMsg = err.response?.data?.errors?.[0] || err.message || "Failed to create class";
+      const errorMsg =
+        err.response?.data?.errors?.[0] ||
+        err.message ||
+        "Failed to create class";
       showNotification(errorMsg, "error");
     }
   }, [gate_id, popupClass, createNewClassInGate, navigate, showNotification]);
@@ -158,7 +178,10 @@ const GatePage = () => {
       setEditingGate(null);
       await loadGateData();
     } catch (err) {
-      showNotification(err.response?.data?.errors?.[0] || "Failed to update gate", "error");
+      showNotification(
+        err.response?.data?.errors?.[0] || "Failed to update gate",
+        "error"
+      );
     }
   }, [editingGate, updateExistingGate, loadGateData, showNotification]);
 
@@ -168,7 +191,10 @@ const GatePage = () => {
       setSuccess("Gate deleted successfully!");
       navigate("/gates");
     } catch (err) {
-      showNotification(err.response?.data?.errors?.[0] || "Failed to delete gate", "error");
+      showNotification(
+        err.response?.data?.errors?.[0] || "Failed to delete gate",
+        "error"
+      );
     }
   }, [deleteExistingGate, gate_id, navigate, showNotification]);
 
@@ -184,7 +210,10 @@ const GatePage = () => {
         setSuccess(`Gate ${isLiked ? "unliked" : "liked"} successfully!`);
         await loadGateData();
       } catch (err) {
-        showNotification(`Failed to ${isLiked ? "unlike" : "like"} gate`, "error");
+        showNotification(
+          `Failed to ${isLiked ? "unlike" : "like"} gate`,
+          "error"
+        );
       }
     },
     [likeGateById, unlikeGateById, gate_id, loadGateData, showNotification]
@@ -244,7 +273,10 @@ const GatePage = () => {
       setEditingClass(null);
       await loadGateData();
     } catch (err) {
-      showNotification(err.response?.data?.errors?.[0] || "Failed to update class", "error");
+      showNotification(
+        err.response?.data?.errors?.[0] || "Failed to update class",
+        "error"
+      );
     }
   }, [editingClass, updateExistingClass, loadGateData, showNotification]);
 
@@ -257,7 +289,10 @@ const GatePage = () => {
       setClassToDelete(null);
       await loadGateData();
     } catch (err) {
-      showNotification(err.response?.data?.errors?.[0] || "Failed to delete class", "error");
+      showNotification(
+        err.response?.data?.errors?.[0] || "Failed to delete class",
+        "error"
+      );
       setDeleteDialogOpen(false);
       setClassToDelete(null);
     }
@@ -279,7 +314,10 @@ const GatePage = () => {
         setLocalLikes({});
       } catch (err) {
         setLocalLikes((prev) => ({ ...prev, [class_id]: isLiked }));
-        showNotification(`Failed to ${isLiked ? "unlike" : "like"} class`, "error");
+        showNotification(
+          `Failed to ${isLiked ? "unlike" : "like"} class`,
+          "error"
+        );
       }
     },
     [loadGateData, showNotification]
@@ -289,7 +327,8 @@ const GatePage = () => {
     setSuccess("");
   };
 
-  if (isLoading || authLoading || gatesLoading || classesLoading) return <LoadingSpinner />;
+  if (isLoading || authLoading || gatesLoading || classesLoading)
+    return <LoadingSpinner />;
   if (!isAuthenticated) {
     navigate("/login");
     return null;
@@ -300,34 +339,47 @@ const GatePage = () => {
   }
 
   return (
-    <AppLayout currentUser={authData} onLogout={handleLogout} token={token} headerTitle={gateData.name || "Gate"}>
+    <AppLayout
+      currentUser={authData}
+      onLogout={handleLogout}
+      token={token}
+      headerTitle={gateData.name || "Gate"}
+    >
       <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
         <ProfileHeader user={authData} isOwnProfile={true}>
-          <Button variant="contained" onClick={handleOpenCreateClass} startIcon={<Add />} sx={actionButtonStyles}>
-            Create Class
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={() =>
-              setEditingGate({
-                gate_id: gateData.gate_id,
-                name: gateData.name,
-                description: gateData.description || "",
-                visibility: gateData.is_public ? "Public" : "Private",
-              })
-            }
-            sx={{ ...actionButtonStyles, ml: 2 }}
-          >
-            Edit Gate
-          </Button>
-          <Button
-            variant="outlined"
-            color="error"
-            onClick={handleDeleteGate}
-            sx={{ ...actionButtonStyles, ml: 2 }}
-          >
-            Delete Gate
-          </Button>
+          <Box sx={{ display: "flex", gap: 2 }}>
+            <Button
+              variant="contained"
+              onClick={handleOpenCreateClass}
+              startIcon={<Add />}
+              sx={actionButtonStyles}
+            >
+              Create Class
+            </Button>
+            <Button
+              variant="contained"
+              onClick={() =>
+                setEditingGate({
+                  gate_id: gateData.gate_id,
+                  name: gateData.name,
+                  description: gateData.description || "",
+                  visibility: gateData.is_public ? "Public" : "Private",
+                })
+              }
+              startIcon={<Edit />}
+              sx={actionButtonStyles}
+            >
+              Edit Gate
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleDeleteGate}
+              sx={deleteButtonStyle}
+            >
+              Delete Gate
+            </Button>
+          </Box>
         </ProfileHeader>
       </Box>
 
@@ -383,6 +435,7 @@ const GatePage = () => {
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDeleteClass}
+        message="Are you sure you want to delete this class? This action cannot be undone."
       />
     </AppLayout>
   );
