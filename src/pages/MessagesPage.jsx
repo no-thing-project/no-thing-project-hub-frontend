@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Button, Alert, Snackbar, Typography } from "@mui/material";
-import { Add } from "@mui/icons-material";
+import { Box, Alert, Snackbar, Typography } from "@mui/material";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import useAuth from "../hooks/useAuth";
 import useMessages from "../hooks/useMessages";
 import useSocial from "../hooks/useSocial";
 import { useNotification } from "../context/NotificationContext";
-import { actionButtonStyles } from "../styles/BaseStyles";
 import ProfileHeader from "../components/Headers/ProfileHeader";
 import ConversationsList from "../components/Messages/ConversationsList";
 import ChatView from "../components/Messages/ChatView";
@@ -21,8 +19,12 @@ const MessagesPage = () => {
     messages,
     loading: messagesLoading,
     error: messagesError,
+    pendingMedia,
     fetchMessagesList,
     sendNewMessage,
+    sendMediaMessage,
+    setPendingMediaFile,
+    clearPendingMedia,
     markMessageRead,
     deleteExistingMessage,
   } = useMessages(token, authData?.anonymous_id, handleLogout, navigate);
@@ -101,10 +103,14 @@ const MessagesPage = () => {
                 currentUserId={authData.anonymous_id}
                 recipient={friends.find((f) => f.anonymous_id === selectedConversationId)}
                 onSendMessage={sendNewMessage}
+                onSendMediaMessage={sendMediaMessage}
                 onMarkRead={handleMarkRead}
                 onDeleteMessage={handleDeleteMessage}
                 token={token}
                 fetchMessagesList={fetchMessagesList}
+                pendingMedia={pendingMedia}
+                setPendingMediaFile={setPendingMediaFile}
+                clearPendingMedia={clearPendingMedia}
               />
             ) : (
               <Typography variant="h6" color="text.secondary" sx={{ mt: 4 }}>

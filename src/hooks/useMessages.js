@@ -1,10 +1,11 @@
 import { useState, useCallback } from "react";
-import { sendMessage, fetchMessages, markMessageAsRead, deleteMessage } from "../api/messagesApi";
+import { sendMessage, fetchMessages, markMessageAsRead, deleteMessage, uploadFile } from "../api/messagesApi";
 
 export const useMessages = (token, userId, onLogout, navigate) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [pendingMedia, setPendingMedia] = useState(null); // Для зберігання файлу перед відправкою
 
   const handleAuthError = useCallback(
     (err) => {
@@ -49,7 +50,7 @@ export const useMessages = (token, userId, onLogout, navigate) => {
       setLoading(true);
       setError(null);
       try {
-        const newMessage = await sendMessage(messageData, token);
+        const newMessage = await sendMessage({ ...messageData, type: "text" }, token);
         setMessages((prev) => [...prev, newMessage].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
         return newMessage;
       } catch (err) {
@@ -62,6 +63,40 @@ export const useMessages = (token, userId, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
+  const sendMediaMessage = useCallback(
+    async (file, type, recipientId) => {
+      if (!token || !file || !recipientId) {
+        setError("Authentication or data missing.");
+        return null;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const uploadedUrl = await uploadFile(file, token);
+        const messageData = { recipientId, content: uploadedUrl, type };
+        const newMessage = await sendMessage(messageData, token);
+        setMessages((prev) => [...prev, newMessage].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
+        setPendingMedia(null); // Очищаємо після відправки
+        return newMessage;
+      } catch (err) {
+        handleAuthError(err);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, handleAuthError]
+  );
+
+  const setPendingMediaFile = useCallback((file, type) => {
+    setPendingMedia({ file, type, preview: URL.createObjectURL(file) });
+  }, []);
+
+  const clearPendingMedia = useCallback(() => {
+    if (pendingMedia?.preview) URL.revokeObjectURL(pendingMedia.preview);
+    setPendingMedia(null);
+  }, [pendingMedia]);
+
   const markMessageRead = useCallback(
     async (messageId) => {
       if (!token || !messageId) {
@@ -73,7 +108,7 @@ export const useMessages = (token, userId, onLogout, navigate) => {
       try {
         const updatedMessage = await markMessageAsRead(messageId, token);
         setMessages((prev) =>
-          prev.map((m) => (m.message_id === messageId ? { ...m, is_read: true } : m))
+          prev.map((m) => (m.message_id === messageId ? { ...m, is_read: true, status: "read" } : m))
         );
         return updatedMessage;
       } catch (err) {
@@ -111,8 +146,12 @@ export const useMessages = (token, userId, onLogout, navigate) => {
     messages,
     loading,
     error,
+    pendingMedia,
     fetchMessagesList,
     sendNewMessage,
+    sendMediaMessage,
+    setPendingMediaFile,
+    clearPendingMedia,
     markMessageRead,
     deleteExistingMessage,
   };
