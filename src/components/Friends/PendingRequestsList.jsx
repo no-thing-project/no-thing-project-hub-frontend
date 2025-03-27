@@ -1,8 +1,76 @@
 import React from "react";
+import PropTypes from "prop-types";
 import { Box, Typography, List, ListItem, ListItemText, Button, Divider } from "@mui/material";
 import { actionButtonStyles } from "../../styles/BaseStyles";
 
+// Стилі як константи
+const listItemStyles = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  py: 1,
+  "&:hover": { backgroundColor: "background.hover" },
+};
+
+const buttonContainerStyles = {
+  display: "flex",
+  gap: 1,
+};
+
+// Компоненти для кнопок
+const AcceptButton = ({ onClick }) => (
+  <Button
+    variant="contained"
+    onClick={onClick}
+    sx={{ ...actionButtonStyles, minWidth: "100px" }}
+  >
+    Accept
+  </Button>
+);
+
+const RejectButton = ({ onClick }) => (
+  <Button
+    variant="outlined"
+    color="error"
+    onClick={onClick}
+    sx={{ ...actionButtonStyles, minWidth: "100px" }}
+  >
+    Reject
+  </Button>
+);
+
+const CancelButton = ({ onClick }) => (
+  <Button
+    variant="outlined"
+    color="warning"
+    onClick={onClick}
+    sx={{ ...actionButtonStyles, minWidth: "100px" }}
+  >
+    Cancel
+  </Button>
+);
+
 const PendingRequestsList = ({ pendingRequests, onAcceptFriend, onRejectFriend }) => {
+  const hasPendingRequests = pendingRequests.length > 0;
+
+  const renderRequestActions = (request) => {
+    const { direction, anonymous_id } = request;
+    const isIncoming = direction === "incoming";
+
+    return (
+      <Box sx={buttonContainerStyles}>
+        {isIncoming ? (
+          <>
+            <AcceptButton onClick={() => onAcceptFriend(anonymous_id)} />
+            <RejectButton onClick={() => onRejectFriend(anonymous_id)} />
+          </>
+        ) : (
+          <CancelButton onClick={() => onRejectFriend(anonymous_id)} />
+        )}
+      </Box>
+    );
+  };
+
   return (
     <Box>
       <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
@@ -10,41 +78,23 @@ const PendingRequestsList = ({ pendingRequests, onAcceptFriend, onRejectFriend }
       </Typography>
       <Divider />
       <List>
-        {pendingRequests.length > 0 ? (
-          pendingRequests.map((request) => (
-            <ListItem
-              key={request.anonymous_id}
-              sx={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                py: 1,
-                "&:hover": { backgroundColor: "background.hover" },
-              }}
-            >
-              <ListItemText
-                primary={request.username || `User (${request.anonymous_id})`} // Відображаємо username
-                primaryTypographyProps={{ variant: "body1", fontWeight: 500 }}
-              />
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <Button
-                  variant="contained"
-                  onClick={() => onAcceptFriend(request.anonymous_id)}
-                  sx={{ ...actionButtonStyles, minWidth: "100px" }}
-                >
-                  Accept
-                </Button>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  onClick={() => onRejectFriend(request.anonymous_id)}
-                  sx={{ ...actionButtonStyles, minWidth: "100px" }}
-                >
-                  Reject
-                </Button>
-              </Box>
-            </ListItem>
-          ))
+        {hasPendingRequests ? (
+          pendingRequests.map((request) => {
+            const { anonymous_id, username, direction } = request;
+            const displayName = username || `User (${anonymous_id})`;
+            const statusText = direction === "outgoing" ? "Sent by you" : "Received";
+
+            return (
+              <ListItem key={anonymous_id} sx={listItemStyles}>
+                <ListItemText
+                  primary={displayName}
+                  secondary={statusText}
+                  primaryTypographyProps={{ variant: "body1", fontWeight: 500 }}
+                />
+                {renderRequestActions(request)}
+              </ListItem>
+            );
+          })
         ) : (
           <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
             No pending requests at the moment.
@@ -53,6 +103,18 @@ const PendingRequestsList = ({ pendingRequests, onAcceptFriend, onRejectFriend }
       </List>
     </Box>
   );
+};
+
+PendingRequestsList.propTypes = {
+  pendingRequests: PropTypes.arrayOf(
+    PropTypes.shape({
+      anonymous_id: PropTypes.string.isRequired,
+      username: PropTypes.string,
+      direction: PropTypes.oneOf(["incoming", "outgoing"]).isRequired,
+    })
+  ).isRequired,
+  onAcceptFriend: PropTypes.func.isRequired,
+  onRejectFriend: PropTypes.func.isRequired,
 };
 
 export default PendingRequestsList;
