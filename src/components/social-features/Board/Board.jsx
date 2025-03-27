@@ -152,18 +152,6 @@ const Board = ({
     [deleteExistingTweet, getPoints]
   );
 
-  // Логіка відповіді
-  const handleReply = useCallback((tweet) => {
-    const tweetElement = document.getElementById(`tweet-${tweet.tweet_id}`);
-    const parentTweetHeight = tweetElement ? tweetElement.getBoundingClientRect().height : 150;
-    setReplyTweet(tweet);
-    setTweetPopup({
-      visible: true,
-      x: tweet.position.x,
-      y: tweet.position.y + parentTweetHeight + 10,
-    });
-  }, []);
-
   const handleReplyHover = useCallback((parentTweetId) => {
     setHighlightedParentId(parentTweetId);
   }, []);
@@ -180,6 +168,25 @@ const Board = ({
     handleMouseMove,
     handleMouseUp,
   } = useBoardInteraction(boardMainRef);
+
+  // Логіка відповіді
+  const handleReply = useCallback(
+    (tweet) => {
+      const tweetElement = document.getElementById(`tweet-${tweet.tweet_id}`);
+      // Отримуємо висоту елемента в пікселях
+      const parentTweetHeight = tweetElement
+        ? tweetElement.getBoundingClientRect().height
+        : 150;
+      // Перераховуємо висоту в координати дошки (ділимо на scale) і додаємо додатковий відступ (10 пікселів також перераховано)
+      setReplyTweet(tweet);
+      setTweetPopup({
+        visible: true,
+        x: tweet.position.x,
+        y: tweet.position.y + (parentTweetHeight + 10) / scale,
+      });
+    },
+    [scale]
+  );
 
   // Формуємо масив DraggableTweet
   const renderedTweets = useMemo(() => {

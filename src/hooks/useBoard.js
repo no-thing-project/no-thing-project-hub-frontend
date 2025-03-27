@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 
 export const BOARD_SIZE = 10000;
-const ZOOM_MIN = 0.1;
+const ZOOM_MIN = 0.3;
 const ZOOM_MAX = 2;
 const ZOOM_STEP = 0.1;
 const ZOOM_SENSITIVITY = 0.001;
