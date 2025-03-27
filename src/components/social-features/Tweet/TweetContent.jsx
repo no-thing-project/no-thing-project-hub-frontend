@@ -14,6 +14,8 @@ const TweetContent = React.memo(
     onReply,
     onReplyHover,
     isParentHighlighted = false,
+    replyCount = 0,
+    parentTweetText = null,
   }) => {
     const isLiked = tweet.liked_by?.some(
       (u) => u.user_id === currentUser?.anonymous_id
@@ -67,6 +69,7 @@ const TweetContent = React.memo(
 
     return (
       <Paper
+        id={`tweet-${tweet.tweet_id}`}
         className="tweet-card"
         elevation={3}
         onClick={(e) => {
@@ -88,12 +91,30 @@ const TweetContent = React.memo(
             boxShadow: "0 6px 16px rgba(0,0,0,0.15)",
           },
           ...(isParentHighlighted && {
-            border: "2px solid #ff9800",
+            backgroundColor: "background.hover",
           }),
         }}
       >
+        {parentTweetText && (
+          <Box
+            sx={{
+              borderLeft: "3px solid",
+              borderColor: "#CDD0D5",
+              paddingLeft: "8px",
+              marginBottom: "8px",
+              fontStyle: "italic",
+              fontWeight: 200,
+              color: "#CDD0D5",
+            }}
+          >
+            Reply to: {parentTweetText}
+          </Box>
+        )}
         {renderContent(tweet.content)}
-        <Typography variant="body1" sx={{ color: "text.secondary", fontSize: "1rem" }}>
+        <Typography
+          variant="body1"
+          sx={{ color: "text.secondary", fontSize: "1rem" }}
+        >
           Author: {tweetAuthor}
         </Typography>
         <Box
@@ -138,10 +159,26 @@ const TweetContent = React.memo(
               }}
               sx={{ ml: 1 }}
             >
-              <ChatBubbleOutlineIcon fontSize="small" sx={{ color: "text.secondary" }} />
+              <ChatBubbleOutlineIcon
+                fontSize="small"
+                sx={{ color: "text.secondary" }}
+              />
             </IconButton>
+            {/* Відображення каунтера відповідей для батьківського твіту */}
+            {replyCount > 0 && (
+              <Typography
+                variant="caption"
+                sx={{
+                  marginLeft: 0.5,
+                  color: "text.secondary",
+                }}
+              >
+                {replyCount}
+              </Typography>
+            )}
           </Box>
-          {((tweet?.user?.anonymous_id || tweet.user_id) === currentUser?.anonymous_id) && (
+          {((tweet?.user?.anonymous_id || tweet.user_id) ===
+            currentUser?.anonymous_id) && (
             <IconButton
               size="small"
               onClick={(e) => {
@@ -158,5 +195,6 @@ const TweetContent = React.memo(
     );
   }
 );
+
 
 export default TweetContent;

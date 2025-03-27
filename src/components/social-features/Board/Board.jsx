@@ -154,8 +154,14 @@ const Board = ({
 
   // Логіка відповіді
   const handleReply = useCallback((tweet) => {
+    const tweetElement = document.getElementById(`tweet-${tweet.tweet_id}`);
+    const parentTweetHeight = tweetElement ? tweetElement.getBoundingClientRect().height : 150;
     setReplyTweet(tweet);
-    setTweetPopup({ visible: true, x: tweet.position.x, y: tweet.position.y });
+    setTweetPopup({
+      visible: true,
+      x: tweet.position.x,
+      y: tweet.position.y + parentTweetHeight + 10,
+    });
   }, []);
 
   const handleReplyHover = useCallback((parentTweetId) => {
@@ -177,28 +183,46 @@ const Board = ({
 
   // Формуємо масив DraggableTweet
   const renderedTweets = useMemo(() => {
-    return tweets.map((tweet) => (
-      <DraggableTweet
-        key={tweet.tweet_id}
-        tweet={tweet}
-        currentUser={currentUser}
-        onStop={(e, data) =>
-          handleUpdateTweet(tweet.tweet_id, {
-            position: { x: data.x, y: data.y },
-          })
+    return tweets.map((tweet) => {
+      // Обчислюємо кількість відповідей для поточного твіту
+      const replyCount = tweets.filter(
+        (t) => t.parent_tweet_id === tweet.tweet_id
+      ).length;
+      // Якщо твіт є відповіддю, шукаємо текст батьківського твіту
+      let parentTweetText = null;
+      if (tweet.parent_tweet_id) {
+        const parentTweet = tweets.find(
+          (t) => t.tweet_id === tweet.parent_tweet_id
+        );
+        if (parentTweet && parentTweet.content && parentTweet.content.value) {
+          parentTweetText = parentTweet.content.value;
         }
-      >
-        <TweetContent
+      }
+      return (
+        <DraggableTweet
+          key={tweet.tweet_id}
           tweet={tweet}
           currentUser={currentUser}
-          onLike={handleToggleLikeTweet}
-          onDelete={handleDeleteTweet}
-          onReply={handleReply}
-          onReplyHover={handleReplyHover}
-          isParentHighlighted={tweet.tweet_id === highlightedParentId}
-        />
-      </DraggableTweet>
-    ));
+          onStop={(e, data) =>
+            handleUpdateTweet(tweet.tweet_id, {
+              position: { x: data.x, y: data.y },
+            })
+          }
+        >
+          <TweetContent
+            tweet={tweet}
+            currentUser={currentUser}
+            onLike={handleToggleLikeTweet}
+            onDelete={handleDeleteTweet}
+            onReply={handleReply}
+            onReplyHover={handleReplyHover}
+            isParentHighlighted={tweet.tweet_id === highlightedParentId}
+            replyCount={replyCount}
+            parentTweetText={parentTweetText}
+          />
+        </DraggableTweet>
+      );
+    });
   }, [
     tweets,
     currentUser,
