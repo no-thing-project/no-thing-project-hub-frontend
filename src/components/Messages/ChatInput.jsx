@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import PropTypes from "prop-types";
 import {
   Box,
@@ -8,6 +8,7 @@ import {
   Button,
   Menu,
   MenuItem,
+  Typography,
 } from "@mui/material";
 import {
   Send,
@@ -20,6 +21,7 @@ import {
   Stop,
 } from "@mui/icons-material";
 import { actionButtonStyles } from "../../styles/BaseStyles";
+import RecorderModal from "./RecorderModal";
 
 const inputAreaStyles = {
   p: { xs: 1, md: 2 },
@@ -45,20 +47,34 @@ const ChatInput = ({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingType, setRecordingType] = useState("voice");
   const [anchorEl, setAnchorEl] = useState(null);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [stream, setStream] = useState(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    if (isRecording) {
+      setRecordingTime(0);
+      timerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [isRecording]);
 
   const handleSend = async () => {
-    // Перевіряємо, чи є текст або медіа
-    if (!messageInput.trim() && (!pendingMediaList || pendingMediaList.length === 0)) return;
+    if (!messageInput.trim() && (!pendingMediaList || !pendingMediaList.length)) return;
+
+    const content = messageInput.trim();
+    const messageData = {
+      recipientId: recipient.anonymous_id,
+      content,
+      media: pendingMediaList || [],
+    };
 
     try {
-      const content = messageInput.trim() || "";
-      const messageData = {
-        recipientId: recipient.anonymous_id,
-        content,
-        media: pendingMediaList || [],
-      };
       await onSendMediaMessage(messageData);
       setMessageInput("");
       clearPendingMedia();
@@ -69,33 +85,51 @@ const ChatInput = ({
   };
 
   const handleFileUpload = (event, type) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    setPendingMediaFile(file, type);
-    setAnchorEl(null);
+    const file = event.target.files?.[0];
+    if (file) {
+      setPendingMediaFile(file, type);
+      setAnchorEl(null);
+    }
   };
 
   const startRecording = async (type) => {
+    if (isRecording) return;
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: type === "video" ? true : false,
+        video: type === "video",
       });
-      mediaRecorderRef.current = new MediaRecorder(stream);
-      mediaRecorderRef.current.ondataavailable = (event) => {
-        chunksRef.current.push(event.data);
-      };
-      mediaRecorderRef.current.onstop = () => {
+
+      const recorder = new MediaRecorder(mediaStream);
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (event) => chunksRef.current.push(event.data);
+      recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, {
           type: type === "voice" ? "audio/webm" : "video/webm",
         });
         const file = new File([blob], `${type}_${Date.now()}.webm`, { type: blob.type });
         setPendingMediaFile(file, type);
         chunksRef.current = [];
-        stream.getTracks().forEach((track) => track.stop());
+        setIsRecording(false);
+        setIsModalOpen(type === "video" ? false : isModalOpen);
+        mediaStream.getTracks().forEach((track) => track.stop());
+        setStream(null);
       };
-      mediaRecorderRef.current.start();
+      recorder.onerror = (err) => {
+        console.error("Recorder error:", err);
+        setIsRecording(false);
+        setIsModalOpen(type === "video" ? false : isModalOpen);
+      };
+
+      setStream(mediaStream);
       setIsRecording(true);
+      recorder.start();
+      if (type === "video") {
+        setTimeout(() => setIsModalOpen(true), 100);
+      }
     } catch (err) {
       console.error("Error starting recording:", err);
     }
@@ -104,43 +138,37 @@ const ChatInput = ({
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
-      setIsRecording(false);
     }
   };
 
-  const handleMenuOpen = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const toggleRecordingMode = () => {
-    if (isRecording) {
-      stopRecording();
-    } else if (recordingType === "voice") {
-      startRecording("voice");
-    } else {
-      startRecording("video");
-    }
-  };
-
-  const switchRecordingType = () => {
+  const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
+  const handleMenuClose = () => setAnchorEl(null);
+  const toggleRecordingMode = () =>
+    isRecording ? stopRecording() : startRecording(recordingType);
+  const switchRecordingType = () =>
     setRecordingType((prev) => (prev === "voice" ? "video" : "voice"));
-  };
+
+  const formatTime = (seconds) =>
+    `${Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 
   const renderRightButton = () => {
     if (isRecording) {
       return (
-        <Tooltip title={`Stop ${recordingType === "voice" ? "Voice" : "Video"} Recording`}>
-          <IconButton size="small" onClick={stopRecording}>
-            <Stop />
-          </IconButton>
-        </Tooltip>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Typography variant="caption" color="error" sx={{ animation: "blink 1s infinite" }}>
+            {formatTime(recordingTime)}
+          </Typography>
+          <Tooltip title={`Stop ${recordingType === "voice" ? "Voice" : "Video"} Recording`}>
+            <IconButton size="small" onClick={stopRecording}>
+              <Stop />
+            </IconButton>
+          </Tooltip>
+        </Box>
       );
     }
-    if (messageInput.trim() || (pendingMediaList && pendingMediaList.length > 0)) {
+    if (messageInput.trim() || (pendingMediaList?.length > 0)) {
       return (
         <Button
           variant="contained"
@@ -212,6 +240,16 @@ const ChatInput = ({
       />
 
       {renderRightButton()}
+
+      <RecorderModal
+        open={isModalOpen && recordingType === "video"}
+        onClose={stopRecording}
+        stream={stream}
+        recordingTime={recordingTime}
+        onStop={stopRecording}
+      />
+
+      <style>{`@keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }`}</style>
     </Box>
   );
 };
