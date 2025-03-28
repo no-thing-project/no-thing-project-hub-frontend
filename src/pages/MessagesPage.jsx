@@ -19,7 +19,7 @@ const MessagesPage = () => {
     messages,
     loading: messagesLoading,
     error: messagesError,
-    pendingMedia,
+    pendingMediaList,
     fetchMessagesList,
     sendNewMessage,
     sendMediaMessage,
@@ -81,11 +81,11 @@ const MessagesPage = () => {
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token} headerTitle="Messages">
-      <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
+      <Box sx={{ maxWidth: { xs: "100%", md: 1500 }, margin: "0 auto", p: { xs: 1, md: 2 } }}>
         <ProfileHeader user={authData} isOwnProfile={true} />
         {messagesError && <Alert severity="error" sx={{ mt: 2 }}>{messagesError}</Alert>}
-        <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-          <Box sx={{ flex: "1 1 30%", maxWidth: "400px" }}>
+        <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 2, mt: 2 }}>
+          <Box sx={{ flex: { xs: "1 1 100%", md: "1 1 30%" }, maxWidth: { md: "400px" } }}>
             <ConversationsList
               messages={messages}
               friends={friends}
@@ -94,7 +94,7 @@ const MessagesPage = () => {
               selectedConversationId={selectedConversationId}
             />
           </Box>
-          <Box sx={{ flex: "1 1 70%" }}>
+          <Box sx={{ flex: { xs: "1 1 100%", md: "1 1 70%" } }}>
             {selectedConversationId ? (
               <ChatView
                 messages={messages.filter((msg) =>
@@ -108,18 +108,17 @@ const MessagesPage = () => {
                 onDeleteMessage={handleDeleteMessage}
                 token={token}
                 fetchMessagesList={fetchMessagesList}
-                pendingMedia={pendingMedia}
+                pendingMediaList={pendingMediaList}
                 setPendingMediaFile={setPendingMediaFile}
                 clearPendingMedia={clearPendingMedia}
               />
             ) : (
-              <Typography variant="h6" color="text.secondary" sx={{ mt: 4 }}>
+              <Typography variant="h6" color="text.secondary" sx={{ mt: 4, textAlign: "center" }}>
                 Select a friend to start chatting
               </Typography>
             )}
           </Box>
         </Box>
-
         <Snackbar
           open={!!success}
           autoHideDuration={3000}

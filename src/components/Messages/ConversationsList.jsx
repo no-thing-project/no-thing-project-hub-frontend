@@ -22,7 +22,7 @@ const ConversationsList = ({
   };
 
   return (
-    <Box sx={{ mt: 2 }}>
+    <Box sx={{ mt: 2, maxHeight: { xs: "50vh", md: "70vh" }, overflowY: "auto" }}>
       <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
         Friends
       </Typography>

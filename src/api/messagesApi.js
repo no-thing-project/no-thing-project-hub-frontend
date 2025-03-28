@@ -1,4 +1,3 @@
-// src/api/messagesApi.js
 import api from "./apiClient";
 import { handleApiError } from "./apiClient";
 
@@ -63,6 +62,7 @@ export const uploadFile = async (file, token) => {
     const response = await api.post(`/api/v1/messages/upload`, formData, {
       headers: {
         Authorization: `Bearer ${token}`,
+        "Content-Type": "multipart/form-data",
       },
     });
     return response.data?.content?.url || response.data?.url;

@@ -4,7 +4,7 @@ import { actionButtonStyles } from "../../styles/BaseStyles";
 
 const MessagesList = ({ messages, currentUserId, onMarkRead, onDeleteMessage }) => {
   return (
-    <Box>
+    <Box sx={{ maxHeight: { xs: "50vh", md: "70vh" }, overflowY: "auto" }}>
       <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
         Your Messages
       </Typography>
@@ -21,8 +21,9 @@ const MessagesList = ({ messages, currentUserId, onMarkRead, onDeleteMessage }) 
                   justifyContent: "space-between",
                   alignItems: "center",
                   py: 1,
-                  "&:hover": { backgroundColor: "background.hover" },
+                  "&:hover": { backgroundColor: "grey.100" },
                   backgroundColor: !msg.is_read && !isSentByCurrentUser ? "grey.100" : "inherit",
+                  flexDirection: { xs: "column", md: "row" }, // Колонка на малих екранах
                 }}
               >
                 <ListItemText
@@ -32,12 +33,12 @@ const MessagesList = ({ messages, currentUserId, onMarkRead, onDeleteMessage }) 
                   }`}
                   primaryTypographyProps={{ fontWeight: !msg.is_read && !isSentByCurrentUser ? 600 : 400 }}
                 />
-                <Box sx={{ display: "flex", gap: 1 }}>
+                <Box sx={{ display: "flex", gap: 1, mt: { xs: 1, md: 0 } }}>
                   {!msg.is_read && !isSentByCurrentUser && (
                     <Button
                       variant="contained"
                       onClick={() => onMarkRead(msg.message_id)}
-                      sx={{ ...actionButtonStyles, minWidth: "120px" }}
+                      sx={{ ...actionButtonStyles, minWidth: { xs: "100%", md: "120px" } }}
                     >
                       Mark as Read
                     </Button>
@@ -46,7 +47,7 @@ const MessagesList = ({ messages, currentUserId, onMarkRead, onDeleteMessage }) 
                     variant="outlined"
                     color="error"
                     onClick={() => onDeleteMessage(msg.message_id)}
-                    sx={{ ...actionButtonStyles, minWidth: "100px" }}
+                    sx={{ ...actionButtonStyles, minWidth: { xs: "100%", md: "100px" } }}
                   >
                     Delete
                   </Button>

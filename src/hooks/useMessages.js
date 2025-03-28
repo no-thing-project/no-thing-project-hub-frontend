@@ -5,15 +5,17 @@ export const useMessages = (token, userId, onLogout, navigate) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [pendingMedia, setPendingMedia] = useState(null); // Для зберігання файлу перед відправкою
+  const [pendingMediaList, setPendingMediaList] = useState([]);
 
   const handleAuthError = useCallback(
     (err) => {
       if (err.status === 401 || err.status === 403) {
         onLogout("Your session has expired. Please log in again.");
         navigate("/login");
+        setError("Session expired. Redirecting to login...");
+      } else {
+        setError(err.message || "An unexpected error occurred.");
       }
-      setError(err.message || "An error occurred.");
     },
     [onLogout, navigate]
   );
@@ -21,7 +23,7 @@ export const useMessages = (token, userId, onLogout, navigate) => {
   const fetchMessagesList = useCallback(
     async ({ signal } = {}) => {
       if (!token) {
-        setError("Authentication required.");
+        setError("Authentication token is missing.");
         return;
       }
       setLoading(true);
@@ -43,8 +45,8 @@ export const useMessages = (token, userId, onLogout, navigate) => {
 
   const sendNewMessage = useCallback(
     async (messageData) => {
-      if (!token || !messageData) {
-        setError("Authentication or message data missing.");
+      if (!token || !messageData || !messageData.recipientId || !messageData.content) {
+        setError("Authentication token or message data (recipientId/content) is missing.");
         return null;
       }
       setLoading(true);
@@ -64,19 +66,36 @@ export const useMessages = (token, userId, onLogout, navigate) => {
   );
 
   const sendMediaMessage = useCallback(
-    async (file, type, recipientId) => {
-      if (!token || !file || !recipientId) {
-        setError("Authentication or data missing.");
+    async (messageData) => {
+      if (!token || !messageData || !messageData.recipientId) {
+        setError("Authentication token or recipient ID is missing.");
         return null;
       }
       setLoading(true);
       setError(null);
       try {
-        const uploadedUrl = await uploadFile(file, token);
-        const messageData = { recipientId, content: uploadedUrl, type };
-        const newMessage = await sendMessage(messageData, token);
+        const { recipientId, content = "Media message", media = [] } = messageData;
+        let finalContent = content;
+        let messageType = "text";
+
+        if (media.length > 0) {
+          // Завантажуємо файл і додаємо URL у content
+          const uploadedUrl = await uploadFile(media[0].file, token); // Припускаємо, що тільки один файл
+          if (!uploadedUrl) throw new Error(`Failed to upload file: ${media[0].file.name}`);
+          finalContent = `${content} ${uploadedUrl}`; // Додаємо URL до content
+          messageType = media[0].type; // Використовуємо тип медіа (image, video тощо)
+        }
+
+        const finalMessageData = {
+          recipientId,
+          content: finalContent,
+          type: messageType,
+        };
+        console.log("Final message data sent to server:", finalMessageData); // Дебагування
+
+        const newMessage = await sendMessage(finalMessageData, token);
         setMessages((prev) => [...prev, newMessage].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
-        setPendingMedia(null); // Очищаємо після відправки
+        setPendingMediaList([]);
         return newMessage;
       } catch (err) {
         handleAuthError(err);
@@ -89,18 +108,32 @@ export const useMessages = (token, userId, onLogout, navigate) => {
   );
 
   const setPendingMediaFile = useCallback((file, type) => {
-    setPendingMedia({ file, type, preview: URL.createObjectURL(file) });
+    if (!file || !type) {
+      setError("File or type is missing for pending media.");
+      return;
+    }
+    const preview = URL.createObjectURL(file);
+    setPendingMediaList((prev) => [...prev, { file, type, preview }]);
   }, []);
 
-  const clearPendingMedia = useCallback(() => {
-    if (pendingMedia?.preview) URL.revokeObjectURL(pendingMedia.preview);
-    setPendingMedia(null);
-  }, [pendingMedia]);
+  const clearPendingMedia = useCallback((index) => {
+    setPendingMediaList((prev) => {
+      if (index !== undefined) {
+        const newList = [...prev];
+        const removed = newList.splice(index, 1)[0];
+        if (removed.preview) URL.revokeObjectURL(removed.preview);
+        return newList;
+      } else {
+        prev.forEach((item) => item.preview && URL.revokeObjectURL(item.preview));
+        return [];
+      }
+    });
+  }, []);
 
   const markMessageRead = useCallback(
     async (messageId) => {
       if (!token || !messageId) {
-        setError("Authentication or message ID missing.");
+        setError("Authentication token or message ID is missing.");
         return null;
       }
       setLoading(true);
@@ -124,7 +157,7 @@ export const useMessages = (token, userId, onLogout, navigate) => {
   const deleteExistingMessage = useCallback(
     async (messageId) => {
       if (!token || !messageId) {
-        setError("Authentication or message ID missing.");
+        setError("Authentication token or message ID is missing.");
         return;
       }
       setLoading(true);
@@ -146,7 +179,7 @@ export const useMessages = (token, userId, onLogout, navigate) => {
     messages,
     loading,
     error,
-    pendingMedia,
+    pendingMediaList,
     fetchMessagesList,
     sendNewMessage,
     sendMediaMessage,
