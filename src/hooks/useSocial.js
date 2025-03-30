@@ -50,7 +50,6 @@ export const useSocial = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Додавання друга за anonymous_id (отримуємо його з пошуку за username)
   const addNewFriend = useCallback(
     async (friendId) => {
       if (!token || !friendId) {
@@ -145,7 +144,10 @@ export const useSocial = (token, onLogout, navigate) => {
       setError(null);
       try {
         const data = await fetchFriends(token, options, signal);
-        setFriends(data.friends || []);
+        setFriends((prev) => {
+          const newFriends = data.friends || [];
+          return JSON.stringify(newFriends) === JSON.stringify(prev) ? prev : newFriends;
+        });
         setFriendsPagination(data.pagination || {});
         return data.friends;
       } catch (err) {

@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import PropTypes from "prop-types";
-import { Box, Typography, IconButton, CircularProgress } from "@mui/material";
-import { Delete } from "@mui/icons-material";
+import { Box, Typography, IconButton, Menu, MenuItem } from "@mui/material";
+import { Delete, Reply, Forward, Save } from "@mui/icons-material";
 
 const messageBubbleStyles = (isSentByCurrentUser) => ({
   maxWidth: { xs: "85%", md: "70%" },
@@ -20,167 +20,69 @@ const messageBubbleStyles = (isSentByCurrentUser) => ({
     top: "50%",
     transform: "translateY(-50%)",
     [isSentByCurrentUser ? "right" : "left"]: "-8px",
-    borderColor: isSentByCurrentUser
-      ? "transparent transparent transparent primary.main"
-      : "transparent grey.200 transparent transparent",
+    borderColor: isSentByCurrentUser ? "transparent transparent transparent primary.main" : "transparent grey.200 transparent transparent",
   },
 });
 
-const MessageBubble = ({ message, isSentByCurrentUser, onDelete, isSending }) => {
+const mediaRenderers = {
+  image: (item) => <img src={item.content} alt="media" style={{ maxWidth: "100%", borderRadius: "10px" }} />,
+  video: (item) => <video controls src={item.content} style={{ maxWidth: "100%", borderRadius: "10px", clipPath: `url(#${item.shape || "square"})` }} />,
+  voice: (item) => <audio controls src={item.content} />,
+  sticker: (item) => <img src={item.content} alt="sticker" style={{ maxWidth: "100px", borderRadius: "10px" }} />,
+  file: (item) => <a href={item.content} download><Typography variant="body2" color="inherit">Download: {item.content.split("/").pop()}</Typography></a>,
+};
+
+const MessageBubble = ({ message, isSentByCurrentUser, onDelete, currentUserId, recipient, onSendMediaMessage, messages, setReplyToMessage, onForward }) => {
+  const [anchorEl, setAnchorEl] = useState(null);
+
   const renderContent = () => {
     const contents = [];
-    const { content, type } = message;
-
-    // Регулярний вираз для пошуку URL у тексті
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const urls = content.match(urlRegex) || [];
-    const textParts = content.split(urlRegex);
-
-    // Обробляємо кожну частину content
-    textParts.forEach((part, index) => {
-      if (part && !urls.includes(part)) {
-        // Якщо це текст (не URL)
-        contents.push(
-          <Typography key={`text-${index}`} variant="body1" sx={{ wordBreak: "break-word" }}>
-            {part}
-          </Typography>
-        );
-      } else if (part && urls.includes(part)) {
-        // Якщо це URL, відображаємо залежно від type
-        switch (type) {
-          case "image":
-          case "sticker":
-            contents.push(
-              <img
-                key={`media-${index}`}
-                src={part}
-                alt={type}
-                style={{ maxWidth: "100%", borderRadius: "10px", marginTop: contents.length > 0 ? "8px" : "0" }}
-              />
-            );
-            break;
-          case "video":
-            contents.push(
-              <video
-                key={`media-${index}`}
-                src={part}
-                controls
-                style={{ maxWidth: "100%", borderRadius: "10px", marginTop: contents.length > 0 ? "8px" : "0" }}
-              />
-            );
-            break;
-          case "voice":
-            contents.push(
-              <audio
-                key={`media-${index}`}
-                src={part}
-                controls
-                style={{ maxWidth: "100%", marginTop: contents.length > 0 ? "8px" : "0" }}
-              />
-            );
-            break;
-          case "file":
-            contents.push(
-              <a
-                key={`media-${index}`}
-                href={part}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-              >
-                <Typography variant="body1" sx={{ mt: contents.length > 0 ? "8px" : "0" }}>
-                  File: {part.split('/').pop().split('?')[0]}
-                </Typography>
-              </a>
-            );
-            break;
-          default:
-            // Якщо тип не медіа, просто показуємо URL як текст
-            contents.push(
-              <Typography key={`text-${index}`} variant="body1" sx={{ wordBreak: "break-word" }}>
-                {part}
-              </Typography>
-            );
-        }
-      }
-    });
-
-    // Якщо нічого немає (заглушка)
-    if (contents.length === 0) {
-      contents.push(
-        <Typography key="empty" variant="body1" sx={{ opacity: 0.7 }}>
-          Empty message
-        </Typography>
+    if (message.replyTo) {
+      const replied = messages.find((m) => m.message_id === message.replyTo);
+      if (replied) contents.push(
+        <Box key="reply" sx={{ backgroundColor: "rgba(0,0,0,0.1)", p: 1, borderRadius: "10px", mb: 1 }}>
+          <Typography variant="caption" sx={{ opacity: 0.8 }}>{replied.content.slice(0, 50) + (replied.content.length > 50 ? "..." : "")}</Typography>
+        </Box>
       );
     }
-
+    if (message.content) contents.push(<Typography key="content" variant="body1">{message.content}</Typography>);
+    message.media?.forEach((item, i) => contents.push(<Box key={`media-${i}`} sx={{ mt: 1 }}>{mediaRenderers[item.type]?.(item)}</Box>));
     return contents;
   };
 
-  const renderStatus = () => {
-    if (!isSentByCurrentUser) return null;
-    if (isSending) {
-      return <CircularProgress size={16} sx={{ color: "white", mr: 1 }} />;
-    }
-    switch (message.status) {
-      case "sent":
-        return <Typography variant="caption" sx={{ opacity: 0.7 }}>✓ Sent</Typography>;
-      case "delivered":
-        return <Typography variant="caption" sx={{ opacity: 0.7 }}>✓✓ Delivered</Typography>;
-      case "read":
-        return <Typography variant="caption" sx={{ opacity: 0.7, color: "lightblue" }}>✓✓ Read</Typography>;
-      default:
-        return null;
-    }
-  };
-
   return (
-    <Box
-      sx={{
-        display: "flex",
-        justifyContent: isSentByCurrentUser ? "flex-end" : "flex-start",
-        mb: 2,
-      }}
-    >
-      <Box sx={messageBubbleStyles(isSentByCurrentUser)}>
+    <Box sx={{ display: "flex", justifyContent: isSentByCurrentUser ? "flex-end" : "flex-start", mb: 2 }}>
+      <Box sx={messageBubbleStyles(isSentByCurrentUser)} onContextMenu={(e) => { e.preventDefault(); setAnchorEl(e.currentTarget); }}>
         {renderContent()}
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mt: 0.5 }}>
-          <Typography variant="caption" sx={{ opacity: 0.7 }}>
-            {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          </Typography>
-          {renderStatus()}
-          {!isSending && (
-            <IconButton
-              size="small"
-              onClick={() => onDelete(message.message_id)}
-              sx={{ color: isSentByCurrentUser ? "white" : "error.main" }}
-            >
-              <Delete fontSize="small" />
-            </IconButton>
-          )}
-        </Box>
+        <Typography variant="caption" sx={{ mt: 0.5, opacity: 0.7, display: "block", textAlign: isSentByCurrentUser ? "right" : "left" }}>
+          {new Date(message.timestamp).toLocaleTimeString()}
+          {isSentByCurrentUser && (message.status === "read" ? " ✓✓" : message.status === "delivered" ? " ✓" : "")}
+        </Typography>
       </Box>
+      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
+        <MenuItem onClick={() => { setReplyToMessage(message); setAnchorEl(null); }}><Reply sx={{ mr: 1 }} /> Reply</MenuItem>
+        <MenuItem onClick={() => { onForward(message); setAnchorEl(null); }}><Forward sx={{ mr: 1 }} /> Forward</MenuItem>
+        {message.media?.length > 0 && (
+          <MenuItem onClick={() => { const link = document.createElement("a"); link.href = message.media[0].content; link.download = message.media[0].content.split("/").pop(); link.click(); setAnchorEl(null); }}>
+            <Save sx={{ mr: 1 }} /> Save
+          </MenuItem>
+        )}
+        {isSentByCurrentUser && <MenuItem onClick={() => { onDelete(message.message_id); setAnchorEl(null); }}><Delete sx={{ mr: 1 }} /> Delete</MenuItem>}
+      </Menu>
     </Box>
   );
 };
 
 MessageBubble.propTypes = {
-  message: PropTypes.shape({
-    message_id: PropTypes.string.isRequired,
-    content: PropTypes.string,
-    media: PropTypes.arrayOf(
-      PropTypes.shape({
-        type: PropTypes.string.isRequired,
-        content: PropTypes.string.isRequired,
-      })
-    ),
-    type: PropTypes.string,
-    status: PropTypes.oneOf(["sent", "delivered", "read"]).isRequired,
-    timestamp: PropTypes.string.isRequired,
-  }).isRequired,
+  message: PropTypes.object.isRequired,
   isSentByCurrentUser: PropTypes.bool.isRequired,
   onDelete: PropTypes.func.isRequired,
-  isSending: PropTypes.bool,
+  currentUserId: PropTypes.string.isRequired,
+  recipient: PropTypes.object,
+  onSendMediaMessage: PropTypes.func.isRequired,
+  messages: PropTypes.array.isRequired,
+  setReplyToMessage: PropTypes.func.isRequired,
+  onForward: PropTypes.func.isRequired, // Додано
 };
 
 export default MessageBubble;

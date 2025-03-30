@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
-import { Box, Typography } from "@mui/material";
-import MessageBubble from "./MessageBubble";
-import MediaPreview from "./MediaPreview";
-import ChatInput from "./ChatInput";
+import { Box, Modal, Typography, Select, MenuItem, Button } from "@mui/material";
+import ChatHeader from "./ChatHeader";
+import ChatMessages from "./ChatMessages";
+import ChatFooter from "./ChatFooter";
+import ChatSettingsModal from "./ChatSettingsModal";
 
 const chatContainerStyles = {
   display: "flex",
@@ -15,22 +16,19 @@ const chatContainerStyles = {
   backgroundColor: "background.paper",
 };
 
-const headerStyles = {
+const modalStyles = {
+  position: "absolute",
+  top: "50%",
+  left: "50%",
+  transform: "translate(-50%, -50%)",
+  bgcolor: "background.paper",
+  boxShadow: 24,
   p: 2,
-  borderBottom: "1px solid",
-  borderColor: "grey.300",
-  backgroundColor: "grey.50",
-};
-
-const messagesAreaStyles = {
-  flex: 1,
-  overflowY: "auto",
-  p: { xs: 1, md: 2 },
-  backgroundColor: "white",
+  borderRadius: 2,
+  width: { xs: "90%", md: "400px" },
 };
 
 const ChatView = ({
-  messages,
   currentUserId,
   recipient,
   onSendMessage,
@@ -42,113 +40,172 @@ const ChatView = ({
   pendingMediaList,
   setPendingMediaFile,
   clearPendingMedia,
+  isGroupChat,
+  friends,
+  setMessages, // Додано для синхронізації з глобальним станом
 }) => {
-  const messagesEndRef = useRef(null);
-  const [sendingMessages, setSendingMessages] = useState(new Set());
+  const [localMessages, setLocalMessages] = useState([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [forwardOpen, setForwardOpen] = useState(false);
+  const [forwardRecipient, setForwardRecipient] = useState("");
+  const [forwardMessage, setForwardMessage] = useState(null);
+  const [chatSettings, setChatSettings] = useState({ videoShape: "square", chatBackground: "default" });
+  const [replyToMessage, setReplyToMessage] = useState(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
+  const lastConversationId = useRef(null);
+
+  const conversationId = isGroupChat ? recipient?.group_id : recipient?.anonymous_id;
+
+  const fetchMessagesForPage = useCallback(
+    async (targetPage, reset = false) => {
+      if (!conversationId || (isFetching && !reset)) return;
+      setIsFetching(true);
+      try {
+        const params = { withUserId: isGroupChat ? null : conversationId, groupId: isGroupChat ? conversationId : null, page: targetPage };
+        const newMessages = await fetchMessagesList(params);
+        setLocalMessages((prev) => {
+          const uniqueNewMessages = newMessages.filter((m) => !prev.some((pm) => pm.message_id === m.message_id));
+          const updatedMessages = reset ? uniqueNewMessages : [...uniqueNewMessages, ...prev].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+          // Синхронізація з глобальним станом
+          setMessages((globalMessages) => {
+            const merged = [...globalMessages.filter((m) => m.group_id !== conversationId && (isGroupChat || m.receiver_id !== conversationId)), ...updatedMessages];
+            return merged.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+          });
+          return updatedMessages;
+        });
+        setHasMore(newMessages.length === 20);
+        if (reset || targetPage > page) setPage(targetPage);
+      } finally {
+        setIsFetching(false);
+      }
+    },
+    [fetchMessagesList, isGroupChat, conversationId, page, setMessages]
+  );
+
+  const loadMoreMessages = useCallback(() => {
+    if (hasMore && !isFetching) fetchMessagesForPage(page + 1);
+  }, [fetchMessagesForPage, page, hasMore, isFetching]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    const unreadMessages = messages.filter((m) => m.receiver_id === currentUserId && !m.is_read);
-    unreadMessages.forEach((m) => onMarkRead(m.message_id));
-  }, [messages, currentUserId, onMarkRead]);
+    if (!conversationId || conversationId === lastConversationId.current) return;
+    setLocalMessages([]);
+    setPage(1);
+    setHasMore(true);
+    lastConversationId.current = conversationId;
+    fetchMessagesForPage(1, true);
+  }, [conversationId, fetchMessagesForPage]);
 
-  const handleSendMediaMessage = async (messageData) => {
-    const tempId = `temp_${Date.now()}`;
-    setSendingMessages((prev) => new Set(prev).add(tempId));
+  const handleSendMessage = useCallback(
+    async (messageData) => {
+      const finalMessageData = {
+        ...messageData,
+        media: (messageData.media || []).map((item) => ({ ...item, shape: item.shape || chatSettings.videoShape })),
+      };
+      await onSendMediaMessage(finalMessageData);
+      fetchMessagesForPage(1, true); // Оновлюємо чат після відправки
+    },
+    [onSendMediaMessage, chatSettings.videoShape, fetchMessagesForPage]
+  );
 
+  const handleForwardMessage = useCallback((message) => {
+    setForwardMessage(message);
+    setForwardOpen(true);
+  }, []);
+
+  const confirmForward = useCallback(async () => {
+    if (!forwardRecipient || !forwardMessage) return;
     try {
-      await onSendMediaMessage(messageData);
-    } finally {
-      setSendingMessages((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(tempId);
-        return newSet;
+      await onSendMediaMessage({
+        recipientId: forwardRecipient,
+        content: `Forwarded: ${forwardMessage.content || "Media"}`,
+        media: forwardMessage.media,
+        replyTo: forwardMessage.replyTo,
       });
+      setForwardOpen(false);
+      setForwardRecipient("");
+      setForwardMessage(null);
+    } catch (err) {
+      console.error("Forward error:", err);
     }
-  };
+  }, [forwardMessage, forwardRecipient, onSendMediaMessage]);
 
   return (
-    <Box sx={chatContainerStyles}>
-      <Typography variant="h6" sx={headerStyles}>
-        Chat with {recipient?.username || `User (${recipient?.anonymous_id})`}
-      </Typography>
-      <Box sx={messagesAreaStyles}>
-        {messages.length > 0 ? (
-          messages.map((msg) => (
-            <MessageBubble
-              key={msg.message_id}
-              message={msg}
-              isSentByCurrentUser={msg.sender_id === currentUserId}
-              onDelete={onDeleteMessage}
-              isSending={sendingMessages.has(msg.message_id)}
-            />
-          ))
-        ) : (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 2, textAlign: "center" }}>
-            No messages yet. Start the conversation!
-          </Typography>
-        )}
-        <div ref={messagesEndRef} />
+    <>
+      <Box sx={chatContainerStyles}>
+        <ChatHeader recipient={recipient} isGroupChat={isGroupChat} onSettingsOpen={() => setSettingsOpen(true)} />
+        <ChatMessages
+          messages={localMessages}
+          currentUserId={currentUserId}
+          recipient={recipient}
+          onDeleteMessage={onDeleteMessage}
+          onSendMediaMessage={handleSendMessage}
+          onMarkRead={onMarkRead}
+          isFetching={isFetching}
+          hasMore={hasMore}
+          loadMoreMessages={loadMoreMessages}
+          chatBackground={chatSettings.chatBackground}
+          setReplyToMessage={setReplyToMessage}
+          onForwardMessage={handleForwardMessage}
+        />
+        <ChatFooter
+          recipient={recipient}
+          onSendMessage={onSendMessage}
+          onSendMediaMessage={handleSendMessage}
+          pendingMediaList={pendingMediaList}
+          setPendingMediaFile={setPendingMediaFile}
+          clearPendingMedia={clearPendingMedia}
+          defaultVideoShape={chatSettings.videoShape}
+          replyToMessage={replyToMessage}
+          setReplyToMessage={setReplyToMessage}
+          isGroupChat={isGroupChat}
+          currentUserId={currentUserId}
+          token={token}
+        />
       </Box>
-      {pendingMediaList && pendingMediaList.length > 0 && (
-        <Box sx={{ p: 1 }}>
-          {pendingMediaList.map((media, index) => (
-            <MediaPreview key={index} pendingMedia={media} onClear={() => clearPendingMedia(index)} />
-          ))}
+      <ChatSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onSave={setChatSettings} initialSettings={chatSettings} />
+      <Modal open={forwardOpen} onClose={() => setForwardOpen(false)}>
+        <Box sx={modalStyles}>
+          <Typography variant="h6" gutterBottom>Select Recipient</Typography>
+          <Select
+            fullWidth
+            value={forwardRecipient}
+            onChange={(e) => setForwardRecipient(e.target.value)}
+            displayEmpty
+            sx={{ mb: 2 }}
+          >
+            <MenuItem value="" disabled>Select a friend</MenuItem>
+            {friends.map((friend) => (
+              <MenuItem key={friend.anonymous_id} value={friend.anonymous_id}>
+                {friend.username || `User (${friend.anonymous_id})`}
+              </MenuItem>
+            ))}
+          </Select>
+          <Button variant="contained" onClick={confirmForward} disabled={!forwardRecipient}>
+            Forward
+          </Button>
         </Box>
-      )}
-      <ChatInput
-        onSendMessage={onSendMessage}
-        onSendMediaMessage={handleSendMediaMessage}
-        recipient={recipient}
-        pendingMediaList={pendingMediaList}
-        setPendingMediaFile={setPendingMediaFile}
-        clearPendingMedia={clearPendingMedia}
-        fetchMessagesList={fetchMessagesList}
-      />
-    </Box>
+      </Modal>
+    </>
   );
 };
 
 ChatView.propTypes = {
-  messages: PropTypes.arrayOf(
-    PropTypes.shape({
-      message_id: PropTypes.string.isRequired,
-      sender_id: PropTypes.string.isRequired,
-      receiver_id: PropTypes.string.isRequired,
-      content: PropTypes.string,
-      media: PropTypes.arrayOf(
-        PropTypes.shape({
-          type: PropTypes.string.isRequired,
-          content: PropTypes.string.isRequired,
-        })
-      ),
-      type: PropTypes.oneOf(["text", "file", "image", "voice", "video", "sticker", "mixed"]), // Додано "mixed"
-      status: PropTypes.oneOf(["sent", "delivered", "read"]).isRequired,
-      is_read: PropTypes.bool.isRequired,
-      timestamp: PropTypes.string.isRequired,
-    })
-  ).isRequired,
   currentUserId: PropTypes.string.isRequired,
-  recipient: PropTypes.shape({
-    anonymous_id: PropTypes.string.isRequired,
-    username: PropTypes.string,
-  }).isRequired,
+  recipient: PropTypes.object,
   onSendMessage: PropTypes.func.isRequired,
   onSendMediaMessage: PropTypes.func.isRequired,
   onMarkRead: PropTypes.func.isRequired,
   onDeleteMessage: PropTypes.func.isRequired,
   token: PropTypes.string.isRequired,
   fetchMessagesList: PropTypes.func.isRequired,
-  pendingMediaList: PropTypes.arrayOf(
-    PropTypes.shape({
-      file: PropTypes.object.isRequired,
-      type: PropTypes.string.isRequired,
-      preview: PropTypes.string.isRequired,
-    })
-  ),
+  pendingMediaList: PropTypes.array,
   setPendingMediaFile: PropTypes.func.isRequired,
   clearPendingMedia: PropTypes.func.isRequired,
+  isGroupChat: PropTypes.bool,
+  friends: PropTypes.array.isRequired,
+  setMessages: PropTypes.func.isRequired, // Додано
 };
 
 export default ChatView;

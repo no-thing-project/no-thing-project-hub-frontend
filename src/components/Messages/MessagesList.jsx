@@ -3,6 +3,16 @@ import { Box, Typography, List, ListItem, ListItemText, Button, Divider } from "
 import { actionButtonStyles } from "../../styles/BaseStyles";
 
 const MessagesList = ({ messages, currentUserId, onMarkRead, onDeleteMessage }) => {
+  // Функція для відображення стану прочитано / непрочитано
+  const renderMessageStatus = (msg) => {
+    const isSentByCurrentUser = msg.sender_id === currentUserId;
+    return msg.is_read
+      ? "Read"
+      : isSentByCurrentUser
+      ? "Sent"
+      : "Unread";
+  };
+
   return (
     <Box sx={{ maxHeight: { xs: "50vh", md: "70vh" }, overflowY: "auto" }}>
       <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
@@ -28,9 +38,7 @@ const MessagesList = ({ messages, currentUserId, onMarkRead, onDeleteMessage }) 
               >
                 <ListItemText
                   primary={msg.content}
-                  secondary={`From: ${msg.sender_id} | To: ${msg.receiver_id} | ${
-                    msg.is_read ? "Read" : "Unread"
-                  }`}
+                  secondary={`From: ${msg.sender_id} | To: ${msg.receiver_id} | ${renderMessageStatus(msg)}`}
                   primaryTypographyProps={{ fontWeight: !msg.is_read && !isSentByCurrentUser ? 600 : 400 }}
                 />
                 <Box sx={{ display: "flex", gap: 1, mt: { xs: 1, md: 0 } }}>
