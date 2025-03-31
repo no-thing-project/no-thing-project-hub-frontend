@@ -1,41 +1,29 @@
 import { AppBar, Box, Toolbar, Typography } from "@mui/material";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUserExtras } from "../../../hooks/useUserExtras";
-import { usePoints } from "../../../hooks/usePoints";
+import { usePoints } from "../../../hooks/usePoints"; // Додаємо хук usePoints
 import { ProfileAvatar } from "../../../utils/avatarUtils";
 import { formatPoints } from "../../../utils/formatPoints";
 
-const Header = ({ currentUser, token, title, onLogout, refreshPoints }) => {
+const Header = ({ currentUser, token, title, onLogout }) => {
   const navigate = useNavigate();
   const { randomPrediction } = useUserExtras(token);
-  const { pointsData, getPoints, loading } = usePoints(token, onLogout, navigate);
+  const { pointsData, getPoints, loading } = usePoints(token, onLogout, navigate); // Використовуємо usePoints
 
   const userName = currentUser?.username ?? "Someone";
-  const userPoints = pointsData?.total_points ?? 0;
+  const userPoints = pointsData?.total_points ?? 0; // Беремо поінти з pointsData
 
-  const hasFetchedPoints = useRef(false);
-
+  // Завантажуємо початкові дані про поінти при монтуванні
   useEffect(() => {
     const controller = new AbortController();
-    const signal = controller.signal;
 
-    if (token && !pointsData && !loading && !hasFetchedPoints.current) {
-      getPoints(signal);
-      hasFetchedPoints.current = true;
+    if (!pointsData && !loading) {
+      getPoints();
     }
 
     return () => controller.abort();
-  }, [token, pointsData, getPoints, loading]);
-
-  // Оновлення поінтів через зовнішній виклик (наприклад, із ProfilePage)
-  useEffect(() => {
-    if (refreshPoints && token && !loading) {
-      const controller = new AbortController();
-      getPoints(controller.signal);
-      return () => controller.abort();
-    }
-  }, [refreshPoints, token, getPoints, loading]);
+  }, [token, pointsData, loading]);
 
   const formatDate = () => {
     const date = new Date();
