@@ -120,7 +120,6 @@ const getStatusStyle = (level) => {
       baseStyle.backgroundImage = "linear-gradient(45deg, #1D2671, #C33764)";
       break;
     case "CORE":
-      // Гармонічний різнокольоровий градієнт, що поєднує кольори рівнів нижче
       baseStyle.backgroundImage = `
         linear-gradient(
           90deg,
@@ -133,10 +132,7 @@ const getStatusStyle = (level) => {
           #F953C6 100%
         )
       `;
-      // Легке сяйво для CORE
-      baseStyle.textShadow =
-        "0 0 6px rgba(255,255,255,0.2), 0 0 12px rgba(255,255,255,0.2)";
-      // Для CORE вже встановлюємо збільшений backgroundSize
+      baseStyle.textShadow = "0 0 6px rgba(255,255,255,0.2), 0 0 12px rgba(255,255,255,0.2)";
       baseStyle.backgroundSize = "400% 400%";
       break;
     default:
@@ -149,7 +145,7 @@ const getStatusStyle = (level) => {
     baseStyle.animation = `${shimmer} 10s ease infinite`;
     const defaultShadow = "0 0 8px rgba(255,255,255,0.4)";
     baseStyle.textShadow = baseStyle.textShadow
-      ? baseStyle.textShadow + `, ${defaultShadow}`
+      ? `${baseStyle.textShadow}, ${defaultShadow}`
       : defaultShadow;
   }
 
@@ -158,11 +154,9 @@ const getStatusStyle = (level) => {
 
 const StatusBadge = ({ level }) => {
   return (
-    <Box sx={getStatusStyle(level)}>
-      <Typography variant="inherit" component="span">
-        {level}
-      </Typography>
-    </Box>
+    <Typography component="span" sx={getStatusStyle(level)}>
+      {level}
+    </Typography>
   );
 };
 
