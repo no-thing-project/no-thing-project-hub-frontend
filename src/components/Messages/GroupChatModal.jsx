@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import PropTypes from "prop-types";
 import { Modal, Box, Typography, TextField, Button, FormControl, Select, MenuItem } from "@mui/material";
-import { actionButtonStyles } from "../../styles/BaseStyles";
+import { useNotification } from "../../context/NotificationContext";
 
-const modalStyles = {
+const MODAL_STYLES = {
   position: "absolute",
   top: "50%",
   left: "50%",
@@ -16,24 +16,25 @@ const modalStyles = {
 };
 
 const GroupChatModal = ({ open, onClose, friends, currentUserId, onCreate }) => {
+  const { showNotification } = useNotification();
   const [name, setName] = useState("");
   const [selectedMembers, setSelectedMembers] = useState([]);
 
   const handleSave = () => {
     if (!name.trim() || selectedMembers.length === 0) {
-      alert("Please enter a name and select at least one member.");
+      showNotification("Please enter a name and select at least one member.", "error");
       return;
     }
     onCreate(name, selectedMembers);
+    setName("");
+    setSelectedMembers([]);
   };
 
-  const handleMemberChange = (event) => {
-    setSelectedMembers(event.target.value);
-  };
+  const handleMemberChange = (event) => setSelectedMembers(event.target.value);
 
   return (
     <Modal open={open} onClose={onClose}>
-      <Box sx={modalStyles}>
+      <Box sx={MODAL_STYLES}>
         <Typography variant="h6" gutterBottom>Create Group Chat</Typography>
         <TextField
           fullWidth
@@ -48,7 +49,9 @@ const GroupChatModal = ({ open, onClose, friends, currentUserId, onCreate }) => 
             multiple
             value={selectedMembers}
             onChange={handleMemberChange}
-            renderValue={(selected) => selected.map((id) => friends.find((f) => f.anonymous_id === id)?.username).join(", ")}
+            renderValue={(selected) =>
+              selected.map((id) => friends.find((f) => f.anonymous_id === id)?.username).join(", ")
+            }
           >
             {friends.map((friend) => (
               <MenuItem key={friend.anonymous_id} value={friend.anonymous_id}>
@@ -57,9 +60,7 @@ const GroupChatModal = ({ open, onClose, friends, currentUserId, onCreate }) => 
             ))}
           </Select>
         </FormControl>
-        <Button variant="contained" onClick={handleSave} sx={actionButtonStyles}>
-          Create
-        </Button>
+        <Button variant="contained" onClick={handleSave}>Create</Button>
       </Box>
     </Modal>
   );

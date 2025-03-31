@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+// src/components/Forms/ResetPasswordForm/ResetPasswordForm.jsx
+import React, { useState, useEffect, useRef } from "react";
 import {
   Container,
   Typography,
@@ -13,9 +14,8 @@ import {
   IconButton,
 } from "@mui/material";
 import { Visibility, VisibilityOff } from "@mui/icons-material";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import config from "../../../config";
+import { setPassword } from "../../../api/authApi";
 import { inputStyles, actionButtonStyles } from "../../../styles/BaseStyles";
 
 const ResetPasswordForm = ({ theme, onLogin }) => {
@@ -28,42 +28,35 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
+  const isSubmittingRef = useRef(false);
 
   useEffect(() => {
     try {
       const searchParams = new URLSearchParams(window.location.search);
-      const hashParams = new URLSearchParams(
-        window.location.hash.split("?")[1] || ""
-      );
-      const tokenFromUrl =
-        searchParams.get("token") || hashParams.get("token");
+      const hashParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
+      const tokenFromUrl = searchParams.get("token") || hashParams.get("token");
 
       if (tokenFromUrl) {
         setToken(tokenFromUrl);
         console.log("Token extracted from URL:", tokenFromUrl);
       } else {
-        setError(
-          "No reset token found in the URL. Please check the link or request a new one."
-        );
+        setError("No reset token found in the URL. Please check the link or request a new one.");
         console.error("No token found in URL");
       }
     } catch (err) {
-      setError(
-        "Invalid URL format. Please check the link or request a new one."
-      );
+      setError("Invalid URL format. Please check the link or request a new one.");
       console.error("Error parsing URL:", err);
     }
   }, []);
 
   const validateInputs = () => {
-    const passwordRegex =
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
 
     if (!newPassword) return "New password is required";
     if (!passwordRegex.test(newPassword))
       return "Password must contain at least 8 characters, uppercase, lowercase, and a number";
-    if (newPassword.length > 128)
-      return "Password cannot exceed 128 characters";
+    if (newPassword.length > 128) return "Password cannot exceed 128 characters";
+    if (!confirmPassword) return "Confirm password is required";
     if (newPassword !== confirmPassword) return "Passwords do not match";
     if (!token) return "Reset token is missing";
     return null;
@@ -71,54 +64,44 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
     setError("");
     setSuccess("");
-    setIsSubmitting(true);
+
+    console.log("Submitting reset password form:", { token, newPassword });
 
     const validationError = validateInputs();
     if (validationError) {
       setError(validationError);
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
       return;
     }
 
     try {
-      console.log("Sending reset password request with:", {
-        token,
-        newPassword,
-      });
-      const response = await axios.post(
-        `${config.REACT_APP_HUB_API_URL}/api/v1/auth/set-password`,
-        {
-          token,
-          newPassword,
-        }
-      );
-      console.log("Response from server:", response.data);
-
-      const { token: jwtToken, profile } = response.data;
-      if (!jwtToken || !profile) {
-        throw new Error(
-          "Invalid reset password response: Missing token or profile"
-        );
+      const response = await setPassword(token, newPassword);
+      console.log("Reset password response:", response);
+      const { accessToken, refreshToken, profile } = response;
+      if (!accessToken || !profile) {
+        throw new Error("Invalid reset password response: Missing token or profile");
       }
-
-      onLogin(jwtToken, profile);
-      localStorage.setItem("token", jwtToken);
+      onLogin(accessToken, refreshToken || null, profile); // Оновлюємо стан у useAuth
       setSuccess("Password successfully changed! Logging you in...");
+      setTimeout(() => {
+        navigate("/home", { replace: true });
+        console.log("Redirected to /home");
+      }, 3000);
     } catch (err) {
-      console.error(
-        "Error during reset password:",
-        err.response?.data || err
-      );
+      console.error("Reset password error:", err);
       const errorMessage =
-        err.response?.status === 400
+        err.status === 400
           ? "Invalid or expired reset token. Please request a new one."
-          : err.response?.data?.errors?.[0] ||
-            err.response?.data?.message ||
-            "Network error, please try again";
+          : err.message || "Network error, please try again";
       setError(errorMessage);
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -127,13 +110,6 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
     setError("");
     setSuccess("");
   };
-
-  useEffect(() => {
-    if (success) {
-      const timer = setTimeout(() => navigate("/home"), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [success, navigate]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -159,17 +135,11 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
           }}
         >
           <Box sx={{ textAlign: "center", mb: theme.spacing(3) }}>
-            <Typography
-              variant="h4"
-              sx={{ color: "text.primary", fontWeight: 600 }}
-            >
+            <Typography variant="h4" sx={{ color: "text.primary", fontWeight: 600 }}>
               Create Password
             </Typography>
-            <Typography
-              variant="body1"
-              sx={{ color: "text.secondary", mt: theme.spacing(1) }}
-            >
-              Start your journey from here
+            <Typography variant="body1" sx={{ color: "text.secondary", mt: theme.spacing(1) }}>
+              Set your new password to continue
             </Typography>
           </Box>
           <Box
@@ -192,11 +162,7 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
                     <IconButton
                       onClick={() => setShowNewPassword(!showNewPassword)}
                       edge="end"
-                      aria-label={
-                        showNewPassword
-                          ? "Hide new password"
-                          : "Show new password"
-                      }
+                      aria-label={showNewPassword ? "Hide new password" : "Show new password"}
                       sx={{ color: "text.primary" }}
                     >
                       {showNewPassword ? <Visibility /> : <VisibilityOff />}
@@ -206,11 +172,7 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
               }}
               required
               error={!!error && error.includes("password")}
-              aria-describedby={
-                error && error.includes("password")
-                  ? "new-password-error"
-                  : undefined
-              }
+              aria-describedby={error && error.includes("password") ? "new-password-error" : undefined}
               sx={inputStyles}
             />
             <TextField
@@ -224,14 +186,10 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
                 endAdornment: (
                   <InputAdornment position="end">
                     <IconButton
-                      onClick={() =>
-                        setShowConfirmPassword(!showConfirmPassword)
-                      }
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                       edge="end"
                       aria-label={
-                        showConfirmPassword
-                          ? "Hide confirm password"
-                          : "Show confirm password"
+                        showConfirmPassword ? "Hide confirm password" : "Show confirm password"
                       }
                       sx={{ color: "text.primary" }}
                     >
@@ -243,9 +201,7 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
               required
               error={!!error && error.includes("Passwords do not match")}
               aria-describedby={
-                error && error.includes("Passwords do not match")
-                  ? "confirm-password-error"
-                  : undefined
+                error && error.includes("Passwords do not match") ? "confirm-password-error" : undefined
               }
               sx={inputStyles}
             />

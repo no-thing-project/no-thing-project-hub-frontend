@@ -1,4 +1,3 @@
-// src/pages/ProfilePage.jsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Button } from '@mui/material';
@@ -13,7 +12,6 @@ import { actionButtonStyles, cancelButtonStyle } from '../styles/BaseStyles';
 import { normalizeUserData } from '../utils/profileUtils';
 import { useNotification } from '../context/NotificationContext';
 
-// Функція для порівняння об’єктів і повернення лише змінених полів
 const getChangedFields = (original, updated) => {
   const changes = {};
   for (const key in updated) {
@@ -42,6 +40,7 @@ const ProfilePage = () => {
     profileData: fetchedProfileData,
     pointsHistory,
     loading: profileLoading,
+    error: profileError,
     fetchProfileData,
     fetchProfilePointsHistory,
     updateProfileData,
@@ -52,12 +51,14 @@ const ProfilePage = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [userData, setUserData] = useState(() => normalizeUserData(currentUser || fetchedProfileData));
 
+  const isOwnProfile = anonymous_id === currentUser?.anonymous_id; // Перенесено перед useEffect
+
   useEffect(() => {
     if (authLoading) return;
     if (!isAuthenticated || !currentUser || !token) {
       clearProfileState();
       showNotification('Please log in to view your profile.', 'error');
-      navigate('/login');
+      navigate('/login', { replace: true });
       return;
     }
 
@@ -71,8 +72,6 @@ const ProfilePage = () => {
         return;
       }
 
-      const isOwnProfile = anonymous_id === currentUser.anonymous_id;
-
       try {
         const promises = [];
         if (!isOwnProfile) {
@@ -85,20 +84,15 @@ const ProfilePage = () => {
 
         const normalizedData = normalizeUserData(isOwnProfile ? currentUser : fetchedProfileData);
         if (!normalizedData) {
-          showNotification('Profile not found. Please try again or check the profile ID.', 'error');
-          navigate('/not-found', { state: { message: `Profile with ID ${anonymous_id} not found.` } });
+          showNotification(`Profile with ID ${anonymous_id} not found.`, 'error');
+          navigate('/not-found', { replace: true, state: { message: `Profile with ID ${anonymous_id} not found.` } });
           return;
         }
         setUserData(normalizedData);
       } catch (err) {
         if (err.name !== 'AbortError') {
           console.error('Error loading profile data in ProfilePage:', err);
-          if (err.message === 'Profile not found') {
-            showNotification(`Profile with ID ${anonymous_id} not found.`, 'error');
-            navigate('/not-found', { state: { message: `Profile with ID ${anonymous_id} not found.` } });
-          } else {
-            showNotification(err.message || 'Failed to load profile data', 'error');
-          }
+          showNotification(err.message || 'Failed to load profile data', 'error');
         }
       }
     };
@@ -119,9 +113,21 @@ const ProfilePage = () => {
     clearProfileState,
     fetchedProfileData,
     showNotification,
+    isOwnProfile, // Додано до залежностей
   ]);
 
-  const isOwnProfile = anonymous_id === currentUser?.anonymous_id;
+  useEffect(() => {
+    if (isOwnProfile && currentUser) {
+      const normalizedCurrentUser = normalizeUserData(currentUser);
+      setUserData((prev) => {
+        if (JSON.stringify(prev) !== JSON.stringify(normalizedCurrentUser)) {
+          console.log("Synced userData with currentUser:", normalizedCurrentUser);
+          return normalizedCurrentUser;
+        }
+        return prev;
+      });
+    }
+  }, [currentUser, isOwnProfile]);
 
   const handleEditProfile = () => {
     setIsEditing(true);
@@ -139,18 +145,23 @@ const ProfilePage = () => {
     try {
       const updatedProfile = await updateProfileData(changes);
       if (updatedProfile) {
+        console.log("Updated profile from server:", updatedProfile);
         const normalizedProfile = normalizeUserData(updatedProfile);
         setUserData(normalizedProfile);
-        updateAuthData(normalizedProfile);
+        if (isOwnProfile) {
+          updateAuthData(normalizedProfile);
+          console.log("Called updateAuthData with:", normalizedProfile);
+        }
         showNotification('Profile updated successfully!', 'success');
         setIsEditing(false);
       } else {
         throw new Error('Failed to update profile');
       }
     } catch (err) {
+      console.error("Error updating profile:", err);
       showNotification(err.message || 'Failed to update profile', 'error');
     }
-  }, [userData, currentUser, updateProfileData, updateAuthData, showNotification]);
+  }, [userData, currentUser, updateProfileData, isOwnProfile, updateAuthData, showNotification]);
 
   const handleCancelEdit = () => {
     setUserData(normalizeUserData(currentUser));
@@ -160,9 +171,13 @@ const ProfilePage = () => {
   const isLoading = authLoading || (!isOwnProfile && profileLoading);
 
   if (isLoading) return <LoadingSpinner />;
-
+  if (profileError) {
+    showNotification(profileError, "error");
+    return null;
+  }
   if (!userData) return null;
 
+  console.log("Rendering ProfilePage with userData:", userData);
   return (
     <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token} headerTitle="Profile">
       <Box sx={{ maxWidth: 1500, margin: '0 auto', p: 2 }}>

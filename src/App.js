@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { lazy, Suspense, useCallback, useEffect } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import './index.css';
 import { ThemeProvider } from '@mui/material';
@@ -7,8 +7,8 @@ import theme from './Theme';
 import LoadingSpinner from './components/Layout/LoadingSpinner';
 import useAuth from './hooks/useAuth';
 import { NotificationProvider, useNotification } from './context/NotificationContext';
+import { AuthProvider } from './context/AuthContext';
 
-// Lazy load pages to improve performance
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const BoardsPage = lazy(() => import('./pages/BoardsPage'));
@@ -29,27 +29,27 @@ const PrivateRoute = ({ element, isAuthenticated }) => {
 
 const AppContent = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, handleLogin, handleLogout, loading, error } = useAuth(navigate);
+  const { isAuthenticated, handleLogin, handleLogout, loading, error, authData } = useAuth(navigate);
   const { showNotification } = useNotification();
 
   useEffect(() => {
-    if (!isAuthenticated && window.location.pathname !== '/login' && window.location.pathname !== '/reset-password' && !loading) {
+    if (loading) return; // Чекаємо завершення завантаження
+    if (!isAuthenticated && !['/login', '/reset-password'].includes(window.location.pathname)) {
       showNotification('Please log in to continue.', 'error');
       navigate('/login', { replace: true });
+    } else if (isAuthenticated && window.location.pathname === '/login') {
+      navigate('/home', { replace: true }); // Редирект із /login на /home після логіну
     }
   }, [isAuthenticated, loading, navigate, showNotification]);
 
   useEffect(() => {
     if (error) {
       showNotification(`Authentication Error: ${error}`, 'error');
-      setTimeout(() => {
-        handleLogout('Please log in again.');
-      }, 2000); // Даємо час побачити сповіщення перед редиректом
+      setTimeout(() => handleLogout('Please log in again.'), 2000);
     }
   }, [error, showNotification, handleLogout]);
 
   if (loading) return <LoadingSpinner />;
-  if (error) return null; 
 
   return (
     <Suspense fallback={<LoadingSpinner />}>
@@ -65,45 +65,27 @@ const AppContent = () => {
             )
           }
         />
-        <Route
-          path="/home"
-          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<HomePage />} />}
-        />
+        <Route path="/home" element={<PrivateRoute isAuthenticated={isAuthenticated} element={<HomePage />} />} />
         <Route
           path="/profile/:anonymous_id"
           element={<PrivateRoute isAuthenticated={isAuthenticated} element={<ProfilePage />} />}
         />
-        <Route
-          path="/boards"
-          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<BoardsPage />} />}
-        />
+        <Route path="/boards" element={<PrivateRoute isAuthenticated={isAuthenticated} element={<BoardsPage />} />} />
         <Route
           path="/board/:board_id"
           element={<PrivateRoute isAuthenticated={isAuthenticated} element={<BoardPage />} />}
         />
-        <Route
-          path="/gates"
-          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<GatesPage />} />}
-        />
-        <Route
-          path="/gate/:gate_id"
-          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<GatePage />} />}
-        />
-        <Route
-          path="/classes"
-          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<ClassesPage />} />}
-        />
+        <Route path="/gates" element={<PrivateRoute isAuthenticated={isAuthenticated} element={<GatesPage />} />} />
+        <Route path="/gate/:gate_id" element={<PrivateRoute isAuthenticated={isAuthenticated} element={<GatePage />} />} />
+        <Route path="/classes" element={<PrivateRoute isAuthenticated={isAuthenticated} element={<ClassesPage />} />} />
         <Route
           path="/class/:class_id"
           element={<PrivateRoute isAuthenticated={isAuthenticated} element={<ClassPage />} />}
         />
-        <Route
-          path="/friends"
-          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<FriendsPage />} />}
-        />
+        <Route path="/friends" element={<PrivateRoute isAuthenticated={isAuthenticated} element={<FriendsPage />} />} />
         <Route
           path="/messages"
-          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<MessagesPage />} />}
+          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<MessagesPage user={authData} />} />}
         />
         <Route path="/not-found" element={<NotFoundPage />} />
         <Route path="*" element={<Navigate to="/not-found" replace />} />
@@ -115,11 +97,13 @@ const AppContent = () => {
 function App() {
   return (
     <ThemeProvider theme={theme}>
-        <Router>
-          <NotificationProvider>
+      <Router>
+        <NotificationProvider>
+          <AuthProvider>
             <AppContent />
-          </NotificationProvider>
-        </Router>
+          </AuthProvider>
+        </NotificationProvider>
+      </Router>
     </ThemeProvider>
   );
 }

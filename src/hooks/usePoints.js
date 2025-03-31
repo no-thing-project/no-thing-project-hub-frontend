@@ -33,6 +33,7 @@ export const usePoints = (token, onLogout, navigate) => {
       setError(null);
       try {
         const data = await fetchPoints(token, signal);
+        console.log("Fetched points data:", data);
         setPointsData(data);
         return data;
       } catch (err) {
@@ -55,10 +56,11 @@ export const usePoints = (token, onLogout, navigate) => {
       setError(null);
       try {
         const data = await transferPoints(recipientId, amount, token);
+        console.log("Points transferred, new data:", data);
         setPointsData((prev) => ({
           ...prev,
           total_points: data.sender_points,
-          donated_points: prev.donated_points + amount,
+          donated_points: (prev?.donated_points || 0) + amount,
         }));
         return data;
       } catch (err) {
@@ -81,6 +83,7 @@ export const usePoints = (token, onLogout, navigate) => {
       setError(null);
       try {
         const data = await fetchTopContributors(token, limit, signal);
+        console.log("Fetched top contributors:", data);
         setTopContributors(data);
         return data;
       } catch (err) {
@@ -103,6 +106,14 @@ export const usePoints = (token, onLogout, navigate) => {
       setError(null);
       try {
         const data = await updatePoints(targetUserId, amount, reason, token);
+        console.log("Points updated, response:", data);
+        // Якщо це оновлення для поточного користувача, оновлюємо pointsData
+        if (data.user_id === pointsData?.user_id) {
+          setPointsData((prev) => ({
+            ...prev,
+            total_points: data.total_points,
+          }));
+        }
         return data;
       } catch (err) {
         handleAuthError(err);
@@ -111,7 +122,7 @@ export const usePoints = (token, onLogout, navigate) => {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, handleAuthError, pointsData]
   );
 
   return {

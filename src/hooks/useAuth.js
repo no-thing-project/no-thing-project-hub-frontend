@@ -1,7 +1,5 @@
-// src/hooks/useAuth.js
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import api from "../api/apiClient";
-import { handleApiError } from "../api/apiClient";
+import { login, refreshToken, getProfile } from "../api/authApi";
 
 const decodeToken = (token) => {
   try {
@@ -15,10 +13,7 @@ const decodeToken = (token) => {
     );
     const payload = JSON.parse(jsonPayload);
     const currentTime = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < currentTime) {
-      console.warn("Token is expired:", payload.exp, "vs", currentTime);
-      return null;
-    }
+    if (payload.exp && payload.exp < currentTime) return null;
     return payload.user ? payload.user : payload;
   } catch (e) {
     console.error("Invalid token:", e);
@@ -28,7 +23,7 @@ const decodeToken = (token) => {
 
 const useAuth = (navigate) => {
   const [token, setToken] = useState(() => localStorage.getItem("token") || null);
-  const [refreshToken, setRefreshToken] = useState(() => localStorage.getItem("refreshToken") || null);
+  const [refreshTokenState, setRefreshTokenState] = useState(() => localStorage.getItem("refreshToken") || null);
   const [authData, setAuthData] = useState(() => {
     try {
       const storedAuthData = localStorage.getItem("authData");
@@ -44,139 +39,166 @@ const useAuth = (navigate) => {
   const isInitialValidationComplete = useRef(false);
   const refreshInProgress = useRef(false);
   const isLoggingOut = useRef(false);
+  const isLoggingIn = useRef(false);
 
-  const handleLogout = useCallback((message) => {
-    if (isLoggingOut.current) return;
-    isLoggingOut.current = true;
-
-    setToken(null);
-    setRefreshToken(null);
-    setAuthData(null);
-    localStorage.clear();
-    setError(message || "Logged out successfully.");
-    if (navigate) navigate('/login');
-  }, [navigate]);
-
-  const refreshAccessToken = useCallback(async () => {
-    if (!refreshToken || refreshInProgress.current) {
-      return false;
+  const updateAuthData = useCallback((profile) => {
+    if (!profile?.anonymous_id) {
+      console.error("Invalid authData from profile:", profile);
+      return;
     }
-    refreshInProgress.current = true;
-    try {
-      const response = await api.post("/api/v1/auth/refresh", { refreshToken });
-      const { accessToken: newToken, refreshToken: newRefreshToken } = response.data.content || response.data;
-      setToken(newToken);
-      setRefreshToken(newRefreshToken);
-      localStorage.setItem("token", newToken);
-      localStorage.setItem("refreshToken", newRefreshToken);
-      return true;
-    } catch (err) {
-      handleApiError(err, setError);
-      handleLogout("Failed to refresh token. Please log in again.");
-      return false;
-    } finally {
-      refreshInProgress.current = false;
-    }
-  }, [refreshToken, handleLogout]);
+    setAuthData((prev) => {
+      const newAuthData = { ...prev, ...profile };
+      localStorage.setItem("authData", JSON.stringify(newAuthData));
+      console.log("Auth data updated in useAuth:", newAuthData);
+      return newAuthData;
+    });
+  }, []);
 
-  const handleLogin = useCallback(
-    async (newToken, newRefreshToken, authDataFromResponse) => {
-      setLoading(true);
-      setError(null);
-      const decodedData = decodeToken(newToken);
-      const normalizedAuthData = authDataFromResponse || decodedData;
-      if (!normalizedAuthData?.anonymous_id) {
-        setError("Invalid or missing authentication data.");
-        setLoading(false);
-        return;
-      }
-      setToken(newToken);
-      setRefreshToken(newRefreshToken);
-      setAuthData(normalizedAuthData);
-      localStorage.setItem("token", newToken);
-      localStorage.setItem("refreshToken", newRefreshToken);
-      localStorage.setItem("authData", JSON.stringify(normalizedAuthData));
-      isInitialValidationComplete.current = true;
-      setLoading(false);
-      if (navigate) navigate("/home");
+  const handleLogout = useCallback(
+    (message) => {
+      if (isLoggingOut.current) return;
+      isLoggingOut.current = true;
+
+      setToken(null);
+      setRefreshTokenState(null);
+      setAuthData(null);
+      localStorage.clear();
+      setError(message || "Logged out successfully.");
+      if (navigate) navigate("/login", { replace: true });
     },
     [navigate]
   );
 
-  const updateAuthData = useCallback((newAuthData) => {
-    if (!newAuthData?.anonymous_id) {
-      console.error("Invalid authData provided for update:", newAuthData);
-      return;
+  const refreshAccessToken = useCallback(async () => {
+    if (!refreshTokenState || refreshInProgress.current) {
+      handleLogout("No refresh token available or refresh in progress.");
+      return false;
     }
-    setAuthData(newAuthData);
-    localStorage.setItem("authData", JSON.stringify(newAuthData));
-  }, []);
+    refreshInProgress.current = true;
+    setLoading(true);
+    try {
+      const { accessToken: newToken, refreshToken: newRefreshToken } = await refreshToken(refreshTokenState);
+      setToken(newToken);
+      setRefreshTokenState(newRefreshToken);
+      localStorage.setItem("token", newToken);
+      localStorage.setItem("refreshToken", newRefreshToken);
+      setError(null);
+      return true;
+    } catch (err) {
+      const errorMessage =
+        err.status === 404
+          ? "Authentication service unavailable."
+          : err.status === 403
+          ? "Refresh token invalid or expired."
+          : "Session expired.";
+      setError(errorMessage);
+      handleLogout(errorMessage);
+      return false;
+    } finally {
+      refreshInProgress.current = false;
+      setLoading(false);
+    }
+  }, [refreshTokenState, handleLogout]);
 
-  useEffect(() => {
-    const requestInterceptor = api.interceptors.request.use(
-      (config) => {
-        if (token) config.headers.Authorization = `Bearer ${token}`;
-        return config;
-      },
-      (error) => Promise.reject(error)
-    );
+  const handleLogin = useCallback(
+    async (arg1, arg2, arg3) => {
+      if (isLoggingIn.current) return;
+      isLoggingIn.current = true;
+      setLoading(true);
+      setError(null);
 
-    const responseInterceptor = api.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        const status = error.response?.status;
-        if (status === 401 && !refreshInProgress.current) {
-          const refreshed = await refreshAccessToken();
-          if (refreshed) {
-            error.config.headers.Authorization = `Bearer ${token}`;
-            return api.request(error.config);
-          }
-        } else if (status === 403) {
-          if (!isLoggingOut.current) {
-            handleLogout("Access denied. Please log in again.");
-          }
+      try {
+        let accessToken, refreshToken, profile;
+        if (typeof arg1 === "string" && !arg1.includes(".")) {
+          const response = await login(arg1, arg2);
+          accessToken = response.accessToken;
+          refreshToken = response.refreshToken;
+          profile = response.profile;
+        } else {
+          accessToken = arg1;
+          refreshToken = arg2;
+          profile = arg3;
         }
-        return Promise.reject(error);
-      }
-    );
 
-    return () => {
-      api.interceptors.request.eject(requestInterceptor);
-      api.interceptors.response.eject(responseInterceptor);
-    };
-  }, [token, refreshAccessToken, handleLogout]);
+        const decodedData = decodeToken(accessToken);
+        const normalizedAuthData = profile || decodedData;
+        if (!normalizedAuthData?.anonymous_id) {
+          throw new Error("Invalid authentication data.");
+        }
+        setToken(accessToken);
+        setRefreshTokenState(refreshToken);
+        setAuthData(normalizedAuthData);
+        localStorage.setItem("token", accessToken);
+        localStorage.setItem("refreshToken", refreshToken);
+        localStorage.setItem("authData", JSON.stringify(normalizedAuthData));
+        isInitialValidationComplete.current = true;
+        console.log("Login state updated:", { accessToken, refreshToken, profile });
+      } catch (err) {
+        setError(err.message || "Login failed.");
+      } finally {
+        setLoading(false);
+        isLoggingIn.current = false;
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     const validateAuth = async () => {
-      if (isInitialValidationComplete.current) {
+      if (isInitialValidationComplete.current || isLoggingIn.current) {
         setLoading(false);
         return;
       }
       setLoading(true);
       try {
-        if (!token && !refreshToken) return;
+        if (!token && !refreshTokenState) {
+          handleLogout("No authentication data found.");
+          return;
+        }
         const payload = decodeToken(token);
         if (!payload) {
-          await refreshAccessToken();
+          const refreshed = await refreshAccessToken();
+          if (!refreshed) {
+            handleLogout("Token expired and refresh failed.");
+          }
         } else if (!authData?.anonymous_id) {
-          await handleLogin(token, refreshToken, payload);
+          const profile = await getProfile(token);
+          updateAuthData(profile);
         }
+      } catch (err) {
+        handleLogout("Authentication validation failed.");
       } finally {
         setLoading(false);
         isInitialValidationComplete.current = true;
       }
     };
     validateAuth();
-  }, [token, refreshToken, authData, handleLogin, refreshAccessToken]);
+  }, [token, refreshTokenState, authData, refreshAccessToken, handleLogout, updateAuthData]);
+
+  useEffect(() => {
+    if (!token || isLoggingIn.current) return;
+    const payload = decodeToken(token);
+    if (!payload?.exp) return;
+
+    const timeToExpire = payload.exp * 1000 - Date.now();
+    const refreshThreshold = 5 * 60 * 1000;
+
+    if (timeToExpire < refreshThreshold) {
+      refreshAccessToken();
+    } else {
+      const timeout = setTimeout(refreshAccessToken, timeToExpire - refreshThreshold);
+      return () => clearTimeout(timeout);
+    }
+  }, [token, refreshAccessToken]);
 
   const isAuthenticated = useMemo(
-    () => !!token && !!authData?.anonymous_id && !!refreshToken,
-    [token, authData, refreshToken]
+    () => !!token && !!authData?.anonymous_id && !!refreshTokenState,
+    [token, authData, refreshTokenState]
   );
 
   return {
     token,
-    refreshToken,
+    refreshToken: refreshTokenState,
     authData,
     isAuthenticated,
     handleLogin,

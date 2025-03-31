@@ -1,116 +1,146 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
-  fetchMessages,
-  fetchGroupChats,
   sendMessage,
+  fetchMessages,
   markMessageAsRead,
+  updateMessage,
   deleteMessage,
   uploadFile,
-  createGroupChat,
-  deleteGroupChat,
-  deleteConversation,
-  loadInitialMessagesData,
-} from "../api/messagesApi";
+} from "../api/messageApi";
+import { INITIAL_LOADING_STATE, DEFAULT_MESSAGES, MESSAGES_PAGE_LIMIT } from "../constants/chatConstants";
+import { sortMessagesByTimestamp } from "../utils/helpers";
 
-const useMessages = (token, userId, onLogout, navigate, friends = []) => {
-  const [messages, setMessages] = useState([]);
-  const [groupChats, setGroupChats] = useState([]);
-  const [loading, setLoading] = useState(false);
+const useMessages = (token, onLogout, navigate) => {
+  const [messages, setMessages] = useState(DEFAULT_MESSAGES);
+  const [loading, setLoading] = useState(INITIAL_LOADING_STATE);
   const [error, setError] = useState(null);
   const [pendingMediaList, setPendingMediaList] = useState([]);
+  const isMounted = useRef(true);
 
-  const handleAuthError = useCallback((err) => {
-    if (err.status === 401 || err.status === 403) {
-      onLogout("Your session has expired. Please log in again.");
-      navigate("/login");
-      setError("Session expired. Redirecting to login...");
-    } else {
-      setError(err.message || "An unexpected error occurred.");
-    }
-  }, [onLogout, navigate]);
-
-  const updateMessages = useCallback((updater) => setMessages((prev) => updater(prev).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))), []);
+  const handleAuthError = useCallback(
+    (err) => {
+      if (!isMounted.current) return;
+      if (err.status === 401 || err.status === 403) {
+        onLogout("Your session has expired. Please log in again.");
+        navigate("/login");
+      } else if (err.name !== "AbortError") {
+        setError(err.message || "An unexpected error occurred.");
+      }
+    },
+    [onLogout, navigate]
+  );
 
   const fetchMessagesList = useCallback(
-    async ({ signal, withUserId, groupId, page = 1, limit = 20 } = {}) => {
-      if (!token) return [];
+    async ({ signal, withUserId, groupId, conversationId, page = 1, limit = MESSAGES_PAGE_LIMIT } = {}) => {
+      if (!token) return DEFAULT_MESSAGES;
       try {
-        const fetchedMessages = await fetchMessages(token, { withUserId, groupId, offset: (page - 1) * limit, limit }, signal);
-        console.log("Fetched messages:", fetchedMessages);
-        return fetchedMessages;
+        const fetchedMessages = await fetchMessages(
+          token,
+          { withUserId, groupId, conversationId, offset: (page - 1) * limit, limit },
+          signal
+        );
+        return sortMessagesByTimestamp(fetchedMessages);
       } catch (err) {
         handleAuthError(err);
-        throw err;
+        return DEFAULT_MESSAGES;
       }
     },
     [token, handleAuthError]
   );
 
-  const loadInitialData = useCallback(async () => {
-    if (!token || friends.length === 0) return;
-    setLoading(true);
-    setError(null);
-    try {
-      console.log("Fetching initial data with token:", token);
-      console.log("Friends passed:", friends);
-      const data = await loadInitialMessagesData(token, friends);
-      console.log("Loaded data:", data);
-      setMessages(data.messages);
-      setGroupChats(data.groupChats);
-    } catch (err) {
-      if (err.name !== "AbortError") {
-        console.error("Load initial data error:", err);
-        handleAuthError(err);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [token, friends, handleAuthError]);
-
   useEffect(() => {
-    loadInitialData();
-  }, [loadInitialData]);
+    return () => {
+      isMounted.current = false;
+      pendingMediaList.forEach((item) => item.preview && URL.revokeObjectURL(item.preview));
+    };
+  }, [pendingMediaList]);
 
-  const sendMessageBase = useCallback(async (messageData, isMedia = false) => {
-    if (!token || (!messageData.recipientId && !messageData.groupId)) {
-      setError("Missing required message data.");
-      return null;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const newMessage = await sendMessage(
-        { ...messageData, type: isMedia ? (messageData.media.length === 1 ? messageData.media[0].type : "mixed") : "text" },
-        token
-      );
-      console.log("New message from sendMessage:", newMessage); // Дебаг
-      updateMessages((prev) => [...prev, newMessage]);
-      if (isMedia) setPendingMediaList([]);
-      return newMessage;
-    } catch (err) {
-      handleAuthError(err);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [token, handleAuthError, updateMessages]);
+  // Початкове завантаження повідомлень
+  useEffect(() => {
+    const loadInitialMessages = async () => {
+      if (!token) {
+        setLoading((prev) => ({ ...prev, initial: false }));
+        return;
+      }
+      setLoading((prev) => ({ ...prev, initial: true }));
+      try {
+        const fetchedMessages = await fetchMessagesList({ signal: new AbortController().signal });
+        if (isMounted.current) {
+          setMessages(fetchedMessages);
+        }
+      } catch (err) {
+        handleAuthError(err);
+      } finally {
+        if (isMounted.current) {
+          setLoading((prev) => ({ ...prev, initial: false }));
+        }
+      }
+    };
 
+    loadInitialMessages();
+  }, [token, fetchMessagesList, handleAuthError]);
 
-  const sendNewMessage = useCallback((messageData) => sendMessageBase({ ...messageData, content: messageData.content || "Message" }), [sendMessageBase]);
+  const sendMessageBase = useCallback(
+    async (messageData, isMedia = false) => {
+      if (!token || (!messageData.groupId && !messageData.conversationId)) {
+        setError("Missing required message data.");
+        return null;
+      }
+      setLoading((prev) => ({ ...prev, action: true }));
+      try {
+        const payload = {
+          ...messageData,
+          type: isMedia ? (messageData.media.length === 1 ? messageData.media[0].type : "mixed") : "text",
+        };
+        const newMessage = await sendMessage(payload, token);
+        setMessages((prev) => sortMessagesByTimestamp([...prev, newMessage]));
+        if (isMedia) setPendingMediaList([]);
+        return newMessage;
+      } catch (err) {
+        handleAuthError(err);
+        return null;
+      } finally {
+        if (isMounted.current) setLoading((prev) => ({ ...prev, action: false }));
+      }
+    },
+    [token, handleAuthError]
+  );
 
-  const sendMediaMessage = useCallback(async (messageData) => {
-    const { recipientId, groupId, content = "Media message", media = [], replyTo } = messageData;
-    if (!media.length) return sendNewMessage({ recipientId, groupId, content, replyTo });
-    const finalMedia = await Promise.all(media.map(async (item) => ({
-      type: item.type,
-      content: await uploadFile(item.file, token),
-      shape: item.shape,
-    })));
-    return sendMessageBase({ recipientId, groupId, content, media: finalMedia, replyTo }, true);
-  }, [sendMessageBase, token]);
+  const sendNewMessage = useCallback(
+    (messageData) => sendMessageBase({ ...messageData, content: messageData.content || "Message" }, false),
+    [sendMessageBase]
+  );
+
+  const sendMediaMessage = useCallback(
+    async (messageData) => {
+      const { groupId, conversationId, content = "Media message", media = [], replyTo } = messageData;
+      if (!media.length) return sendNewMessage({ groupId, conversationId, content, replyTo });
+      setLoading((prev) => ({ ...prev, action: true }));
+      try {
+        const finalMedia = await Promise.all(
+          media.map(async (item) => {
+            const uploadedFile = await uploadFile(item.file, token);
+            return {
+              type: item.type,
+              content: uploadedFile.url,
+              shape: item.shape || "square",
+              metadata: item.metadata || {},
+            };
+          })
+        );
+        return await sendMessageBase({ groupId, conversationId, content, media: finalMedia, replyTo }, true);
+      } catch (err) {
+        handleAuthError(err);
+        return null;
+      } finally {
+        if (isMounted.current) setLoading((prev) => ({ ...prev, action: false }));
+      }
+    },
+    [token, sendMessageBase, handleAuthError]
+  );
 
   const setPendingMediaFile = useCallback((media) => {
-    if (!media?.file || !media.type) return setError("File or type is missing.");
+    if (!media?.file || !media.type) return;
     const preview = URL.createObjectURL(media.file);
     setPendingMediaList((prev) => [...prev, { ...media, preview }]);
   }, []);
@@ -128,93 +158,65 @@ const useMessages = (token, userId, onLogout, navigate, friends = []) => {
     });
   }, []);
 
-  const markMessageRead = useCallback(async (messageId) => {
-    if (!token || !messageId) return setError("Missing token or message ID.");
-    setLoading(true);
-    setError(null);
-    try {
-      const updatedMessage = await markMessageAsRead(messageId, token);
-      updateMessages((prev) => prev.map((m) => (m.message_id === messageId ? { ...m, is_read: true, status: "read" } : m)));
-      return updatedMessage;
-    } catch (err) {
-      handleAuthError(err);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [token, handleAuthError, updateMessages]);
+  const markMessageRead = useCallback(
+    async (messageId) => {
+      if (!token || !messageId) return null;
+      setLoading((prev) => ({ ...prev, action: true }));
+      try {
+        const updatedMessage = await markMessageAsRead(messageId, token);
+        setMessages((prev) =>
+          prev.map((m) => (m.message_id === messageId ? { ...m, is_read: true, status: "read" } : m))
+        );
+        return updatedMessage;
+      } catch (err) {
+        handleAuthError(err);
+        return null;
+      } finally {
+        if (isMounted.current) setLoading((prev) => ({ ...prev, action: false }));
+      }
+    },
+    [token, handleAuthError]
+  );
 
-  const deleteExistingMessage = useCallback(async (messageId) => {
-    if (!token || !messageId) return setError("Missing token or message ID.");
-    setLoading(true);
-    setError(null);
-    try {
-      await deleteMessage(messageId, token);
-      updateMessages((prev) => prev.filter((m) => m.message_id !== messageId));
-    } catch (err) {
-      handleAuthError(err);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [token, handleAuthError, updateMessages]);
+  const updateExistingMessage = useCallback(
+    async (messageId, content) => {
+      if (!token || !messageId || !content) return null;
+      setLoading((prev) => ({ ...prev, action: true }));
+      try {
+        const updatedMessage = await updateMessage(messageId, content, token);
+        setMessages((prev) =>
+          prev.map((m) => (m.message_id === messageId ? { ...m, content } : m))
+        );
+        return updatedMessage;
+      } catch (err) {
+        handleAuthError(err);
+        return null;
+      } finally {
+        if (isMounted.current) setLoading((prev) => ({ ...prev, action: false }));
+      }
+    },
+    [token, handleAuthError]
+  );
 
-  const createNewGroupChat = useCallback(async (name, members) => {
-    if (!token || !name || !members.length) return setError("Missing group chat data.");
-    setLoading(true);
-    setError(null);
-    try {
-      const group = await createGroupChat(name, members, token);
-      setGroupChats((prev) => [...prev, group]); // Оновлюємо глобальний стан
-      return group;
-    } catch (err) {
-      handleAuthError(err);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [token, handleAuthError]);
-
-  const deleteExistingGroupChat = useCallback(async (groupId) => {
-    if (!token || !groupId) return setError("Missing token or group ID.");
-    setLoading(true);
-    setError(null);
-    try {
-      await deleteGroupChat(groupId, token);
-      setGroupChats((prev) => prev.filter((g) => g.group_id !== groupId));
-      updateMessages((prev) => prev.filter((m) => m.group_id !== groupId));
-    } catch (err) {
-      handleAuthError(err);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [token, handleAuthError, updateMessages]);
-
-  const deleteExistingConversation = useCallback(async (conversationId) => {
-    if (!token || !conversationId) return setError("Missing token or conversation ID.");
-    setLoading(true);
-    setError(null);
-    try {
-      await deleteConversation(conversationId, token);
-      updateMessages((prev) => prev.filter((m) => m.conversation_id !== conversationId));
-    } catch (err) {
-      handleAuthError(err);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [token, handleAuthError, updateMessages]);
-
-  const refreshMessages = useCallback(() => {
-    loadInitialData();
-  }, [loadInitialData]);
+  const deleteExistingMessage = useCallback(
+    async (messageId) => {
+      if (!token || !messageId) return;
+      setLoading((prev) => ({ ...prev, action: true }));
+      try {
+        await deleteMessage(messageId, token);
+        setMessages((prev) => prev.filter((m) => m.message_id !== messageId));
+      } catch (err) {
+        handleAuthError(err);
+      } finally {
+        if (isMounted.current) setLoading((prev) => ({ ...prev, action: false }));
+      }
+    },
+    [token, handleAuthError]
+  );
 
   return {
     messages,
     setMessages,
-    groupChats,
-    setGroupChats,
     loading,
     error,
     pendingMediaList,
@@ -224,11 +226,8 @@ const useMessages = (token, userId, onLogout, navigate, friends = []) => {
     setPendingMediaFile,
     clearPendingMedia,
     markMessageRead,
+    updateExistingMessage,
     deleteExistingMessage,
-    createNewGroupChat,
-    deleteExistingGroupChat,
-    deleteExistingConversation,
-    refreshMessages,
   };
 };
 

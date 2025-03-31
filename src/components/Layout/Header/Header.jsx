@@ -1,19 +1,41 @@
-// src/components/Layout/Header/Header.jsx
 import { AppBar, Box, Toolbar, Typography } from "@mui/material";
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUserExtras } from "../../../hooks/useUserExtras";
-import {
-  ProfileAvatar
-} from "../../../utils/avatarUtils";
+import { usePoints } from "../../../hooks/usePoints";
+import { ProfileAvatar } from "../../../utils/avatarUtils";
 import { formatPoints } from "../../../utils/formatPoints";
 
-const Header = ({ currentUser, token, title }) => {
+const Header = ({ currentUser, token, title, onLogout, refreshPoints }) => {
   const navigate = useNavigate();
   const { randomPrediction } = useUserExtras(token);
+  const { pointsData, getPoints, loading } = usePoints(token, onLogout, navigate);
 
-  const userName = currentUser?.username || "Someone";
-  const userPoints = currentUser?.total_points || 0;
+  const userName = currentUser?.username ?? "Someone";
+  const userPoints = pointsData?.total_points ?? 0;
+
+  const hasFetchedPoints = useRef(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    if (token && !pointsData && !loading && !hasFetchedPoints.current) {
+      getPoints(signal);
+      hasFetchedPoints.current = true;
+    }
+
+    return () => controller.abort();
+  }, [token, pointsData, getPoints, loading]);
+
+  // Оновлення поінтів через зовнішній виклик (наприклад, із ProfilePage)
+  useEffect(() => {
+    if (refreshPoints && token && !loading) {
+      const controller = new AbortController();
+      getPoints(controller.signal);
+      return () => controller.abort();
+    }
+  }, [refreshPoints, token, getPoints, loading]);
 
   const formatDate = () => {
     const date = new Date();
@@ -33,7 +55,7 @@ const Header = ({ currentUser, token, title }) => {
     }
   };
 
-  const headerText = `Передбачення для ${userName}. ${randomPrediction}`;
+  const headerText = `Передбачення для ${userName}. ${randomPrediction || ""}`;
 
   return (
     <AppBar

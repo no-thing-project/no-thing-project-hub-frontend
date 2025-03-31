@@ -1,10 +1,9 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { Box, Typography, Button, Modal, IconButton, Menu, MenuItem } from "@mui/material";
 import { Stop, ShapeLine } from "@mui/icons-material";
-import { actionButtonStyles } from "../../styles/BaseStyles";
 
-const modalStyles = {
+const MODAL_STYLES = {
   position: "absolute",
   top: "50%",
   left: "50%",
@@ -19,47 +18,54 @@ const modalStyles = {
   gap: 2,
 };
 
-const videoShapes = {
+const VIDEO_SHAPES = {
   square: "none",
   circle: "circle(50%)",
   heart: "path('M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z')",
   diamond: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)",
 };
 
-const RecorderModal = ({ open, onClose, stream, recordingTime, onStop, initialShape = "square" }) => {
+const VIDEO_STYLES = (shape) => ({
+  width: "100%",
+  maxWidth: "400px",
+  borderRadius: shape === "square" ? "8px" : "0",
+  clipPath: VIDEO_SHAPES[shape],
+  backgroundColor: "black",
+});
+
+const RecorderModal = ({ open, onClose, stream, recordingTime: externalRecordingTime, onStop, initialShape = "square" }) => {
   const videoRef = useRef(null);
   const [shape, setShape] = useState(initialShape);
   const [anchorEl, setAnchorEl] = useState(null);
   const [mediaError, setMediaError] = useState(null);
+  const [recordingTime, setRecordingTime] = useState(externalRecordingTime);
+  const timerRef = useRef(null);
 
   useEffect(() => {
-    const checkMediaAccess = async () => {
-      try {
-        const testStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        testStream.getTracks().forEach((track) => track.stop());
-      } catch (err) {
-        setMediaError("Cannot access camera or microphone. Please check permissions.");
-      }
-    };
-    if (open) checkMediaAccess();
-  }, [open]);
-
-  useEffect(() => {
-    const videoElement = videoRef.current;
-    if (open && videoElement && stream) {
-      if (stream.active && stream.getVideoTracks().length > 0) {
+    if (open && stream) {
+      const videoElement = videoRef.current;
+      if (videoElement && stream.active && stream.getVideoTracks().length > 0) {
         videoElement.srcObject = stream;
-        videoElement.play().catch((err) => console.error("Error playing video:", err));
+        videoElement.play().catch((err) => {
+          console.error("Error playing video:", err);
+          setMediaError("Failed to play video stream.");
+        });
       } else {
         setMediaError("Stream is not active or has no video tracks.");
       }
+
+      timerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+
+      return () => {
+        clearInterval(timerRef.current);
+        if (videoElement && videoElement.srcObject) {
+          videoElement.srcObject.getTracks().forEach((track) => track.stop());
+          videoElement.srcObject = null;
+        }
+      };
     }
-    return () => {
-      if (videoElement && videoElement.srcObject) {
-        videoElement.srcObject.getTracks().forEach((track) => track.stop());
-        videoElement.srcObject = null;
-      }
-    };
   }, [open, stream]);
 
   const formatTime = (seconds) =>
@@ -72,29 +78,21 @@ const RecorderModal = ({ open, onClose, stream, recordingTime, onStop, initialSh
     handleShapeMenuClose();
   };
 
-  const handleStop = () => onStop(shape);
+  const handleStop = () => {
+    clearInterval(timerRef.current);
+    onStop(shape);
+    setRecordingTime(0);
+  };
 
   return (
     <Modal open={open} onClose={onClose}>
-      <Box sx={modalStyles}>
+      <Box sx={MODAL_STYLES}>
         {mediaError ? (
           <Typography variant="body1" color="error">{mediaError}</Typography>
         ) : (
           <>
             <Box sx={{ position: "relative" }}>
-              <video
-                ref={videoRef}
-                style={{
-                  width: "100%",
-                  maxWidth: "400px",
-                  borderRadius: shape === "square" ? "8px" : "0",
-                  clipPath: videoShapes[shape],
-                  backgroundColor: "black",
-                }}
-                muted
-                autoPlay
-                playsInline
-              />
+              <video ref={videoRef} style={VIDEO_STYLES(shape)} muted autoPlay playsInline />
               <IconButton
                 size="small"
                 onClick={handleShapeMenuOpen}
@@ -103,36 +101,25 @@ const RecorderModal = ({ open, onClose, stream, recordingTime, onStop, initialSh
                 <ShapeLine />
               </IconButton>
             </Box>
-            <Menu
-              anchorEl={anchorEl}
-              open={Boolean(anchorEl)}
-              onClose={handleShapeMenuClose}
-              anchorOrigin={{ vertical: "top", horizontal: "right" }}
-              transformOrigin={{ vertical: "top", horizontal: "right" }}
-            >
-              {Object.keys(videoShapes).map((shapeKey) => (
-                <MenuItem key={shapeKey} onClick={() => handleShapeChange(shapeKey)}>
-                  {shapeKey.charAt(0).toUpperCase() + shapeKey.slice(1)}
-                </MenuItem>
-              ))}
-            </Menu>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Typography variant="caption" color="error" sx={{ animation: "blink 1s infinite" }}>
-                {formatTime(recordingTime)}
-              </Typography>
-              <Button
-                variant="contained"
-                color="error"
-                startIcon={<Stop />}
-                onClick={handleStop}
-                sx={actionButtonStyles}
-              >
-                Stop Recording
-              </Button>
-            </Box>
+            <Typography variant="body1">{formatTime(recordingTime)}</Typography>
+            <Button variant="contained" color="error" startIcon={<Stop />} onClick={handleStop}>
+              Stop Recording
+            </Button>
           </>
         )}
-        <style>{`@keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }`}</style>
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleShapeMenuClose}
+          anchorOrigin={{ vertical: "top", horizontal: "right" }}
+          transformOrigin={{ vertical: "top", horizontal: "right" }}
+        >
+          {Object.keys(VIDEO_SHAPES).map((shapeOption) => (
+            <MenuItem key={shapeOption} onClick={() => handleShapeChange(shapeOption)}>
+              {shapeOption.charAt(0).toUpperCase() + shapeOption.slice(1)}
+            </MenuItem>
+          ))}
+        </Menu>
       </Box>
     </Modal>
   );
@@ -142,12 +129,13 @@ RecorderModal.propTypes = {
   open: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   stream: PropTypes.object,
-  recordingTime: PropTypes.number.isRequired,
+  recordingTime: PropTypes.number,
   onStop: PropTypes.func.isRequired,
   initialShape: PropTypes.oneOf(["square", "circle", "heart", "diamond"]),
 };
 
 RecorderModal.defaultProps = {
+  recordingTime: 0,
   initialShape: "square",
 };
 

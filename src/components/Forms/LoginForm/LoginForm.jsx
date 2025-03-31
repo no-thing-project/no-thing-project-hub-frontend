@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from "react";
+// src/components/Forms/LoginForm/LoginForm.jsx
+// src/components/Forms/LoginForm/LoginForm.jsx
+import React, { useState, useEffect, useRef } from "react";
 import {
   Container,
   Typography,
@@ -16,9 +18,8 @@ import {
   IconButton,
 } from "@mui/material";
 import { Visibility, VisibilityOff } from "@mui/icons-material";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import config from "../../../config";
+import { login, forgotPassword } from "../../../api/authApi";
 import { inputStyles, actionButtonStyles } from "../../../styles/BaseStyles";
 
 const LoginForm = ({ theme, onLogin }) => {
@@ -31,13 +32,13 @@ const LoginForm = ({ theme, onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
+  const isSubmittingRef = useRef(false);
 
   const registrationLink = "https://secure.wayforpay.com/donate/NoThingProject";
 
   const validateInputs = () => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const passwordRegex =
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
 
     if (!email) return "Email is required";
     if (!emailRegex.test(email)) return "Please enter a valid email address";
@@ -52,50 +53,51 @@ const LoginForm = ({ theme, onLogin }) => {
   const validateForgotEmail = () => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!forgotEmail) return "Email is required";
-    if (!emailRegex.test(forgotEmail))
-      return "Please enter a valid email address";
+    if (!emailRegex.test(forgotEmail)) return "Please enter a valid email address";
     if (forgotEmail.length > 255) return "Email cannot exceed 255 characters";
     return null;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
     setError("");
     setSuccess("");
-    setIsSubmitting(true);
+
+    console.log("Submitting login form:", { email, password });
 
     const validationError = validateInputs();
     if (validationError) {
       setError(validationError);
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
       return;
     }
 
     try {
-      const res = await axios.post(
-        `${config.REACT_APP_HUB_API_URL}/api/v1/auth/login`,
-        {
-          email,
-          password,
-        }
-      );
-      const { token, profile } = res.data;
-      if (!token || !profile) {
-        throw new Error("Invalid login response: Missing token or profile");
+      const response = await login(email, password);
+      console.log("Login response:", response);
+      const { accessToken, refreshToken, profile } = response;
+      if (!accessToken || !refreshToken || !profile) {
+        throw new Error("Invalid login response: Missing tokens or profile");
       }
-      localStorage.setItem("token", token);
-      onLogin(token, profile);
+      onLogin(accessToken, refreshToken, profile); // Оновлюємо стан у useAuth
       setSuccess("Login successful! Redirecting...");
+      setTimeout(() => {
+        navigate("/home", { replace: true });
+        console.log("Redirected to /home");
+      }, 3000);
     } catch (err) {
-      console.error("Login error:", err.response?.data || err);
+      console.error("Login error:", err);
       const errorMessage =
-        err.response?.status === 401
+        err.status === 401
           ? "Invalid email or password. Please try again."
-          : err.response?.data?.errors?.[0] ||
-            err.response?.data?.message ||
-            "Network error, please try again";
+          : err.message || "Network error, please try again";
       setError(errorMessage);
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -110,18 +112,15 @@ const LoginForm = ({ theme, onLogin }) => {
     }
 
     try {
-      await axios.post(
-        `${config.REACT_APP_HUB_API_URL}/api/v1/auth/forgot-password`,
-        { email: forgotEmail }
-      );
+      const response = await forgotPassword(forgotEmail);
+      if (response.code !== 200) {
+        throw new Error(response.errors?.[0] || "Failed to send reset email");
+      }
       setSuccess("An email with a password reset link has been sent!");
       setTimeout(() => handleCloseModal(), 2000);
     } catch (err) {
-      console.error("Forgot password error:", err.response?.data || err);
-      const errorMessage =
-        err.response?.data?.errors?.[0] ||
-        err.response?.data?.message ||
-        "Network error, please try again";
+      console.error("Forgot password error:", err);
+      const errorMessage = err.message || "Network error, please try again";
       setError(errorMessage);
     }
   };
@@ -137,13 +136,6 @@ const LoginForm = ({ theme, onLogin }) => {
     setError("");
     setSuccess("");
   };
-
-  useEffect(() => {
-    if (success) {
-      const timer = setTimeout(() => navigate("/home"), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [success, navigate]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -171,16 +163,10 @@ const LoginForm = ({ theme, onLogin }) => {
             }}
           >
             <Box sx={{ textAlign: "center", mb: theme.spacing(3) }}>
-              <Typography
-                variant="h4"
-                sx={{ color: "text.primary", fontWeight: 600 }}
-              >
+              <Typography variant="h4" sx={{ color: "text.primary", fontWeight: 600 }}>
                 Sign In
               </Typography>
-              <Typography
-                variant="body1"
-                sx={{ color: "text.secondary", mt: theme.spacing(1) }}
-              >
+              <Typography variant="body1" sx={{ color: "text.secondary", mt: theme.spacing(1) }}>
                 Sign in to continue
               </Typography>
             </Box>
@@ -220,9 +206,7 @@ const LoginForm = ({ theme, onLogin }) => {
                       <IconButton
                         onClick={() => setShowPassword(!showPassword)}
                         edge="end"
-                        aria-label={
-                          showPassword ? "Hide password" : "Show password"
-                        }
+                        aria-label={showPassword ? "Hide password" : "Show password"}
                         sx={{ color: "text.primary" }}
                       >
                         {showPassword ? <Visibility /> : <VisibilityOff />}
@@ -233,9 +217,7 @@ const LoginForm = ({ theme, onLogin }) => {
                 required
                 error={!!error && error.includes("Password")}
                 aria-describedby={
-                  error && error.includes("Password")
-                    ? "password-error"
-                    : undefined
+                  error && error.includes("Password") ? "password-error" : undefined
                 }
               />
 

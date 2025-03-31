@@ -33,7 +33,8 @@ const HomePage = () => {
     if (authLoading) return;
     if (!isAuthenticated || !currentUser || !token) {
       clearProfileState();
-      navigate("/login");
+      showNotification("Please log in to continue.", "error");
+      navigate("/login", { replace: true });
       return;
     }
 
@@ -43,6 +44,7 @@ const HomePage = () => {
     const loadProfile = async () => {
       if (!initialAnonymousIdRef.current) {
         handleLogout("User data is incomplete. Please log in again.");
+        showNotification("User data incomplete.", "error");
         return;
       }
 
@@ -57,16 +59,13 @@ const HomePage = () => {
           console.log(`Profile fetched in ${endTime - startTime}ms, result:`, result);
 
           if (!result || !result.profileData) {
-            navigate("/not-found", { state: { message: `Profile with ID ${targetId} not found.` } });
+            showNotification(`Profile with ID ${targetId} not found.`, "error");
+            navigate("/not-found", { replace: true, state: { message: `Profile with ID ${targetId} not found.` } });
           }
         } catch (err) {
           if (err.name !== "AbortError") {
             console.error("Error loading profile in HomePage:", err);
-            if (err.message === "Profile not found") {
-              navigate("/not-found", { state: { message: `Profile with ID ${targetId} not found.` } });
-            } else {
-              showNotification(err.message || "Failed to load profile", "error");
-            }
+            showNotification(err.message || "Failed to load profile", "error");
           }
         }
       }
@@ -81,9 +80,16 @@ const HomePage = () => {
   const profileData = isOwnProfile ? currentUser : fetchedProfileData;
 
   const isLoading = authLoading || (anonymous_id && anonymous_id !== initialAnonymousIdRef.current && profileLoading);
+
   if (isLoading) return <LoadingSpinner />;
-  if (profileError) showNotification(profileError, "error");
-  if (!profileData) showNotification("Profile not found. Please try again or check the profile ID.", "error");
+  if (profileError) {
+    showNotification(profileError, "error");
+    return null;
+  }
+  if (!profileData) {
+    showNotification("Profile not found. Please try again or check the profile ID.", "error");
+    return null;
+  }
 
   console.log("Rendering HomePage with profileData:", profileData);
   return (
