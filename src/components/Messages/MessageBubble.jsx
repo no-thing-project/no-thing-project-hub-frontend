@@ -5,19 +5,38 @@ import { Delete, Reply, Forward, Save } from "@mui/icons-material";
 import { motion } from "framer-motion";
 
 const MEDIA_RENDERERS = {
-  image: (item) => <img src={item.content} alt="media" style={{ maxWidth: "100%", borderRadius: "10px" }} />,
+  image: (item) => (
+    <img
+      src={item.content}
+      alt="media"
+      style={{ maxWidth: "100%", borderRadius: "10px" }}
+      onError={(e) => (e.target.src = "/fallback-image.jpg")}
+    />
+  ),
   video: (item) => (
     <video
       controls
       src={item.content}
-      style={{ maxWidth: "100%", borderRadius: "10px", clipPath: `url(#${item.shape || "square"})` }}
+      style={{
+        maxWidth: "100%",
+        borderRadius: "10px",
+        clipPath: `url(#${item.shape || "square"})`,
+      }}
     />
   ),
   voice: (item) => <audio controls src={item.content} />,
-  sticker: (item) => <img src={item.content} alt="sticker" style={{ maxWidth: "100px", borderRadius: "10px" }} />,
+  sticker: (item) => (
+    <img
+      src={item.content}
+      alt="sticker"
+      style={{ maxWidth: "100px", borderRadius: "10px" }}
+    />
+  ),
   file: (item) => (
     <a href={item.content} download>
-      <Typography variant="body2" color="inherit">Download: {item.content.split("/").pop()}</Typography>
+      <Typography variant="body2" color="inherit">
+        Download: {item.content.split("/").pop()}
+      </Typography>
     </a>
   ),
 };
@@ -87,8 +106,7 @@ const MessageBubble = ({
   };
 
   const handleSave = () => {
-    // Логіка збереження повідомлення (наприклад, у локальному сховищі або на сервері)
-    console.log("Saving message:", message);
+    // Власна логіка збереження
     handleClose();
   };
 
@@ -100,20 +118,37 @@ const MessageBubble = ({
         contents.push(
           <Box
             key="reply"
-            sx={{ backgroundColor: "rgba(0,0,0,0.1)", p: 1, borderRadius: "10px", mb: 1 }}
+            sx={{
+              backgroundColor: "rgba(0,0,0,0.1)",
+              p: 1,
+              borderRadius: "10px",
+              mb: 1,
+            }}
           >
             <Typography variant="caption" sx={{ opacity: 0.8 }}>
-              {replied.content.slice(0, 50) + (replied.content.length > 50 ? "..." : "")}
+              {replied.content.slice(0, 50) +
+                (replied.content.length > 50 ? "..." : "")}
             </Typography>
           </Box>
         );
       }
     }
     if (message.content) {
-      contents.push(<Typography key="content" variant="body1">{message.content}</Typography>);
+      contents.push(
+        <Typography key="content" variant="body1">
+          {message.content}
+        </Typography>
+      );
     }
     message.media?.forEach((item, i) => {
-      contents.push(<Box key={`media-${i}`} sx={{ mt: 1 }}>{MEDIA_RENDERERS[item.type]?.(item)}</Box>);
+      const Renderer = MEDIA_RENDERERS[item.type];
+      if (Renderer) {
+        contents.push(
+          <Box key={`media-${i}`} sx={{ mt: 1 }}>
+            <Renderer {...item} />
+          </Box>
+        );
+      }
     });
     return contents;
   };
@@ -139,10 +174,14 @@ const MessageBubble = ({
         >
           {renderContent()}
           <Typography sx={TIMESTAMP_STYLES}>
-            {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            {new Date(message.timestamp).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </Typography>
         </Box>
       </motion.div>
+
       <Menu
         id="message-menu"
         anchorEl={anchorEl}

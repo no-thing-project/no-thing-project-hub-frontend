@@ -1,42 +1,58 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { createConversation, fetchConversations, updateConversation, deleteConversation } from "../api/conversationApi";
-import { INITIAL_LOADING_STATE, DEFAULT_CONVERSATIONS } from "../constants/chatConstants";
+import {
+  createGroupChat,
+  fetchGroupChats,
+  fetchGroupById,
+  updateGroupChat,
+  deleteGroupChat,
+  archiveGroupChat,
+  fetchGroupStats,
+} from "../api/groupChatApi";
 
-const useConversations = (token, onLogout, navigate) => {
-  const [conversations, setConversations] = useState(DEFAULT_CONVERSATIONS);
+const INITIAL_LOADING_STATE = { initial: false, action: false };
+const DEFAULT_GROUP_CHATS = [];
+
+const useGroupChats = (token, 
+  // socket,
+   onLogout, navigate) => {
+  const [groupChats, setGroupChats] = useState(DEFAULT_GROUP_CHATS);
   const [loading, setLoading] = useState(INITIAL_LOADING_STATE);
   const [error, setError] = useState(null);
   const isMounted = useRef(true);
-  const loadingController = useRef(null);
+  const abortController = useRef(null);
 
   useEffect(() => {
     return () => {
       isMounted.current = false;
-      if (loadingController.current) loadingController.current.abort();
+      abortController.current?.abort();
     };
   }, []);
 
   const handleAuthError = useCallback(
     (err) => {
       if (!isMounted.current) return;
-      if (err.status === 401 || err.status === 403) {
-        onLogout("Your session has expired. Please log in again.");
+      if (err.status === 401) {
+        onLogout("Session expired. Please log in again.");
         navigate("/login");
+      } else if (err.status === 403 || err.status === 503) {
+        setError("Access denied or service unavailable.");
+      } else if (err.status === 404) {
+        setError("Group chat not found.");
       } else if (err.name !== "AbortError") {
-        setError(err.message || "An unexpected error occurred.");
+        setError(err.message || "Unexpected error.");
       }
     },
     [onLogout, navigate]
   );
 
-  const loadConversations = useCallback(async () => {
+  const loadGroupChats = useCallback(async () => {
     if (!token) return;
-    loadingController.current = new AbortController();
+    abortController.current = new AbortController();
     setLoading((prev) => ({ ...prev, initial: true }));
     setError(null);
     try {
-      const data = await fetchConversations(token, loadingController.current.signal);
-      if (isMounted.current) setConversations(data);
+      const data = await fetchGroupChats(token, abortController.current.signal);
+      if (isMounted.current) setGroupChats(data);
     } catch (err) {
       handleAuthError(err);
     } finally {
@@ -45,17 +61,19 @@ const useConversations = (token, onLogout, navigate) => {
   }, [token, handleAuthError]);
 
   useEffect(() => {
-    loadConversations();
-  }, [loadConversations]);
+    loadGroupChats();
+  }, [loadGroupChats]);
 
-  const createNewConversation = useCallback(
-    async (recipientId) => {
-      if (!token || !recipientId) return null;
+  const createNewGroupChat = useCallback(
+    async (name, members) => {
+      if (!token || !name || !members?.length) return null;
       setLoading((prev) => ({ ...prev, action: true }));
       try {
-        const conversation = await createConversation(recipientId, token);
-        setConversations((prev) => [...prev, conversation]);
-        return conversation;
+        const group = await createGroupChat(name, members, token);
+        if (isMounted.current) {
+          setGroupChats((prev) => [...prev, group]);
+        }
+        return group;
       } catch (err) {
         handleAuthError(err);
         return null;
@@ -66,16 +84,31 @@ const useConversations = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  const updateExistingConversation = useCallback(
-    async (conversationId, updates) => {
-      if (!token || !conversationId) return null;
+  const getGroupById = useCallback(
+    async (groupId) => {
+      if (!token || !groupId) return null;
+      try {
+        return await fetchGroupById(groupId, token);
+      } catch (err) {
+        handleAuthError(err);
+        return null;
+      }
+    },
+    [token, handleAuthError]
+  );
+
+  const updateExistingGroupChat = useCallback(
+    async (groupId, updates) => {
+      if (!token || !groupId) return null;
       setLoading((prev) => ({ ...prev, action: true }));
       try {
-        const updatedConversation = await updateConversation(conversationId, updates, token);
-        setConversations((prev) =>
-          prev.map((c) => (c.conversation_id === conversationId ? updatedConversation : c))
-        );
-        return updatedConversation;
+        const updated = await updateGroupChat(groupId, updates, token);
+        if (isMounted.current) {
+          setGroupChats((prev) =>
+            prev.map((g) => (g.group_id === groupId ? updated : g))
+          );
+        }
+        return updated;
       } catch (err) {
         handleAuthError(err);
         return null;
@@ -86,13 +119,15 @@ const useConversations = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  const deleteExistingConversation = useCallback(
-    async (conversationId) => {
-      if (!token || !conversationId) return;
+  const deleteExistingGroupChat = useCallback(
+    async (groupId) => {
+      if (!token || !groupId) return;
       setLoading((prev) => ({ ...prev, action: true }));
       try {
-        await deleteConversation(conversationId, token);
-        setConversations((prev) => prev.filter((c) => c.conversation_id !== conversationId));
+        await deleteGroupChat(groupId, token);
+        if (isMounted.current) {
+          setGroupChats((prev) => prev.filter((g) => g.group_id !== groupId));
+        }
       } catch (err) {
         handleAuthError(err);
       } finally {
@@ -101,17 +136,95 @@ const useConversations = (token, onLogout, navigate) => {
     },
     [token, handleAuthError]
   );
+
+  const toggleArchiveGroupChat = useCallback(
+    async (groupId) => {
+      if (!token || !groupId) return null;
+      setLoading((prev) => ({ ...prev, action: true }));
+      try {
+        const result = await archiveGroupChat(groupId, token);
+        if (isMounted.current) {
+          setGroupChats((prev) =>
+            prev.map((g) => (g.group_id === groupId ? { ...g, is_archived: result.is_archived } : g))
+          );
+        }
+        return result;
+      } catch (err) {
+        handleAuthError(err);
+        return null;
+      } finally {
+        if (isMounted.current) setLoading((prev) => ({ ...prev, action: false }));
+      }
+    },
+    [token, handleAuthError]
+  );
+
+  const getGroupStats = useCallback(
+    async (groupId) => {
+      if (!token || !groupId) return null;
+      try {
+        return await fetchGroupStats(groupId, token);
+      } catch (err) {
+        handleAuthError(err);
+        return null;
+      }
+    },
+    [token, handleAuthError]
+  );
+
+  // // Socket events
+  // useEffect(() => {
+  //   if (!socket || !token) return;
+
+  //   socket.on("groupChatCreated", (group) => {
+  //     if (isMounted.current) {
+  //       setGroupChats((prev) => [...prev, group]);
+  //     }
+  //   });
+
+  //   socket.on("groupChatUpdated", (group) => {
+  //     if (isMounted.current) {
+  //       setGroupChats((prev) =>
+  //         prev.map((g) => (g.group_id === group.group_id ? group : g))
+  //       );
+  //     }
+  //   });
+
+  //   socket.on("groupChatDeleted", (groupId) => {
+  //     if (isMounted.current) {
+  //       setGroupChats((prev) => prev.filter((g) => g.group_id !== groupId));
+  //     }
+  //   });
+
+  //   socket.on("groupChatArchived", ({ group_id, is_archived }) => {
+  //     if (isMounted.current) {
+  //       setGroupChats((prev) =>
+  //         prev.map((g) => (g.group_id === group_id ? { ...g, is_archived } : g))
+  //       );
+  //     }
+  //   });
+
+  //   return () => {
+  //     socket.off("groupChatCreated");
+  //     socket.off("groupChatUpdated");
+  //     socket.off("groupChatDeleted");
+  //     socket.off("groupChatArchived");
+  //   };
+  // }, [socket, token]);
 
   return {
-    conversations,
-    setConversations,
+    groupChats,
+    setGroupChats,
     loading,
     error,
-    loadConversations,
-    createNewConversation,
-    updateExistingConversation,
-    deleteExistingConversation,
+    loadGroupChats,
+    createNewGroupChat,
+    getGroupById,
+    updateExistingGroupChat,
+    deleteExistingGroupChat,
+    toggleArchiveGroupChat,
+    getGroupStats,
   };
 };
 
-export default useConversations;
+export default useGroupChats;

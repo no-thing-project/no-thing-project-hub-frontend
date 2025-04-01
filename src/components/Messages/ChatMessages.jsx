@@ -37,7 +37,9 @@ const ChatMessages = ({
 
   const handleIntersection = useCallback(
     (entries) => {
-      if (entries[0].isIntersecting && hasMore && !isFetching) loadMoreMessages();
+      if (entries[0].isIntersecting && hasMore && !isFetching) {
+        loadMoreMessages();
+      }
     },
     [hasMore, isFetching, loadMoreMessages]
   );

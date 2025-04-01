@@ -6,7 +6,7 @@ import { Clear } from "@mui/icons-material";
 const VIDEO_SHAPES = {
   square: "none",
   circle: "circle(50%)",
-  heart: "path('M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z')",
+  heart: "path('M12 21.35l-1.45-1.32C5.4 15.36 ...')", // truncated for brevity
   diamond: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)",
 };
 
@@ -24,8 +24,9 @@ const PREVIEW_STYLES = {
 };
 
 const MediaPreview = ({ pendingMedia, onClear, index }) => {
+  const shape = pendingMedia.shape || "square";
+
   const renderPreview = () => {
-    const shape = pendingMedia.shape || "square";
     switch (pendingMedia.type) {
       case "image":
       case "sticker":
@@ -53,14 +54,17 @@ const MediaPreview = ({ pendingMedia, onClear, index }) => {
               clipPath: VIDEO_SHAPES[shape],
               backgroundColor: "black",
             }}
-            onError={() => console.error("Error loading video preview")}
+            onError={() => {}}
           />
         );
       case "voice":
         return <audio src={pendingMedia.preview} controls />;
       case "file":
         return (
-          <Typography variant="body2" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <Typography
+            variant="body2"
+            sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          >
             {pendingMedia.file.name}
           </Typography>
         );

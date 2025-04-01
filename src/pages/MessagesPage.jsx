@@ -9,7 +9,7 @@ import useMessages from "../hooks/useMessages";
 import useConversations from "../hooks/useConversations";
 import useGroupChats from "../hooks/useGroupChats";
 import useSocial from "../hooks/useSocial";
-import useChatData from "../hooks/useChatData"; // Додаємо useChatData
+import useChatData from "../hooks/useChatData";
 import { useNotification } from "../context/NotificationContext";
 import ProfileHeader from "../components/Headers/ProfileHeader";
 import ConversationsList from "../components/Messages/ConversationsList";
@@ -55,9 +55,8 @@ const MessagesPage = () => {
   const { showNotification } = useNotification();
   const { token, authData, isAuthenticated, handleLogout, loading: authLoading } = useAuth(navigate);
 
-  // Використовуємо всі хуки
   const {
-    messages,
+    messages = [], // Додаємо значення за замовчуванням
     setMessages,
     loading: messagesLoading,
     error: messagesError,
@@ -73,7 +72,7 @@ const MessagesPage = () => {
   } = useMessages(token, handleLogout, navigate);
 
   const {
-    conversations,
+    conversations = [], // Додаємо значення за замовчуванням
     setConversations,
     loading: convLoading,
     error: convError,
@@ -84,7 +83,7 @@ const MessagesPage = () => {
   } = useConversations(token, handleLogout, navigate);
 
   const {
-    groupChats,
+    groupChats = [], // Додаємо значення за замовчуванням
     setGroupChats,
     loading: groupLoading,
     error: groupError,
@@ -94,28 +93,24 @@ const MessagesPage = () => {
     deleteExistingGroupChat,
   } = useGroupChats(token, handleLogout, navigate);
 
-  const { friends, getFriends, loading: socialLoading, error: socialError } = useSocial(
+  const { friends = [], getFriends, loading: socialLoading, error: socialError } = useSocial(
     token,
     handleLogout,
     navigate
   );
 
-  const {
-    loadInitialData, // Додаємо loadInitialData з useChatData для глобального завантаження
-  } = useChatData(token, handleLogout, navigate);
+  const { loadInitialData } = useChatData(token, handleLogout, navigate);
 
   const [selectedConversationId, setSelectedConversationId] = useState(null);
   const [success, setSuccess] = useState("");
   const [groupModalOpen, setGroupModalOpen] = useState(false);
 
-  // Завантажуємо друзів, якщо їх немає
   useEffect(() => {
     if (isAuthenticated && token && !socialLoading && friends.length === 0) {
       getFriends();
     }
   }, [isAuthenticated, token, socialLoading, friends.length, getFriends]);
 
-  // Дебагінг стану завантаження
   useEffect(() => {
     console.log({
       authLoading,
@@ -126,10 +121,9 @@ const MessagesPage = () => {
     });
   }, [authLoading, messagesLoading, convLoading, groupLoading, socialLoading]);
 
-  // Завантажуємо початкові дані через useChatData
   useEffect(() => {
     if (isAuthenticated && token) {
-      loadInitialData(); // Завантажуємо всі дані (повідомлення, розмови, групи)
+      loadInitialData();
     }
   }, [isAuthenticated, token, loadInitialData]);
 
@@ -209,8 +203,7 @@ const MessagesPage = () => {
 
   const recipient = getRecipient();
 
-  // Умова для лоадера
-  if (authLoading || messagesLoading.initial || convLoading.initial || groupLoading.initial) {
+  if (authLoading) {
     return <LoadingSpinner />;
   }
 
@@ -247,16 +240,17 @@ const MessagesPage = () => {
           <Box sx={FLEX_CONTAINER_STYLES}>
             <Box sx={CONVERSATIONS_BOX_STYLES}>
               <ConversationsList
-                messages={messages}
-                groupChats={groupChats}
-                conversations={conversations}
-                friends={friends}
+                messages={messages || []} // Додаємо захисну перевірку
+                groupChats={groupChats || []}
+                conversations={conversations || []}
+                friends={friends || []}
                 currentUserId={authData.anonymous_id}
                 onSelectConversation={setSelectedConversationId}
                 selectedConversationId={selectedConversationId}
                 onDeleteGroupChat={deleteExistingGroupChat}
                 onDeleteConversation={deleteExistingConversation}
                 isLoading={socialLoading}
+                createNewConversation={createNewConversation}
               />
             </Box>
             <Box sx={CHAT_BOX_STYLES}>
@@ -276,7 +270,6 @@ const MessagesPage = () => {
                   friends={friends}
                   messages={messages}
                   setMessages={setMessages}
-                  // Передаємо методи з хуків для повного контролю
                   sendNewMessage={sendNewMessage}
                   sendMediaMessage={sendMediaMessage}
                   markMessageRead={markMessageRead}
@@ -290,10 +283,12 @@ const MessagesPage = () => {
                   deleteExistingGroupChat={deleteExistingGroupChat}
                   loadConversations={loadConversations}
                   loadGroupChats={loadGroupChats}
-                  loadInitialData={loadInitialData} // Додаємо для глобального оновлення
+                  loadInitialData={loadInitialData}
                 />
               ) : (
-                <Typography {...NO_CHAT_MESSAGE_STYLES}>Select a conversation to start chatting</Typography>
+                <Typography {...NO_CHAT_MESSAGE_STYLES}>
+                  Select a conversation to start chatting
+                </Typography>
               )}
             </Box>
           </Box>

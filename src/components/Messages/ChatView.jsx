@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
-import { Box, Modal, Typography, Select, MenuItem, Button } from "@mui/material";
+import { Box, Modal, Typography, Select, MenuItem, Button, CircularProgress } from "@mui/material";
 import { useChatSettings } from "../../context/ChatSettingsContext";
 import ChatHeader from "./ChatHeader";
 import ChatMessages from "./ChatMessages";
 import ChatFooter from "./ChatFooter";
 import ChatSettingsModal from "./ChatSettingsModal";
-import createConversation from "../../hooks/useConversations";
 
 const CHAT_CONTAINER_STYLES = {
   display: "flex",
@@ -47,6 +46,20 @@ const ChatView = ({
   friends,
   messages,
   setMessages,
+  sendNewMessage,
+  sendMediaMessage,
+  markMessageRead,
+  updateExistingMessage,
+  deleteExistingMessage,
+  createNewConversation,
+  updateExistingConversation,
+  deleteExistingConversation,
+  createNewGroupChat,
+  updateExistingGroupChat,
+  deleteExistingGroupChat,
+  loadConversations,
+  loadGroupChats,
+  loadInitialData,
 }) => {
   const { settings } = useChatSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -54,62 +67,28 @@ const ChatView = ({
   const [forwardRecipient, setForwardRecipient] = useState("");
   const [forwardMessage, setForwardMessage] = useState(null);
   const [replyToMessage, setReplyToMessage] = useState(null);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [error, setError] = useState(null);
+
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [isFetching, setIsFetching] = useState(false);
   const lastConversationId = useRef(null);
-  const [conversationId, setConversationId] = useState(null);
+  const conversationId = isGroupChat ? recipient?.group_id : recipient?.conversation_id;
 
-  // Оновлюємо conversationId на основі recipient
-  useEffect(() => {
-    const newConversationId = isGroupChat ? recipient?.group_id : recipient?.conversation_id;
-    setConversationId(newConversationId);
-  }, [recipient, isGroupChat]);
-
+  // Фільтруємо повідомлення поточного чату
   const filteredMessages = messages.filter((msg) =>
     isGroupChat ? msg.group_id === conversationId : msg.conversation_id === conversationId
   );
 
-  // Перевірка та створення розмови, якщо її немає
-  const ensureConversationExists = useCallback(async () => {
-    if (isGroupChat || !recipient?.user2 || !token || !conversationId) return conversationId;
-
-    try {
-      const existingMessages = await fetchMessagesList({
-        signal: new AbortController().signal,
-        conversationId,
-      });
-
-      if (!existingMessages.length) {
-        // Якщо повідомлень немає, створюємо нову розмову
-        const newConversation = await createConversation({ recipientId: recipient.user2 }, token);
-        if (newConversation?.conversation_id) {
-          setConversationId(newConversation.conversation_id);
-          return newConversation.conversation_id;
-        }
-      }
-      return conversationId;
-    } catch (err) {
-      console.error("Error ensuring conversation exists:", err);
-      if (err.status === 403) {
-        console.warn("Conversation not found or access denied, creating new one...");
-        const newConversation = await createConversation({ recipientId: recipient.user2 }, token);
-        if (newConversation?.conversation_id) {
-          setConversationId(newConversation.conversation_id);
-          return newConversation.conversation_id;
-        }
-      }
-      throw err; // Передаємо помилку далі, якщо створення не вдалося
-    }
-  }, [isGroupChat, recipient, token, conversationId, fetchMessagesList]);
-
   const fetchMessagesForPage = useCallback(
     async (targetPage, reset = false) => {
-      if (!conversationId || (isFetching && !reset)) return;
-      setIsFetching(true);
+      if (!conversationId) return;
+      setIsLoadingMessages(true);
+      setError(null);
+      const controller = new AbortController();
       try {
         const params = {
-          signal: new AbortController().signal,
+          signal: controller.signal,
           conversationId: isGroupChat ? null : conversationId,
           groupId: isGroupChat ? conversationId : null,
           page: targetPage,
@@ -117,43 +96,39 @@ const ChatView = ({
         };
         const newMessages = await fetchMessagesList(params);
         setMessages((prev) => {
-          const updatedMessages = reset ? newMessages : [...prev, ...newMessages];
-          return updatedMessages.filter(
-            (msg, index, self) => self.findIndex((m) => m.message_id === msg.message_id) === index
+          const updated = reset ? newMessages : [...prev, ...newMessages];
+          // Видаляємо дублікати
+          return updated.filter(
+            (m, idx, arr) => arr.findIndex((x) => x.message_id === m.message_id) === idx
           );
         });
         setHasMore(newMessages.length === FETCH_LIMIT);
         if (reset || targetPage > page) setPage(targetPage);
       } catch (err) {
-        console.error("Fetch messages error:", err);
+        if (err.name !== "AbortError") {
+          setError(err.response?.data?.message || "Failed to load messages");
+        }
       } finally {
-        setIsFetching(false);
+        setIsLoadingMessages(false);
       }
+      return () => controller.abort();
     },
     [fetchMessagesList, isGroupChat, conversationId, page, setMessages]
   );
 
   const loadMoreMessages = useCallback(() => {
-    if (hasMore && !isFetching) fetchMessagesForPage(page + 1);
-  }, [fetchMessagesForPage, page, hasMore, isFetching]);
+    if (hasMore && !isLoadingMessages) {
+      fetchMessagesForPage(page + 1);
+    }
+  }, [fetchMessagesForPage, page, hasMore, isLoadingMessages]);
 
-  // Ініціалізація чату при зміні conversationId
   useEffect(() => {
     if (!conversationId || conversationId === lastConversationId.current) return;
-
-    const initializeChat = async () => {
-      setPage(1);
-      setHasMore(true);
-      lastConversationId.current = conversationId;
-
-      const validConversationId = await ensureConversationExists();
-      if (validConversationId) {
-        await fetchMessagesForPage(1, true);
-      }
-    };
-
-    initializeChat().catch((err) => console.error("Failed to initialize chat:", err));
-  }, [conversationId, ensureConversationExists, fetchMessagesForPage]);
+    setPage(1);
+    setHasMore(true);
+    lastConversationId.current = conversationId;
+    fetchMessagesForPage(1, true);
+  }, [conversationId, fetchMessagesForPage]);
 
   const handleSendMessage = useCallback(
     async (messageData) => {
@@ -167,13 +142,10 @@ const ChatView = ({
         })),
         ...(messageData.replyTo && { replyTo: messageData.replyTo }),
       };
-      try {
-        await onSendMessage(finalMessageData);
-        setReplyToMessage(null);
-        await fetchMessagesForPage(1, true);
-      } catch (err) {
-        console.error("Send message error:", err);
-      }
+      await onSendMessage(finalMessageData);
+      setReplyToMessage(null);
+      // Оновлюємо список після відправки
+      fetchMessagesForPage(1, true);
     },
     [onSendMessage, settings.videoShape, fetchMessagesForPage, conversationId, isGroupChat]
   );
@@ -183,48 +155,58 @@ const ChatView = ({
     setForwardOpen(true);
   }, []);
 
-  const confirmForward = useCallback(
-    async () => {
-      if (!forwardRecipient || !forwardMessage) return;
-      try {
-        await onSendMessage({
-          conversationId: null,
-          groupId: null,
-          recipientId: forwardRecipient,
-          content: `Forwarded: ${forwardMessage.content || "Media"}`,
-          media: forwardMessage.media,
-          replyTo: forwardMessage.replyTo,
-        });
-        setForwardOpen(false);
-        setForwardRecipient("");
-        setForwardMessage(null);
-      } catch (err) {
-        console.error("Forward error:", err);
-      }
-    },
-    [forwardMessage, forwardRecipient, onSendMessage]
-  );
+  const confirmForward = useCallback(async () => {
+    if (!forwardRecipient || !forwardMessage) return;
+    await onSendMessage({
+      conversationId: null,
+      groupId: null,
+      recipientId: forwardRecipient,
+      content: `Forwarded: ${forwardMessage.content || "Media"}`,
+      media: forwardMessage.media,
+      replyTo: forwardMessage.replyTo,
+    });
+    setForwardOpen(false);
+    setForwardRecipient("");
+    setForwardMessage(null);
+  }, [forwardMessage, forwardRecipient, onSendMessage]);
 
   return (
     <Box sx={CHAT_CONTAINER_STYLES}>
-      <ChatHeader recipient={recipient} isGroupChat={isGroupChat} onSettingsOpen={() => setSettingsOpen(true)} />
-      <ChatMessages
-        messages={filteredMessages}
-        currentUserId={currentUserId}
+      <ChatHeader
         recipient={recipient}
-        onDeleteMessage={onDeleteMessage}
-        onSendMediaMessage={handleSendMessage}
-        onMarkRead={onMarkRead}
-        isFetching={isFetching}
-        hasMore={hasMore}
-        loadMoreMessages={loadMoreMessages}
-        chatBackground={settings.chatBackground}
-        setReplyToMessage={setReplyToMessage}
-        onForwardMessage={handleForwardMessage}
+        isGroupChat={isGroupChat}
+        onSettingsOpen={() => setSettingsOpen(true)}
       />
+
+      {isLoadingMessages ? (
+        <Box sx={{ flexGrow: 1, display: "flex", justifyContent: "center", alignItems: "center" }}>
+          <CircularProgress size={24} />
+        </Box>
+      ) : error ? (
+        <Box sx={{ flexGrow: 1, display: "flex", justifyContent: "center", alignItems: "center" }}>
+          <Typography color="error">{error}</Typography>
+        </Box>
+      ) : (
+        <ChatMessages
+          messages={filteredMessages}
+          currentUserId={currentUserId}
+          recipient={recipient}
+          onDeleteMessage={onDeleteMessage}
+          onSendMediaMessage={handleSendMessage}
+          onMarkRead={onMarkRead}
+          isFetching={isLoadingMessages}
+          hasMore={hasMore}
+          loadMoreMessages={loadMoreMessages}
+          chatBackground={settings.chatBackground}
+          setReplyToMessage={setReplyToMessage}
+          onForwardMessage={handleForwardMessage}
+        />
+      )}
+
       <ChatFooter
         recipient={recipient}
         onSendMessage={handleSendMessage}
+        onSendMediaMessage={handleSendMessage}
         pendingMediaList={pendingMediaList}
         setPendingMediaFile={setPendingMediaFile}
         clearPendingMedia={clearPendingMedia}
@@ -235,10 +217,14 @@ const ChatView = ({
         currentUserId={currentUserId}
         token={token}
       />
+
       <ChatSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
       <Modal open={forwardOpen} onClose={() => setForwardOpen(false)}>
         <Box sx={MODAL_STYLES}>
-          <Typography variant="h6" gutterBottom>Select Recipient</Typography>
+          <Typography variant="h6" gutterBottom>
+            Select Recipient
+          </Typography>
           <Select
             fullWidth
             value={forwardRecipient}
@@ -255,7 +241,11 @@ const ChatView = ({
               </MenuItem>
             ))}
           </Select>
-          <Button variant="contained" onClick={confirmForward} disabled={!forwardRecipient}>
+          <Button
+            variant="contained"
+            onClick={confirmForward}
+            disabled={!forwardRecipient}
+          >
             Forward
           </Button>
         </Box>
@@ -279,6 +269,20 @@ ChatView.propTypes = {
   friends: PropTypes.array,
   messages: PropTypes.array,
   setMessages: PropTypes.func.isRequired,
+  sendNewMessage: PropTypes.func.isRequired,
+  sendMediaMessage: PropTypes.func.isRequired,
+  markMessageRead: PropTypes.func.isRequired,
+  updateExistingMessage: PropTypes.func.isRequired,
+  deleteExistingMessage: PropTypes.func.isRequired,
+  createNewConversation: PropTypes.func.isRequired,
+  updateExistingConversation: PropTypes.func.isRequired,
+  deleteExistingConversation: PropTypes.func.isRequired,
+  createNewGroupChat: PropTypes.func.isRequired,
+  updateExistingGroupChat: PropTypes.func.isRequired,
+  deleteExistingGroupChat: PropTypes.func.isRequired,
+  loadConversations: PropTypes.func.isRequired,
+  loadGroupChats: PropTypes.func.isRequired,
+  loadInitialData: PropTypes.func.isRequired,
 };
 
 ChatView.defaultProps = {

@@ -1,6 +1,15 @@
 import React, { useState } from "react";
 import PropTypes from "prop-types";
-import { Modal, Box, Typography, TextField, Button, FormControl, Select, MenuItem } from "@mui/material";
+import {
+  Modal,
+  Box,
+  Typography,
+  TextField,
+  Button,
+  FormControl,
+  Select,
+  MenuItem,
+} from "@mui/material";
 import { useNotification } from "../../context/NotificationContext";
 
 const MODAL_STYLES = {
@@ -35,7 +44,10 @@ const GroupChatModal = ({ open, onClose, friends, currentUserId, onCreate }) => 
   return (
     <Modal open={open} onClose={onClose}>
       <Box sx={MODAL_STYLES}>
-        <Typography variant="h6" gutterBottom>Create Group Chat</Typography>
+        <Typography variant="h6" gutterBottom>
+          Create Group Chat
+        </Typography>
+
         <TextField
           fullWidth
           label="Group Name"
@@ -43,6 +55,7 @@ const GroupChatModal = ({ open, onClose, friends, currentUserId, onCreate }) => 
           onChange={(e) => setName(e.target.value)}
           sx={{ mb: 2 }}
         />
+
         <FormControl fullWidth sx={{ mb: 2 }}>
           <Typography variant="body1">Select Members</Typography>
           <Select
@@ -50,7 +63,13 @@ const GroupChatModal = ({ open, onClose, friends, currentUserId, onCreate }) => 
             value={selectedMembers}
             onChange={handleMemberChange}
             renderValue={(selected) =>
-              selected.map((id) => friends.find((f) => f.anonymous_id === id)?.username).join(", ")
+              selected
+                .map(
+                  (id) =>
+                    friends.find((f) => f.anonymous_id === id)?.username ||
+                    `User (${id})`
+                )
+                .join(", ")
             }
           >
             {friends.map((friend) => (
@@ -60,7 +79,10 @@ const GroupChatModal = ({ open, onClose, friends, currentUserId, onCreate }) => 
             ))}
           </Select>
         </FormControl>
-        <Button variant="contained" onClick={handleSave}>Create</Button>
+
+        <Button variant="contained" onClick={handleSave}>
+          Create
+        </Button>
       </Box>
     </Modal>
   );

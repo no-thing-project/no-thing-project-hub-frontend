@@ -1,3 +1,4 @@
+// src/hooks/useAuth.js
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { login, refreshToken, getProfile } from "../api/authApi";
 
@@ -109,12 +110,14 @@ const useAuth = (navigate) => {
 
       try {
         let accessToken, refreshToken, profile;
+        // Якщо передані email і password, робимо запит
         if (typeof arg1 === "string" && !arg1.includes(".")) {
           const response = await login(arg1, arg2);
           accessToken = response.accessToken;
           refreshToken = response.refreshToken;
           profile = response.profile;
         } else {
+          // Якщо передані токени напряму
           accessToken = arg1;
           refreshToken = arg2;
           profile = arg3;
@@ -140,7 +143,7 @@ const useAuth = (navigate) => {
         isLoggingIn.current = false;
       }
     },
-    []
+    [navigate]
   );
 
   useEffect(() => {
@@ -162,8 +165,7 @@ const useAuth = (navigate) => {
             handleLogout("Token expired and refresh failed.");
           }
         } else if (!authData?.anonymous_id) {
-          const profile = await getProfile(token);
-          updateAuthData(profile);
+          await updateAuthData();
         }
       } catch (err) {
         handleLogout("Authentication validation failed.");

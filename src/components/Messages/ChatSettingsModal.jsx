@@ -42,24 +42,35 @@ const ChatSettingsModal = ({ open, onClose }) => {
   return (
     <Modal open={open} onClose={onClose}>
       <Box sx={MODAL_STYLES}>
-        <Typography variant="h6" gutterBottom>Chat Settings</Typography>
+        <Typography variant="h6" gutterBottom>
+          Chat Settings
+        </Typography>
+
         <FormControl fullWidth sx={{ mb: 2 }}>
           <Typography variant="body1">Video Shape</Typography>
           <Select value={videoShape} onChange={(e) => setVideoShape(e.target.value)}>
             {Object.entries(VIDEO_SHAPES).map(([key, label]) => (
-              <MenuItem key={key} value={key}>{label}</MenuItem>
+              <MenuItem key={key} value={key}>
+                {label}
+              </MenuItem>
             ))}
           </Select>
         </FormControl>
+
         <FormControl fullWidth sx={{ mb: 2 }}>
           <Typography variant="body1">Chat Background</Typography>
           <Select value={chatBackground} onChange={(e) => setChatBackground(e.target.value)}>
             {Object.entries(BACKGROUND_OPTIONS).map(([key, label]) => (
-              <MenuItem key={key} value={key}>{label}</MenuItem>
+              <MenuItem key={key} value={key}>
+                {label}
+              </MenuItem>
             ))}
           </Select>
         </FormControl>
-        <Button variant="contained" onClick={handleSave}>Save</Button>
+
+        <Button variant="contained" onClick={handleSave}>
+          Save
+        </Button>
       </Box>
     </Modal>
   );
