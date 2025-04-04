@@ -1,9 +1,8 @@
-import React from "react";
+import React, { memo } from "react";
 import { Box, Typography, List, ListItem, ListItemText, Button, Divider } from "@mui/material";
 import { actionButtonStyles } from "../../styles/BaseStyles";
 
 const MessagesList = ({ messages, currentUserId, onMarkRead, onDeleteMessage }) => {
-  // Функція для відображення стану прочитано / непрочитано
   const renderMessageStatus = (msg) => {
     const isSentByCurrentUser = msg.sender_id === currentUserId;
     return msg.is_read
@@ -33,7 +32,7 @@ const MessagesList = ({ messages, currentUserId, onMarkRead, onDeleteMessage }) 
                   py: 1,
                   "&:hover": { backgroundColor: "grey.100" },
                   backgroundColor: !msg.is_read && !isSentByCurrentUser ? "grey.100" : "inherit",
-                  flexDirection: { xs: "column", md: "row" }, // Колонка на малих екранах
+                  flexDirection: { xs: "column", md: "row" },
                 }}
               >
                 <ListItemText
@@ -73,4 +72,11 @@ const MessagesList = ({ messages, currentUserId, onMarkRead, onDeleteMessage }) 
   );
 };
 
-export default MessagesList;
+MessagesList.propTypes = {
+  messages: PropTypes.array.isRequired,
+  currentUserId: PropTypes.string.isRequired,
+  onMarkRead: PropTypes.func.isRequired,
+  onDeleteMessage: PropTypes.func.isRequired,
+};
+
+export default memo(MessagesList);

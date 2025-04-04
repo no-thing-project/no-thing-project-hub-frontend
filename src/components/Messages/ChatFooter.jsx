@@ -15,6 +15,8 @@ const ChatFooter = ({
   replyToMessage,
   setReplyToMessage,
   isGroupChat,
+  token,
+  currentUserId,
 }) => (
   <>
     {pendingMediaList?.length > 0 && (
@@ -40,12 +42,14 @@ const ChatFooter = ({
       replyToMessage={replyToMessage}
       setReplyToMessage={setReplyToMessage}
       isGroupChat={isGroupChat}
+      token={token}
+      currentUserId={currentUserId}
     />
   </>
 );
 
 ChatFooter.propTypes = {
-  recipient: PropTypes.object,
+  recipient: PropTypes.object.isRequired,
   onSendMessage: PropTypes.func.isRequired,
   onSendMediaMessage: PropTypes.func.isRequired,
   pendingMediaList: PropTypes.array,
@@ -53,8 +57,10 @@ ChatFooter.propTypes = {
   clearPendingMedia: PropTypes.func.isRequired,
   defaultVideoShape: PropTypes.string,
   replyToMessage: PropTypes.object,
-  setReplyToMessage: PropTypes.func,
-  isGroupChat: PropTypes.bool,
+  setReplyToMessage: PropTypes.func.isRequired,
+  isGroupChat: PropTypes.bool.isRequired,
+  token: PropTypes.string.isRequired,
+  currentUserId: PropTypes.string.isRequired,
 };
 
 export default ChatFooter;

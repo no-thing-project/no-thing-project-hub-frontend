@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Alert, Snackbar, Typography, Button } from "@mui/material";
-import { GroupAdd } from "@mui/icons-material";
+import { Box, Alert, Snackbar, Typography, Button, TextField } from "@mui/material";
+import { GroupAdd, Search } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import useAuth from "../hooks/useAuth";
@@ -9,7 +9,7 @@ import useMessages from "../hooks/useMessages";
 import useSocial from "../hooks/useSocial";
 import { useNotification } from "../context/NotificationContext";
 import ProfileHeader from "../components/Headers/ProfileHeader";
-import ConversationsList from "../components/Messages/ConversationsList";
+import ConversationsListIn from "../components/Messages/ConversationsList";
 import ChatView from "../components/Messages/ChatView";
 import GroupChatModal from "../components/Messages/GroupChatModal";
 
@@ -30,10 +30,12 @@ const MessagesPage = () => {
     clearPendingMedia,
     markMessageRead,
     deleteExistingMessage,
+    editExistingMessage,
     createNewGroupChat,
     deleteExistingGroupChat,
     deleteExistingConversation,
     fetchMessagesList,
+    searchExistingMessages,
     refreshMessages,
   } = useMessages(token, authData?.anonymous_id, handleLogout, navigate);
   const { friends, getFriends, loading: socialLoading } = useSocial(token, handleLogout, navigate);
@@ -41,12 +43,24 @@ const MessagesPage = () => {
   const [selectedConversationId, setSelectedConversationId] = useState(null);
   const [success, setSuccess] = useState("");
   const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [friendsFetched, setFriendsFetched] = useState(false); // Додаємо стан для відстеження
 
+  // Завантаження друзів лише один раз, якщо вони ще не завантажені
   useEffect(() => {
-    if (isAuthenticated && token && !socialLoading && friends.length === 0) {
-      getFriends();
-    }
-  }, [isAuthenticated, token, socialLoading, friends, getFriends]);
+    if (!isAuthenticated || !token || socialLoading || friendsFetched || friends.length > 0) return;
+
+    const fetchFriends = async () => {
+      try {
+        await getFriends();
+        setFriendsFetched(true); // Позначаємо, що друзі вже завантажені
+      } catch (err) {
+        showNotification("Failed to load friends list", "error");
+      }
+    };
+
+    fetchFriends();
+  }, [isAuthenticated, token, socialLoading, friends, friendsFetched, getFriends, showNotification]);
 
   const handleMarkRead = useCallback(
     async (messageId) => {
@@ -65,12 +79,23 @@ const MessagesPage = () => {
       try {
         await deleteExistingMessage(messageId);
         setSuccess("Message deleted!");
-        refreshMessages();
       } catch (err) {
         showNotification(err.message || "Failed to delete message", "error");
       }
     },
-    [deleteExistingMessage, showNotification, refreshMessages]
+    [deleteExistingMessage, showNotification]
+  );
+
+  const handleEditMessage = useCallback(
+    async (messageId, newContent) => {
+      try {
+        await editExistingMessage(messageId, newContent);
+        setSuccess("Message edited!");
+      } catch (err) {
+        showNotification(err.message || "Failed to edit message", "error");
+      }
+    },
+    [editExistingMessage, showNotification]
   );
 
   const handleCreateGroup = useCallback(
@@ -79,25 +104,36 @@ const MessagesPage = () => {
         const group = await createNewGroupChat(name, members);
         setSuccess(`Group ${group.name} created!`);
         setGroupModalOpen(false);
-        refreshMessages();
       } catch (err) {
         showNotification(err.message || "Failed to create group", "error");
       }
     },
-    [createNewGroupChat, showNotification, refreshMessages]
+    [createNewGroupChat, showNotification]
   );
 
   const handleSendMessage = useCallback(
     async (messageData) => {
       try {
         await sendMediaMessage(messageData);
-        refreshMessages();
       } catch (err) {
         showNotification(err.message || "Failed to send message", "error");
       }
     },
-    [sendMediaMessage, showNotification, refreshMessages]
+    [sendMediaMessage, showNotification]
   );
+
+  const handleSearch = useCallback(async () => {
+    if (!searchQuery) {
+      refreshMessages();
+      return;
+    }
+    try {
+      const results = await searchExistingMessages(searchQuery);
+      setMessages(results);
+    } catch (err) {
+      showNotification(err.message || "Failed to search messages", "error");
+    }
+  }, [searchQuery, searchExistingMessages, setMessages, refreshMessages, showNotification]);
 
   const recipient = React.useMemo(() => {
     if (!selectedConversationId) return null;
@@ -118,14 +154,23 @@ const MessagesPage = () => {
       <Box sx={{ maxWidth: { xs: "100%", md: 1500 }, margin: "0 auto", p: { xs: 1, md: 2 } }}>
         <ProfileHeader user={authData} isOwnProfile />
         {messagesError && <Alert severity="error" sx={{ mt: 2 }}>{messagesError}</Alert>}
-        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2, gap: 2 }}>
+          <TextField
+            variant="outlined"
+            placeholder="Search messages..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyPress={(e) => e.key === "Enter" && handleSearch()}
+            sx={{ flexGrow: 1 }}
+            InputProps={{ endAdornment: <Search /> }}
+          />
           <Button variant="contained" startIcon={<GroupAdd />} onClick={() => setGroupModalOpen(true)}>
             Create Group Chat
           </Button>
         </Box>
         <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 2 }}>
           <Box sx={{ flex: { xs: "1 1 100%", md: "1 1 30%" }, maxWidth: { md: "400px" } }}>
-            <ConversationsList
+            <ConversationsListIn
               messages={messages}
               groupChats={groupChats}
               friends={friends}
@@ -145,6 +190,7 @@ const MessagesPage = () => {
                 onSendMediaMessage={handleSendMessage}
                 onMarkRead={handleMarkRead}
                 onDeleteMessage={handleDeleteMessage}
+                onEditMessage={handleEditMessage}
                 token={token}
                 fetchMessagesList={fetchMessagesList}
                 pendingMediaList={pendingMediaList}
@@ -152,7 +198,7 @@ const MessagesPage = () => {
                 clearPendingMedia={clearPendingMedia}
                 isGroupChat={selectedConversationId.startsWith("group:")}
                 friends={friends}
-                setMessages={setMessages} // Додаємо для синхронізації
+                setMessages={setMessages}
               />
             ) : (
               <Typography variant="h6" color="text.secondary" sx={{ mt: 4, textAlign: "center" }}>

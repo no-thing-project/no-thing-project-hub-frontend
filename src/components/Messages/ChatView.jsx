@@ -35,6 +35,7 @@ const ChatView = ({
   onSendMediaMessage,
   onMarkRead,
   onDeleteMessage,
+  onEditMessage,
   token,
   fetchMessagesList,
   pendingMediaList,
@@ -42,7 +43,7 @@ const ChatView = ({
   clearPendingMedia,
   isGroupChat,
   friends,
-  setMessages, // Додано для синхронізації з глобальним станом
+  setMessages,
 }) => {
   const [localMessages, setLocalMessages] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -54,6 +55,7 @@ const ChatView = ({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
+  const [error, setError] = useState(null);
   const lastConversationId = useRef(null);
 
   const conversationId = isGroupChat ? recipient?.group_id : recipient?.anonymous_id;
@@ -63,20 +65,31 @@ const ChatView = ({
       if (!conversationId || (isFetching && !reset)) return;
       setIsFetching(true);
       try {
-        const params = { withUserId: isGroupChat ? null : conversationId, groupId: isGroupChat ? conversationId : null, page: targetPage };
+        const params = {
+          withUserId: isGroupChat ? null : conversationId,
+          groupId: isGroupChat ? conversationId : null,
+          page: targetPage,
+        };
         const newMessages = await fetchMessagesList(params);
         setLocalMessages((prev) => {
           const uniqueNewMessages = newMessages.filter((m) => !prev.some((pm) => pm.message_id === m.message_id));
-          const updatedMessages = reset ? uniqueNewMessages : [...uniqueNewMessages, ...prev].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-          // Синхронізація з глобальним станом
+          const updatedMessages = reset
+            ? uniqueNewMessages
+            : [...uniqueNewMessages, ...prev].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
           setMessages((globalMessages) => {
-            const merged = [...globalMessages.filter((m) => m.group_id !== conversationId && (isGroupChat || m.receiver_id !== conversationId)), ...updatedMessages];
+            const merged = [
+              ...globalMessages.filter((m) => m.group_id !== conversationId && (isGroupChat || m.receiver_id !== conversationId)),
+              ...updatedMessages,
+            ];
             return merged.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
           });
           return updatedMessages;
         });
         setHasMore(newMessages.length === 20);
         if (reset || targetPage > page) setPage(targetPage);
+      } catch (err) {
+        setError("Failed to fetch messages");
+        console.error(err);
       } finally {
         setIsFetching(false);
       }
@@ -93,18 +106,24 @@ const ChatView = ({
     setLocalMessages([]);
     setPage(1);
     setHasMore(true);
+    setError(null);
     lastConversationId.current = conversationId;
     fetchMessagesForPage(1, true);
   }, [conversationId, fetchMessagesForPage]);
 
   const handleSendMessage = useCallback(
     async (messageData) => {
-      const finalMessageData = {
-        ...messageData,
-        media: (messageData.media || []).map((item) => ({ ...item, shape: item.shape || chatSettings.videoShape })),
-      };
-      await onSendMediaMessage(finalMessageData);
-      fetchMessagesForPage(1, true); // Оновлюємо чат після відправки
+      try {
+        const finalMessageData = {
+          ...messageData,
+          media: (messageData.media || []).map((item) => ({ ...item, shape: item.shape || chatSettings.videoShape })),
+        };
+        await onSendMediaMessage(finalMessageData);
+        fetchMessagesForPage(1, true);
+      } catch (err) {
+        setError("Failed to send message");
+        console.error(err);
+      }
     },
     [onSendMediaMessage, chatSettings.videoShape, fetchMessagesForPage]
   );
@@ -127,6 +146,7 @@ const ChatView = ({
       setForwardRecipient("");
       setForwardMessage(null);
     } catch (err) {
+      setError("Failed to forward message");
       console.error("Forward error:", err);
     }
   }, [forwardMessage, forwardRecipient, onSendMediaMessage]);
@@ -135,11 +155,13 @@ const ChatView = ({
     <>
       <Box sx={chatContainerStyles}>
         <ChatHeader recipient={recipient} isGroupChat={isGroupChat} onSettingsOpen={() => setSettingsOpen(true)} />
+        {error && <Typography color="error" sx={{ p: 2 }}>{error}</Typography>}
         <ChatMessages
           messages={localMessages}
           currentUserId={currentUserId}
           recipient={recipient}
           onDeleteMessage={onDeleteMessage}
+          onEditMessage={onEditMessage}
           onSendMediaMessage={handleSendMessage}
           onMarkRead={onMarkRead}
           isFetching={isFetching}
@@ -160,8 +182,8 @@ const ChatView = ({
           replyToMessage={replyToMessage}
           setReplyToMessage={setReplyToMessage}
           isGroupChat={isGroupChat}
-          currentUserId={currentUserId}
           token={token}
+          currentUserId={currentUserId}
         />
       </Box>
       <ChatSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onSave={setChatSettings} initialSettings={chatSettings} />
@@ -193,19 +215,20 @@ const ChatView = ({
 
 ChatView.propTypes = {
   currentUserId: PropTypes.string.isRequired,
-  recipient: PropTypes.object,
+  recipient: PropTypes.object.isRequired,
   onSendMessage: PropTypes.func.isRequired,
   onSendMediaMessage: PropTypes.func.isRequired,
   onMarkRead: PropTypes.func.isRequired,
   onDeleteMessage: PropTypes.func.isRequired,
+  onEditMessage: PropTypes.func.isRequired,
   token: PropTypes.string.isRequired,
   fetchMessagesList: PropTypes.func.isRequired,
   pendingMediaList: PropTypes.array,
   setPendingMediaFile: PropTypes.func.isRequired,
   clearPendingMedia: PropTypes.func.isRequired,
-  isGroupChat: PropTypes.bool,
+  isGroupChat: PropTypes.bool.isRequired,
   friends: PropTypes.array.isRequired,
-  setMessages: PropTypes.func.isRequired, // Додано
+  setMessages: PropTypes.func.isRequired,
 };
 
 export default ChatView;

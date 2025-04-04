@@ -27,9 +27,9 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen }) => (
 );
 
 ChatHeader.propTypes = {
-  recipient: PropTypes.object,
+  recipient: PropTypes.object.isRequired,
   isGroupChat: PropTypes.bool.isRequired,
   onSettingsOpen: PropTypes.func.isRequired,
 };
 
-export default ChatHeader;
+export default React.memo(ChatHeader);

@@ -15,6 +15,7 @@ const ChatMessages = ({
   currentUserId,
   recipient,
   onDeleteMessage,
+  onEditMessage,
   onSendMediaMessage,
   onMarkRead,
   isFetching,
@@ -22,7 +23,7 @@ const ChatMessages = ({
   loadMoreMessages,
   chatBackground,
   setReplyToMessage,
-  onForwardMessage, // Додано
+  onForwardMessage,
 }) => {
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -58,12 +59,13 @@ const ChatMessages = ({
             message={msg}
             isSentByCurrentUser={msg.sender_id === currentUserId}
             onDelete={onDeleteMessage}
+            onEdit={onEditMessage}
             currentUserId={currentUserId}
             recipient={recipient}
             onSendMediaMessage={onSendMediaMessage}
             messages={messages}
             setReplyToMessage={setReplyToMessage}
-            onForward={onForwardMessage} // Додано
+            onForward={onForwardMessage}
           />
         ))
       ) : (
@@ -79,8 +81,9 @@ const ChatMessages = ({
 ChatMessages.propTypes = {
   messages: PropTypes.array.isRequired,
   currentUserId: PropTypes.string.isRequired,
-  recipient: PropTypes.object,
+  recipient: PropTypes.object.isRequired,
   onDeleteMessage: PropTypes.func.isRequired,
+  onEditMessage: PropTypes.func.isRequired,
   onSendMediaMessage: PropTypes.func.isRequired,
   onMarkRead: PropTypes.func.isRequired,
   isFetching: PropTypes.bool.isRequired,
@@ -88,7 +91,7 @@ ChatMessages.propTypes = {
   loadMoreMessages: PropTypes.func.isRequired,
   chatBackground: PropTypes.string.isRequired,
   setReplyToMessage: PropTypes.func.isRequired,
-  onForwardMessage: PropTypes.func.isRequired, // Додано
+  onForwardMessage: PropTypes.func.isRequired,
 };
 
-export default ChatMessages;
+export default React.memo(ChatMessages);

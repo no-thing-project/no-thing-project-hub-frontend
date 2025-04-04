@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import PropTypes from "prop-types";
 import { Box, Typography, IconButton, Menu, MenuItem } from "@mui/material";
-import { Delete, Reply, Forward, Save } from "@mui/icons-material";
+import { Delete, Reply, Forward, Save, Edit } from "@mui/icons-material";
 
 const messageBubbleStyles = (isSentByCurrentUser) => ({
   maxWidth: { xs: "85%", md: "70%" },
@@ -32,7 +32,7 @@ const mediaRenderers = {
   file: (item) => <a href={item.content} download><Typography variant="body2" color="inherit">Download: {item.content.split("/").pop()}</Typography></a>,
 };
 
-const MessageBubble = ({ message, isSentByCurrentUser, onDelete, currentUserId, recipient, onSendMediaMessage, messages, setReplyToMessage, onForward }) => {
+const MessageBubble = ({ message, isSentByCurrentUser, onDelete, onEdit, currentUserId, recipient, onSendMediaMessage, messages, setReplyToMessage, onForward }) => {
   const [anchorEl, setAnchorEl] = useState(null);
 
   const renderContent = () => {
@@ -48,6 +48,14 @@ const MessageBubble = ({ message, isSentByCurrentUser, onDelete, currentUserId, 
     if (message.content) contents.push(<Typography key="content" variant="body1">{message.content}</Typography>);
     message.media?.forEach((item, i) => contents.push(<Box key={`media-${i}`} sx={{ mt: 1 }}>{mediaRenderers[item.type]?.(item)}</Box>));
     return contents;
+  };
+
+  const handleEdit = () => {
+    const newContent = prompt("Edit message:", message.content);
+    if (newContent && newContent !== message.content) {
+      onEdit(message.message_id, newContent);
+    }
+    setAnchorEl(null);
   };
 
   return (
@@ -67,7 +75,12 @@ const MessageBubble = ({ message, isSentByCurrentUser, onDelete, currentUserId, 
             <Save sx={{ mr: 1 }} /> Save
           </MenuItem>
         )}
-        {isSentByCurrentUser && <MenuItem onClick={() => { onDelete(message.message_id); setAnchorEl(null); }}><Delete sx={{ mr: 1 }} /> Delete</MenuItem>}
+        {isSentByCurrentUser && (
+          <>
+            <MenuItem onClick={handleEdit}><Edit sx={{ mr: 1 }} /> Edit</MenuItem>
+            <MenuItem onClick={() => { onDelete(message.message_id); setAnchorEl(null); }}><Delete sx={{ mr: 1 }} /> Delete</MenuItem>
+          </>
+        )}
       </Menu>
     </Box>
   );
@@ -77,12 +90,13 @@ MessageBubble.propTypes = {
   message: PropTypes.object.isRequired,
   isSentByCurrentUser: PropTypes.bool.isRequired,
   onDelete: PropTypes.func.isRequired,
+  onEdit: PropTypes.func.isRequired,
   currentUserId: PropTypes.string.isRequired,
   recipient: PropTypes.object,
   onSendMediaMessage: PropTypes.func.isRequired,
   messages: PropTypes.array.isRequired,
   setReplyToMessage: PropTypes.func.isRequired,
-  onForward: PropTypes.func.isRequired, // Додано
+  onForward: PropTypes.func.isRequired,
 };
 
-export default MessageBubble;
+export default React.memo(MessageBubble);

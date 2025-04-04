@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { Box, Typography, List, TextField, CircularProgress, Button, Menu, MenuItem } from "@mui/material";
+import PropTypes from "prop-types";
 import { Add } from "@mui/icons-material";
 import ConversationItem from "./ConversationItem";
 
@@ -12,91 +13,60 @@ const ConversationsList = ({
   selectedConversationId,
   onDeleteGroupChat,
   onDeleteConversation,
-  isLoading: externalLoading = false,
+  isLoading = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [anchorEl, setAnchorEl] = useState(null);
 
   const getConversationData = useMemo(() => {
-    return (group_id, isGroup = false) => {
+    return (id, isGroup = false) => {
       const convMessages = messages.filter((msg) =>
-        isGroup ? msg.group_id === group_id : [msg.sender_id, msg.receiver_id].includes(group_id) && !msg.group_id
+        isGroup ? msg.group_id === id : [msg.sender_id, msg.receiver_id].includes(id) && !msg.group_id
       );
       const lastMessage = convMessages.length
         ? convMessages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0]
         : null;
       const unreadCount = convMessages.filter((m) => m.receiver_id === currentUserId && !m.is_read).length;
-      console.log(`Conversation data for ${isGroup ? "group" : "friend"} ${group_id}:`, { lastMessage, unreadCount });
       return { lastMessage, unreadCount };
     };
   }, [messages, currentUserId]);
 
-  const filteredGroupChats = useMemo(() => {
-    const filtered = groupChats.filter((g) =>
+  const filteredGroupChats = useMemo(() =>
+    groupChats.filter((g) =>
       g.members.includes(currentUserId) && g.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-    console.log("filteredGroupChats:", filtered);
-    return filtered;
-  }, [groupChats, currentUserId, searchQuery]);
+    ), [groupChats, currentUserId, searchQuery]);
 
-  const filteredFriends = useMemo(() => {
-    const filtered = friends.filter((f) =>
+  const filteredFriends = useMemo(() =>
+    friends.filter((f) =>
       (f.username || f.anonymous_id).toLowerCase().includes(searchQuery.toLowerCase())
-    );
-    console.log("filteredFriends:", filtered);
-    return filtered;
-  }, [friends, searchQuery]);
+    ), [friends, searchQuery]);
 
   const activeConversations = useMemo(() => {
     const friendIdsWithMessages = new Set(
-      messages
-        .filter((msg) => !msg.group_id) // Тільки приватні повідомлення
-        .map((msg) => {
-          console.log("Processing message:", msg); // Дебаг кожного повідомлення
-          return [msg.sender_id, msg.receiver_id].filter((id) => id !== undefined); // Фільтруємо undefined
-        })
-        .flat()
+      messages.filter((msg) => !msg.group_id).flatMap((msg) => [msg.sender_id, msg.receiver_id])
     );
-    const result = filteredFriends.filter((friend) => friendIdsWithMessages.has(friend.anonymous_id));
-    console.log("friendIdsWithMessages:", [...friendIdsWithMessages]);
-    console.log("activeConversations:", result);
-    return result;
+    return filteredFriends.filter((friend) => friendIdsWithMessages.has(friend.anonymous_id));
   }, [filteredFriends, messages]);
 
-  const availableFriends = useMemo(() => {
-    const result = filteredFriends.filter(
-      (friend) => !activeConversations.some((active) => active.anonymous_id === friend.anonymous_id)
-    );
-    console.log("availableFriends:", result);
-    return result;
-  }, [filteredFriends, activeConversations]);
+  const availableFriends = useMemo(() =>
+    filteredFriends.filter((friend) =>
+      !activeConversations.some((active) => active.anonymous_id === friend.anonymous_id)
+    ), [filteredFriends, activeConversations]);
 
   const hasConversations = messages.length > 0 || groupChats.length > 0;
   const hasFriends = friends.length > 0;
 
   const handleNewChatClick = useCallback((event) => setAnchorEl(event.currentTarget), []);
-  const handleFriendSelect = useCallback(
-    (friendId) => {
-      console.log("Selected friend ID:", friendId);
-      onSelectConversation(friendId);
-      setAnchorEl(null);
-    },
-    [onSelectConversation]
-  );
+  const handleFriendSelect = useCallback((friendId) => {
+    onSelectConversation(friendId);
+    setAnchorEl(null);
+  }, [onSelectConversation]);
   const handleCloseMenu = useCallback(() => setAnchorEl(null), []);
-
-  console.log("ConversationsList render:");
-  console.log("currentUserId:", currentUserId);
-  console.log("messages:", messages);
-  console.log("groupChats:", groupChats);
-  console.log("friends:", friends);
-  console.log("filteredGroupChats:", filteredGroupChats);
-  console.log("activeConversations:", activeConversations);
 
   return (
     <Box sx={{ mt: 2, maxHeight: { xs: "50vh", md: "70vh" }, overflowY: "auto" }}>
       <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Conversations</Typography>
-      {externalLoading ? (
+      {isLoading ? (
         <Box sx={{ display: "flex", justifyContent: "center", my: 2 }}>
           <CircularProgress />
         </Box>
@@ -149,7 +119,7 @@ const ConversationsList = ({
                   return (
                     <ConversationItem
                       key={group.group_id}
-                      id={`group:${group.group_id}`}
+                      id={group.group_id}
                       name={group.name}
                       isGroup
                       lastMessage={lastMessage}
@@ -211,4 +181,16 @@ const ConversationsList = ({
   );
 };
 
-export default ConversationsList;
+ConversationsList.propTypes = {
+  messages: PropTypes.array.isRequired,
+  groupChats: PropTypes.array.isRequired,
+  friends: PropTypes.array.isRequired,
+  currentUserId: PropTypes.string.isRequired,
+  onSelectConversation: PropTypes.func.isRequired,
+  selectedConversationId: PropTypes.string,
+  onDeleteGroupChat: PropTypes.func.isRequired,
+  onDeleteConversation: PropTypes.func.isRequired,
+  isLoading: PropTypes.bool,
+};
+
+export default React.memo(ConversationsList);

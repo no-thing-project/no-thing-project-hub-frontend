@@ -1,4 +1,5 @@
-import React from "react";
+import React, { memo } from "react";
+import PropTypes from "prop-types";
 import { ListItem, ListItemText, Badge, IconButton } from "@mui/material";
 import { Delete } from "@mui/icons-material";
 
@@ -44,4 +45,15 @@ const ConversationItem = ({
   </ListItem>
 );
 
-export default ConversationItem;
+ConversationItem.propTypes = {
+  id: PropTypes.string.isRequired,
+  name: PropTypes.string.isRequired,
+  isGroup: PropTypes.bool,
+  lastMessage: PropTypes.object,
+  unreadCount: PropTypes.number,
+  selected: PropTypes.bool,
+  onSelect: PropTypes.func.isRequired,
+  onDelete: PropTypes.func.isRequired,
+};
+
+export default memo(ConversationItem);

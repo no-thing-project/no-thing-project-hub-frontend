@@ -53,7 +53,7 @@ const MediaPreview = ({ pendingMedia, onClear, index }) => {
               clipPath: videoShapes[shape],
               backgroundColor: "black",
             }}
-            onError={() => alert("Error loading video preview")}
+            onError={() => console.error("Error loading video preview")}
           />
         );
       case "voice":
@@ -65,7 +65,7 @@ const MediaPreview = ({ pendingMedia, onClear, index }) => {
           </Typography>
         );
       default:
-        return null;
+        return <Typography variant="body2">Unsupported media type</Typography>;
     }
   };
 
@@ -88,4 +88,4 @@ MediaPreview.propTypes = {
   index: PropTypes.number.isRequired,
 };
 
-export default MediaPreview;
+export default React.memo(MediaPreview);
