@@ -1,17 +1,23 @@
-import api from "./apiClient";
-import { handleApiError } from "./apiClient";
+import api from './apiClient';
+import { handleApiError } from './apiClient';
 
-const API_BASE = "/api/v1/messages";
-
-// Універсальна функція для обробки відповідей
 const processResponse = (response) => response.data?.content || response.data;
 
-// Відправка повідомлення
+// Повідомлення
 export const sendMessage = async (messageData, token) => {
-  if (!messageData) throw new Error("Message data is required");
   try {
-    const response = await api.post(`${API_BASE}/`, messageData, {
+    const response = await api.post('api/v1/messages/', messageData, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const fetchMessages = async (conversationId, { page = 1, limit = 20 } = {}, token) => {
+  try {
+    const response = await api.get(`api/v1/messages/${conversationId}`, {
       headers: { Authorization: `Bearer ${token}` },
+      params: { page, limit },
     });
     return processResponse(response);
   } catch (err) {
@@ -19,13 +25,38 @@ export const sendMessage = async (messageData, token) => {
   }
 };
 
-// Отримання повідомлень
-export const fetchMessages = async (token, { withUserId, groupId, offset = 0, limit = 20, signal } = {}) => {
+export const markMessageAsRead = async (messageId, token) => {
   try {
-    const response = await api.get(`${API_BASE}/`, {
+    const response = await api.put(`api/v1/messages/${messageId}/read`, {}, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const deleteMessage = async (messageId, token) => {
+  try {
+    const response = await api.delete(`api/v1/messages/${messageId}`, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const editMessage = async ({ messageId, newContent }, token) => {
+  try {
+    const response = await api.patch('api/v1/messages/edit', { messageId, newContent }, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const searchMessages = async (conversationId, query, { limit = 50 } = {}, token) => {
+  try {
+    const response = await api.get(`api/v1/messages/search/${conversationId}`, {
       headers: { Authorization: `Bearer ${token}` },
-      params: { withUserId, groupId, offset, limit },
-      signal,
+      params: { query, limit },
     });
     return processResponse(response);
   } catch (err) {
@@ -33,11 +64,151 @@ export const fetchMessages = async (token, { withUserId, groupId, offset = 0, li
   }
 };
 
-// Отримання групових чатів
+// Розмови
+export const createConversation = async (friendId, token) => {
+  try {
+    const response = await api.post('api/v1/conversations/', { friendId }, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const fetchConversations = async ({ page = 1, limit = 20 } = {}, token) => {
+  try {
+    const response = await api.get('api/v1/conversations/', {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { page, limit },
+    });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const fetchConversation = async (conversationId, token) => {
+  try {
+    const response = await api.get(`api/v1/conversations/${conversationId}`, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const updateConversation = async (conversationId, { name }, token) => {
+  try {
+    const response = await api.patch(`api/v1/conversations/${conversationId}`, { name }, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const archiveConversation = async (conversationId, token) => {
+  try {
+    const response = await api.post(`api/v1/conversations/${conversationId}/archive`, {}, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const unarchiveConversation = async (conversationId, token) => {
+  try {
+    const response = await api.post(`api/v1/conversations/${conversationId}/unarchive`, {}, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const muteConversation = async (conversationId, token) => {
+  try {
+    const response = await api.post(`api/v1/conversations/${conversationId}/mute`, {}, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const unmuteConversation = async (conversationId, token) => {
+  try {
+    const response = await api.post(`api/v1/conversations/${conversationId}/unmute`, {}, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const pinConversation = async (conversationId, token) => {
+  try {
+    const response = await api.post(`api/v1/conversations/${conversationId}/pin`, {}, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const unpinConversation = async (conversationId, token) => {
+  try {
+    const response = await api.post(`api/v1/conversations/${conversationId}/unpin`, {}, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const deleteConversation = async (conversationId, token) => {
+  try {
+    const response = await api.delete(`api/v1/conversations/${conversationId}`, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+// Групові чати
 export const fetchGroupChats = async (token) => {
   try {
-    const response = await api.get(`${API_BASE}/groups`, {
+    const response = await api.get('api/v1/groups/', { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const createGroupChat = async ({ name, members }, token) => {
+  try {
+    const response = await api.post('api/v1/groups/', { name, members }, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const updateGroupChat = async (groupId, { name }, token) => {
+  try {
+    const response = await api.patch(`api/v1/groups/${groupId}`, { name }, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const addGroupMembers = async (groupId, { members }, token) => {
+  try {
+    const response = await api.post(`api/v1/groups/${groupId}/members`, { members }, { headers: { Authorization: `Bearer ${token}` } });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const removeGroupMembers = async (groupId, { members }, token) => {
+  try {
+    const response = await api.delete(`api/v1/groups/${groupId}/members`, {
       headers: { Authorization: `Bearer ${token}` },
+      data: { members },
     });
     return processResponse(response);
   } catch (err) {
@@ -45,81 +216,37 @@ export const fetchGroupChats = async (token) => {
   }
 };
 
-// Завантаження початкових даних
-export const loadInitialMessagesData = async (token, friends) => {
-  if (!token || !friends?.length) return { messages: [], groupChats: [] };
-  const controller = new AbortController();
+export const deleteGroupChat = async (groupId, token) => {
   try {
-    const [groupChats, allMessages] = await Promise.all([
-      fetchGroupChats(token),
-      Promise.all([
-        ...friends.map((friend) =>
-          fetchMessages(token, { withUserId: friend.anonymous_id, signal: controller.signal })
-        ),
-        ...(await fetchGroupChats(token)).map((group) =>
-          fetchMessages(token, { groupId: group.group_id, signal: controller.signal })
-        ),
-      ]),
-    ]);
-    return { messages: allMessages.flat(), groupChats };
-  } catch (err) {
-    if (err.name !== "AbortError") throw err;
-    return { messages: [], groupChats: [] };
-  } finally {
-    controller.abort();
-  }
-};
-
-// Позначення повідомлення як прочитане
-export const markMessageAsRead = async (messageId, token) => {
-  if (!messageId) throw new Error("Message ID is required");
-  try {
-    const response = await api.put(`${API_BASE}/${messageId}/read`, {}, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = await api.delete(`api/v1/groups/${groupId}`, { headers: { Authorization: `Bearer ${token}` } });
     return processResponse(response);
   } catch (err) {
     return handleApiError(err);
   }
 };
 
-// Видалення повідомлення
-export const deleteMessage = async (messageId, token) => {
-  if (!messageId) throw new Error("Message ID is required");
-  try {
-    const response = await api.delete(`${API_BASE}/${messageId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return processResponse(response);
-  } catch (err) {
-    return handleApiError(err);
-  }
-};
-
-// Завантаження файлу
+// Завантаження файлів
 export const uploadFile = async (file, token) => {
-  if (!file) throw new Error("File is required");
   try {
     const formData = new FormData();
-    formData.append("file", file);
-    const response = await api.post(`${API_BASE}/upload`, formData, {
+    formData.append('file', file);
+    const response = await api.post('api/v1/uploads/', formData, {
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": "multipart/form-data",
+        'Content-Type': 'multipart/form-data',
       },
     });
-    return processResponse(response)?.url;
+    return processResponse(response);
   } catch (err) {
     return handleApiError(err);
   }
 };
 
-// Створення групового чату
-export const createGroupChat = async (name, members, token) => {
-  if (!name || !members?.length) throw new Error("Group name and members are required");
+export const fetchFile = async (fileKey, token) => {
   try {
-    const response = await api.post(`${API_BASE}/group`, { name, members }, {
+    const response = await api.get('api/v1/uploads/', {
       headers: { Authorization: `Bearer ${token}` },
+      params: { fileKey },
     });
     return processResponse(response);
   } catch (err) {
@@ -127,52 +254,11 @@ export const createGroupChat = async (name, members, token) => {
   }
 };
 
-// Видалення групового чату
-export const deleteGroupChat = async (groupId, token) => {
-  if (!groupId) throw new Error("Group ID is required");
+export const deleteFile = async (fileKey, token) => {
   try {
-    const response = await api.delete(`${API_BASE}/group/${groupId}`, {
+    const response = await api.delete('api/v1/uploads/', {
       headers: { Authorization: `Bearer ${token}` },
-    });
-    return processResponse(response);
-  } catch (err) {
-    return handleApiError(err);
-  }
-};
-
-// Видалення розмови
-export const deleteConversation = async (conversationId, token) => {
-  if (!conversationId) throw new Error("Conversation ID is required");
-  try {
-    const response = await api.delete(`${API_BASE}/conversation/${conversationId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return processResponse(response);
-  } catch (err) {
-    return handleApiError(err);
-  }
-};
-
-// Редагування повідомлення
-export const editMessage = async (messageId, newContent, token) => {
-  if (!messageId || !newContent) throw new Error("Message ID and new content are required");
-  try {
-    const response = await api.patch(`${API_BASE}/edit`, { messageId, newContent }, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return processResponse(response);
-  } catch (err) {
-    return handleApiError(err);
-  }
-};
-
-// Пошук повідомлень
-export const searchMessages = async (query, token) => {
-  if (!query) throw new Error("Search query is required");
-  try {
-    const response = await api.get(`${API_BASE}/search`, {
-      headers: { Authorization: `Bearer ${token}` },
-      params: { query },
+      data: { fileKey },
     });
     return processResponse(response);
   } catch (err) {
