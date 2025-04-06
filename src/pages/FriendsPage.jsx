@@ -126,7 +126,7 @@ const FriendsPage = () => {
   }
 
   return (
-    <AppLayout currentUser={authData} onLogout={handleLogout} token={token} headerTitle="Friends">
+    <AppLayout currentUser={authData} onLogout={handleLogout} token={token} >
       <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
         <ProfileHeader user={authData} isOwnProfile={true}>
           <Button
