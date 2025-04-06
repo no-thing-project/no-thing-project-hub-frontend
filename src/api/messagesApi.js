@@ -265,3 +265,48 @@ export const deleteFile = async (fileKey, token) => {
     return handleApiError(err);
   }
 };
+
+// Додаткові методи для роботи з користувачем
+export const fetchUserConversations = async (token) => {
+  try {
+    const response = await api.get('api/v1/user/conversations', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const fetchUserGroups = async (token) => {
+  try {
+    const response = await api.get('api/v1/user/groups', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const fetchUserMessages = async (token) => {
+  try {
+    const response = await api.get('api/v1/user/messages', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const fetchUserStats = async (token) => {
+  try {
+    const response = await api.get('api/v1/user/stats', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return processResponse(response);
+  } catch (err) {
+    return handleApiError(err);
+  }
+};

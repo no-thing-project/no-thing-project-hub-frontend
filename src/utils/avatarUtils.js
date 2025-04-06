@@ -86,6 +86,8 @@ export const StyledBadge = styled(Badge, {
 
 // Об'єднаний компонент аватара з бейджем
 export const ProfileAvatar = ({ user, badgeSize = 10, status = "online", onClicEvent }) => {
+  if (!user) return null; // 🔐 Захист від null
+
   return (
     <StyledBadge
       overlap="circular"
@@ -114,3 +116,4 @@ export const ProfileAvatar = ({ user, badgeSize = 10, status = "online", onClicE
     </StyledBadge>
   );
 };
+

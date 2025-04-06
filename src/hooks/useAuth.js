@@ -1,7 +1,7 @@
 // src/hooks/useAuth.js
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import api from "../api/apiClient";
-import { handleApiError } from "../api/apiClient";
+import { useNavigate } from "react-router-dom";
+import api, { handleApiError } from "../api/apiClient";
 
 const decodeToken = (token) => {
   try {
@@ -26,7 +26,8 @@ const decodeToken = (token) => {
   }
 };
 
-const useAuth = (navigate) => {
+const useAuth = () => {
+  const navigate = useNavigate();
   const [token, setToken] = useState(() => localStorage.getItem("token") || null);
   const [refreshToken, setRefreshToken] = useState(() => localStorage.getItem("refreshToken") || null);
   const [authData, setAuthData] = useState(() => {
@@ -53,18 +54,23 @@ const useAuth = (navigate) => {
     setRefreshToken(null);
     setAuthData(null);
     localStorage.clear();
-    setError(message || "Logged out successfully.");
-    if (navigate) navigate('/login');
+
+    setTimeout(() => {
+      navigate('/login', { replace: true });
+      window.location.reload();
+    }, 0);
+
+    setError(message || "Logged out.");
   }, [navigate]);
 
   const refreshAccessToken = useCallback(async () => {
-    if (!refreshToken || refreshInProgress.current) {
-      return false;
-    }
+    if (!refreshToken || refreshInProgress.current) return false;
+
     refreshInProgress.current = true;
     try {
       const response = await api.post("/api/v1/auth/refresh", { refreshToken });
       const { accessToken: newToken, refreshToken: newRefreshToken } = response.data.content || response.data;
+
       setToken(newToken);
       setRefreshToken(newRefreshToken);
       localStorage.setItem("token", newToken);
@@ -85,11 +91,13 @@ const useAuth = (navigate) => {
       setError(null);
       const decodedData = decodeToken(newToken);
       const normalizedAuthData = authDataFromResponse || decodedData;
+
       if (!normalizedAuthData?.anonymous_id) {
         setError("Invalid or missing authentication data.");
         setLoading(false);
         return;
       }
+
       setToken(newToken);
       setRefreshToken(newRefreshToken);
       setAuthData(normalizedAuthData);
@@ -98,16 +106,14 @@ const useAuth = (navigate) => {
       localStorage.setItem("authData", JSON.stringify(normalizedAuthData));
       isInitialValidationComplete.current = true;
       setLoading(false);
-      if (navigate) navigate("/home");
+
+      navigate("/home");
     },
     [navigate]
   );
 
   const updateAuthData = useCallback((newAuthData) => {
-    if (!newAuthData?.anonymous_id) {
-      console.error("Invalid authData provided for update:", newAuthData);
-      return;
-    }
+    if (!newAuthData?.anonymous_id) return;
     setAuthData(newAuthData);
     localStorage.setItem("authData", JSON.stringify(newAuthData));
   }, []);

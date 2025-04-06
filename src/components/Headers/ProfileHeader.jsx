@@ -4,6 +4,8 @@ import { headerStyles } from "../../styles/ProfileStyles";
 import StatusBage from "../Bages/StatusBage";
 
 const ProfileHeader = ({ user, isOwnProfile, children, ...props }) => {
+  if (!user) return null; // або спінер/плейсхолдер, якщо потрібно
+
   return (
     <Card sx={headerStyles.card}>
       <CardContent>
@@ -28,4 +30,3 @@ const ProfileHeader = ({ user, isOwnProfile, children, ...props }) => {
 };
 
 export default ProfileHeader;
-

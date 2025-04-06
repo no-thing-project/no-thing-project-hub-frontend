@@ -1,3 +1,4 @@
+// src/pages/HomePage.jsx
 import React, { useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import AppLayout from "../components/Layout/AppLayout";
@@ -24,7 +25,7 @@ const HomePage = () => {
   const initialAnonymousIdRef = useRef(null);
 
   useEffect(() => {
-    if (currentUser && currentUser.anonymous_id && !initialAnonymousIdRef.current) {
+    if (currentUser?.anonymous_id && !initialAnonymousIdRef.current) {
       initialAnonymousIdRef.current = currentUser.anonymous_id;
     }
   }, [currentUser]);
@@ -50,18 +51,12 @@ const HomePage = () => {
 
       if (anonymous_id && anonymous_id !== initialAnonymousIdRef.current) {
         try {
-          console.log("Fetching profile for targetId:", targetId);
-          const startTime = Date.now();
           const result = await fetchProfileData(targetId, signal);
-          const endTime = Date.now();
-          console.log(`Profile fetched in ${endTime - startTime}ms, result:`, result);
-
-          if (!result || !result.profileData) {
+          if (!result?.profileData) {
             navigate("/not-found", { state: { message: `Profile with ID ${targetId} not found.` } });
           }
         } catch (err) {
           if (err.name !== "AbortError") {
-            console.error("Error loading profile in HomePage:", err);
             if (err.message === "Profile not found") {
               navigate("/not-found", { state: { message: `Profile with ID ${targetId} not found.` } });
             } else {
@@ -77,15 +72,19 @@ const HomePage = () => {
     return () => controller.abort();
   }, [anonymous_id, currentUser, token, isAuthenticated, authLoading, navigate, fetchProfileData, handleLogout, clearProfileState, showNotification]);
 
+  useEffect(() => {
+    if (profileError) {
+      showNotification(profileError, "error");
+    }
+  }, [profileError, showNotification]);
+
   const isOwnProfile = !anonymous_id || anonymous_id === initialAnonymousIdRef.current;
   const profileData = isOwnProfile ? currentUser : fetchedProfileData;
 
   const isLoading = authLoading || (anonymous_id && anonymous_id !== initialAnonymousIdRef.current && profileLoading);
   if (isLoading) return <LoadingSpinner />;
-  if (profileError) showNotification(profileError, "error");
-  if (!profileData) showNotification("Profile not found. Please try again or check the profile ID.", "error");
+  if (!profileData) return null;
 
-  console.log("Rendering HomePage with profileData:", profileData);
   return (
     <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token}>
       <HomeSection profileData={profileData} isOwnProfile={isOwnProfile} />

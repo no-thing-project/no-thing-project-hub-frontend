@@ -164,7 +164,7 @@ const ProfilePage = () => {
   if (!userData) return null;
 
   return (
-    <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token} headerTitle="Profile">
+    <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token} >
       <Box sx={{ maxWidth: 1500, margin: '0 auto', p: 2 }}>
         <ProfileHeader user={userData} isOwnProfile={isOwnProfile}>
           {isOwnProfile && (

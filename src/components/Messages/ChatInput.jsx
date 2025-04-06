@@ -28,8 +28,8 @@ const inputAreaStyles = {
 };
 
 const ChatInput = ({
+  conversationId,
   onSendMediaMessage,
-  recipient,
   pendingMediaList,
   setPendingMediaFile,
   clearPendingMedia,
@@ -66,9 +66,9 @@ const ChatInput = ({
     if (!messageInput.trim() && !pendingMediaList?.length) return;
     setIsSending(true);
     const messageData = {
-      ...(isGroupChat ? { groupId: recipient.group_id } : { recipientId: recipient.anonymous_id }),
+      conversationId,
       content: messageInput.trim() || "Media message",
-      media: pendingMediaList,
+      mediaFiles: pendingMediaList,
       ...(replyToMessage && { replyTo: replyToMessage.message_id }),
     };
     try {
@@ -86,7 +86,7 @@ const ChatInput = ({
   const handleFileUpload = (event, type) => {
     const file = event.target.files?.[0];
     if (file) {
-      setPendingMediaFile({ file, type, preview: URL.createObjectURL(file), shape: defaultVideoShape });
+      setPendingMediaFile(file);
       setAnchorEl(null);
     }
   };
@@ -190,8 +190,8 @@ const ChatInput = ({
 };
 
 ChatInput.propTypes = {
+  conversationId: PropTypes.string.isRequired,
   onSendMediaMessage: PropTypes.func.isRequired,
-  recipient: PropTypes.object.isRequired,
   pendingMediaList: PropTypes.array,
   setPendingMediaFile: PropTypes.func.isRequired,
   clearPendingMedia: PropTypes.func.isRequired,
