@@ -17,7 +17,7 @@ export const fetchBoards = async (token, filters = {}, signal) => {
 export const fetchBoardsByGateId = async (gateId, token, filters = {}, signal) => {
   if (!gateId) throw new Error("Gate ID is required");
   try {
-    const response = await api.get(`/api/v1/boards/${gateId}`, {
+    const response = await api.get(`/api/v1/boards/gates/${gateId}/boards`, {
       headers: { Authorization: `Bearer ${token}` },
       params: filters,
       signal,
@@ -44,18 +44,15 @@ export const fetchBoardsByClassId = async (classId, token, filters = {}, signal)
 
 export const fetchBoardById = async (boardId, gateId, classId, token, signal) => {
   if (!boardId) throw new Error("Board ID is required");
-  let url = `/api/v1/boards/${boardId}`; // Default case: standalone board
-  if (gateId && gateId !== null && typeof gateId === "string") {
-    url = `/api/v1/boards/gates/${gateId}/${boardId}`;
-  } else if (classId && classId !== null && typeof classId === "string") {
-    url = `/api/v1/boards/classes/${classId}/${boardId}`;
-  }
+  let url = `/api/v1/boards/${boardId}`;
+  if (gateId) url = `/api/v1/boards/gates/${gateId}/boards/${boardId}`;
+  else if (classId) url = `/api/v1/boards/classes/${classId}/${boardId}`;
   try {
     const response = await api.get(url, {
       headers: { Authorization: `Bearer ${token}` },
-      signal, // Pass signal as an option, not part of URL
+      signal,
     });
-    return response.data?.content || response.data;
+    return response.data?.content || {};
   } catch (err) {
     return handleApiError(err);
   }
@@ -67,7 +64,7 @@ export const createBoard = async (boardData, token) => {
     const response = await api.post(`/api/v1/boards`, boardData, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    return response.data?.content || response.data;
+    return response.data?.content || {};
   } catch (err) {
     return handleApiError(err);
   }
@@ -76,10 +73,10 @@ export const createBoard = async (boardData, token) => {
 export const createBoardInGate = async (gateId, boardData, token) => {
   if (!gateId || !boardData) throw new Error("Gate ID and board data are required");
   try {
-    const response = await api.post(`/api/v1/boards/${gateId}`, boardData, {
+    const response = await api.post(`/api/v1/boards/gates/${gateId}/boards`, boardData, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    return response.data?.content || response.data;
+    return response.data?.content || {};
   } catch (err) {
     return handleApiError(err);
   }
@@ -91,7 +88,7 @@ export const createBoardInClass = async (classId, boardData, token) => {
     const response = await api.post(`/api/v1/boards/classes/${classId}`, boardData, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    return response.data?.content || response.data;
+    return response.data?.content || {};
   } catch (err) {
     return handleApiError(err);
   }
@@ -100,27 +97,13 @@ export const createBoardInClass = async (classId, boardData, token) => {
 export const updateBoard = async (boardId, gateId, classId, boardData, token) => {
   if (!boardId || !boardData) throw new Error("Board ID and data are required");
   let url = `/api/v1/boards/${boardId}`;
-  if (gateId) url = `/api/v1/boards/${gateId}/${boardId}`;
+  if (gateId) url = `/api/v1/boards/gates/${gateId}/boards/${boardId}`;
   else if (classId) url = `/api/v1/boards/classes/${classId}/${boardId}`;
   try {
     const response = await api.put(url, boardData, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    return response.data?.content || response.data;
-  } catch (err) {
-    return handleApiError(err);
-  }
-};
-
-export const updateBoardStatus = async (boardId, gateId, classId, statusData, token) => {
-  if (!boardId || !statusData) throw new Error("Board ID and status data are required");
-  let url = `/api/v1/boards/${gateId}/${boardId}/status`;
-  if (classId) url = `/api/v1/boards/classes/${classId}/${boardId}/status`;
-  try {
-    const response = await api.put(url, statusData, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return response.data?.content || response.data;
+    return response.data?.content || {};
   } catch (err) {
     return handleApiError(err);
   }
@@ -129,13 +112,13 @@ export const updateBoardStatus = async (boardId, gateId, classId, statusData, to
 export const deleteBoard = async (boardId, gateId, classId, token) => {
   if (!boardId) throw new Error("Board ID is required");
   let url = `/api/v1/boards/${boardId}`;
-  if (gateId) url = `/api/v1/boards/${gateId}/${boardId}`;
+  if (gateId) url = `/api/v1/boards/gates/${gateId}/boards/${boardId}`;
   else if (classId) url = `/api/v1/boards/classes/${classId}/${boardId}`;
   try {
     const response = await api.delete(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    return response.data?.content || response.data;
+    return response.data?.content || {};
   } catch (err) {
     return handleApiError(err);
   }
@@ -153,13 +136,25 @@ export const fetchBoardMembers = async (boardId, token) => {
   }
 };
 
+export const fetchBoardStats = async (boardId, token) => {
+  if (!boardId) throw new Error("Board ID is required");
+  try {
+    const response = await api.get(`/api/v1/boards/${boardId}/stats`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data?.content || {};
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
 export const likeBoard = async (boardId, token) => {
   if (!boardId) throw new Error("Board ID is required");
   try {
     const response = await api.post(`/api/v1/boards/${boardId}/like`, {}, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    return response.data?.content || response.data;
+    return response.data?.content || {};
   } catch (err) {
     return handleApiError(err);
   }
@@ -171,19 +166,67 @@ export const unlikeBoard = async (boardId, token) => {
     const response = await api.post(`/api/v1/boards/${boardId}/unlike`, {}, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    return response.data?.content || response.data;
+    return response.data?.content || {};
   } catch (err) {
     return handleApiError(err);
   }
 };
 
-export const fetchBoardStats = async (boardId, token) => {
-  if (!boardId) throw new Error("Board ID is required");
+export const inviteUser = async (boardId, anonymousId, token) => {
+  if (!boardId || !anonymousId) throw new Error("Board ID and user ID are required");
   try {
-    const response = await api.get(`/api/v1/boards/${boardId}/stats`, {
+    const response = await api.post(`/api/v1/boards/${boardId}/invite`, { anonymous_id: anonymousId }, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    return response.data?.content || response.data;
+    return response.data?.content || {};
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const acceptInvite = async (boardId, token) => {
+  if (!boardId) throw new Error("Board ID is required");
+  try {
+    const response = await api.post(`/api/v1/boards/${boardId}/accept-invite`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data?.content || {};
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const addMember = async (boardId, memberData, token) => {
+  if (!boardId || !memberData) throw new Error("Board ID and member data are required");
+  try {
+    const response = await api.post(`/api/v1/boards/${boardId}/add-member`, memberData, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data?.content || {};
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const removeMember = async (boardId, memberData, token) => {
+  if (!boardId || !memberData) throw new Error("Board ID and member data are required");
+  try {
+    const response = await api.post(`/api/v1/boards/${boardId}/remove-member`, memberData, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data?.content || {};
+  } catch (err) {
+    return handleApiError(err);
+  }
+};
+
+export const runAIModeration = async (boardId, token) => {
+  if (!boardId) throw new Error("Board ID is required");
+  try {
+    const response = await api.post(`/api/v1/boards/${boardId}/ai-moderation`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data?.content || {};
   } catch (err) {
     return handleApiError(err);
   }

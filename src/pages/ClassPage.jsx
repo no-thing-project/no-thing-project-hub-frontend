@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, memo, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Box, Button, Snackbar, Alert } from "@mui/material";
 import { Add, Edit } from "@mui/icons-material";
@@ -109,23 +109,23 @@ const ClassPage = () => {
     loadClassData();
   }, [loadClassData, isAuthenticated]);
 
-  const filteredBoards = boards.filter((board) => {
-    const matchesSearch = board.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    if (!matchesSearch) return false;
-    if (quickFilter === "all") return true;
-    if (quickFilter === "public") return board.is_public;
-    if (quickFilter === "private") return !board.is_public;
-    if (quickFilter === "liked") {
-      const isLiked =
-        localLikes[board.board_id] !== undefined
-          ? localLikes[board.board_id]
-          : board.is_liked;
-      return isLiked;
-    }
-    return true;
-  });
+  const filteredBoards = useMemo(() => {
+    return boards.filter((board) => {
+      const matchesSearch = board.name.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+      if (quickFilter === "all") return true;
+      if (quickFilter === "public") return board.is_public;
+      if (quickFilter === "private") return !board.is_public;
+      if (quickFilter === "liked") {
+        const isLiked =
+          localLikes[board.board_id] !== undefined
+            ? localLikes[board.board_id]
+            : board.is_liked;
+        return isLiked;
+      }
+      return true;
+    });
+  }, [boards, quickFilter, searchQuery, localLikes]);
 
   const handleOpenCreateBoard = () => {
     setPopupBoard({ name: "", description: "", visibility: "Public" });
@@ -153,9 +153,7 @@ const ClassPage = () => {
       navigate(`/board/${newBoard.board_id}`);
     } catch (err) {
       const errorMsg =
-        err.response?.data?.errors?.[0] ||
-        err.message ||
-        "Failed to create board";
+        err.response?.data?.errors?.[0] || err.message || "Failed to create board";
       showNotification(errorMsg, "error");
     }
   }, [class_id, popupBoard, createNewBoardInClass, navigate, showNotification]);
@@ -215,13 +213,7 @@ const ClassPage = () => {
         "error"
       );
     }
-  }, [
-    editingBoard,
-    updateExistingBoard,
-    class_id,
-    loadClassData,
-    showNotification,
-  ]);
+  }, [editingBoard, updateExistingBoard, class_id, loadClassData, showNotification]);
 
   const handleDeleteBoard = useCallback(async () => {
     if (!boardToDelete) return;
@@ -239,13 +231,7 @@ const ClassPage = () => {
       setDeleteDialogOpen(false);
       setBoardToDelete(null);
     }
-  }, [
-    boardToDelete,
-    deleteExistingBoard,
-    class_id,
-    loadClassData,
-    showNotification,
-  ]);
+  }, [boardToDelete, deleteExistingBoard, class_id, loadClassData, showNotification]);
 
   const handleLikeBoard = useCallback(
     async (board_id, isLiked) => {
@@ -262,10 +248,7 @@ const ClassPage = () => {
         setLocalLikes({});
       } catch (err) {
         setLocalLikes((prev) => ({ ...prev, [board_id]: isLiked }));
-        showNotification(
-          `Failed to ${isLiked ? "unlike" : "like"} board`,
-          "error"
-        );
+        showNotification(`Failed to ${isLiked ? "unlike" : "like"} board`, "error");
       }
     },
     [likeBoardById, unlikeBoardById, loadClassData, showNotification]
@@ -275,8 +258,7 @@ const ClassPage = () => {
     setSuccess("");
   };
 
-  if (isLoading || authLoading || classesLoading || boardsLoading)
-    return <LoadingSpinner />;
+  if (isLoading || authLoading || classesLoading || boardsLoading) return <LoadingSpinner />;
   if (!isAuthenticated) {
     navigate("/login");
     return null;
@@ -287,11 +269,7 @@ const ClassPage = () => {
   }
 
   return (
-    <AppLayout
-      currentUser={authData}
-      onLogout={handleLogout}
-      token={token}
-    >
+    <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
         <ProfileHeader user={authData} isOwnProfile={true}>
           <Box sx={{ display: "flex", gap: 2 }}>
@@ -300,6 +278,7 @@ const ClassPage = () => {
               onClick={handleOpenCreateBoard}
               startIcon={<Add />}
               sx={actionButtonStyles}
+              aria-label="Create new board"
             >
               Create Board
             </Button>
@@ -315,6 +294,7 @@ const ClassPage = () => {
               }
               startIcon={<Edit />}
               sx={actionButtonStyles}
+              aria-label="Edit class"
             >
               Edit Class
             </Button>
@@ -323,6 +303,7 @@ const ClassPage = () => {
               color="error"
               onClick={handleDeleteClass}
               sx={deleteButtonStyle}
+              aria-label="Delete class"
             >
               Delete Class
             </Button>
@@ -391,11 +372,7 @@ const ClassPage = () => {
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity="success"
-          sx={{ width: "100%" }}
-        >
+        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
           {success}
         </Alert>
       </Snackbar>
@@ -403,4 +380,4 @@ const ClassPage = () => {
   );
 };
 
-export default ClassPage;
+export default memo(ClassPage);

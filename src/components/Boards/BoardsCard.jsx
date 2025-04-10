@@ -1,5 +1,5 @@
-import React from "react";
-import { Box, Typography, IconButton } from "@mui/material";
+import React, { memo } from "react";
+import { Box, Typography, IconButton, Tooltip } from "@mui/material";
 import { Edit, Delete, Favorite, FavoriteBorder, Public, Lock } from "@mui/icons-material";
 
 const BoardCard = ({
@@ -11,7 +11,6 @@ const BoardCard = ({
   setDeleteDialogOpen,
   navigate,
 }) => {
-  // Обчислення загальної довжини контенту для визначення span
   const totalLength = board.name.length + (board.description ? board.description.length : 0);
   let span = 1;
   if (totalLength > 100) {
@@ -19,9 +18,14 @@ const BoardCard = ({
   } else if (totalLength > 40) {
     span = 2;
   }
-  // Визначення статусу лайку: оптимістичне значення або з сервера
   const isLiked =
     localLikes[board.board_id] !== undefined ? localLikes[board.board_id] : board.is_liked;
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      navigate(`/board/${board.board_id}`);
+    }
+  };
 
   return (
     <Box
@@ -40,44 +44,55 @@ const BoardCard = ({
         ":hover": { backgroundColor: "background.hover", transform: "scale(1.02)" },
       }}
       onClick={() => navigate(`/board/${board.board_id}`)}
+      onKeyPress={handleKeyPress}
+      tabIndex={0}
+      role="button"
+      aria-label={`View board ${board.name}`}
     >
-      {/* Верхня частина з кнопками */}
       <Box sx={{ alignSelf: "flex-end", display: "flex", gap: 1, mb: 1 }}>
-        <IconButton
-          onClick={(e) => {
-            e.stopPropagation();
-            setEditingBoard({
-              board_id: board.board_id,
-              name: board.name,
-              description: board.description || "",
-              visibility: board.is_public ? "Public" : "Private",
-            });
-          }}
-          sx={{ p: 1, color: "text.primary" }}
-        >
-          <Edit />
-        </IconButton>
-        <IconButton
-          onClick={(e) => {
-            e.stopPropagation();
-            handleLike(board.board_id, isLiked);
-          }}
-          sx={{ p: 1, color: "text.primary" }}
-        >
-          {isLiked ? <Favorite color="text.primary" /> : <FavoriteBorder />}
-        </IconButton>
-        <IconButton
-          onClick={(e) => {
-            e.stopPropagation();
-            setBoardToDelete(board.board_id);
-            setDeleteDialogOpen(true)
-          }}
-          sx={{ p: 1, color: "error.dark" }}
-        >
-          <Delete />
-        </IconButton>
+        <Tooltip title="Edit">
+          <IconButton
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingBoard({
+                board_id: board.board_id,
+                name: board.name,
+                description: board.description || "",
+                visibility: board.is_public ? "Public" : "Private",
+              });
+            }}
+            sx={{ p: 1, color: "text.primary" }}
+            aria-label={`Edit board ${board.name}`}
+          >
+            <Edit />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={isLiked ? "Unlike" : "Like"}>
+          <IconButton
+            onClick={(e) => {
+              e.stopPropagation();
+              handleLike(board.board_id, isLiked);
+            }}
+            sx={{ p: 1, color: "text.primary" }}
+            aria-label={isLiked ? "Unlike board" : "Like board"}
+          >
+            {isLiked ? <Favorite color="error" /> : <FavoriteBorder />}
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Delete">
+          <IconButton
+            onClick={(e) => {
+              e.stopPropagation();
+              setBoardToDelete(board.board_id);
+              setDeleteDialogOpen(true);
+            }}
+            sx={{ p: 1, color: "error.dark" }}
+            aria-label={`Delete board ${board.name}`}
+          >
+            <Delete />
+          </IconButton>
+        </Tooltip>
       </Box>
-      {/* Середня частина з назвою та описом */}
       <Box sx={{ flexGrow: 1, my: 1, alignContent: "center" }}>
         <Typography variant="h6" sx={{ mb: 1, textAlign: "center" }}>
           {board.name}
@@ -88,7 +103,6 @@ const BoardCard = ({
           </Typography>
         )}
       </Box>
-      {/* Нижня частина з індикатором видимості */}
       <Box sx={{ width: "100%", mt: 1 }} onClick={() => navigate(`/board/${board.board_id}`)}>
         {board.is_public ? (
           <Box
@@ -120,4 +134,4 @@ const BoardCard = ({
   );
 };
 
-export default BoardCard;
+export default memo(BoardCard);

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   fetchBoards,
   fetchBoardsByGateId,
@@ -8,12 +8,16 @@ import {
   createBoardInGate,
   createBoardInClass,
   updateBoard,
-  updateBoardStatus,
   deleteBoard,
   fetchBoardMembers,
   likeBoard,
   unlikeBoard,
   fetchBoardStats,
+  inviteUser,
+  acceptInvite,
+  addMember,
+  removeMember,
+  runAIModeration,
 } from "../api/boardsApi";
 
 export const useBoards = (token, onLogout, navigate) => {
@@ -29,33 +33,42 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const handleAuthError = useCallback(
     (err) => {
-      if (err.status === 401 || err.status === 403) {
+      const status = err.status || 500;
+      if (status === 401 || status === 403) {
         onLogout("Your session has expired. Please log in again.");
         navigate("/login");
       }
       setError(err.message || "An error occurred.");
+      return null;
     },
     [onLogout, navigate]
   );
 
+  const resetState = useCallback(() => {
+    setBoards([]);
+    setBoardData(null);
+    setMembers([]);
+    setStats(null);
+    setPagination({});
+    setGateInfo(null);
+    setClassInfo(null);
+    setError(null);
+  }, []);
+
   const fetchBoardsList = useCallback(
     async (filters = {}, signal) => {
-      if (!token) {
-        setError("Authentication required.");
-        return [];
-      }
+      if (!token) return setError("Authentication required.");
       setLoading(true);
       setError(null);
       try {
         const data = await fetchBoards(token, filters, signal);
-        setBoards(data.boards);
-        setPagination(data.pagination);
+        setBoards(data.boards || []);
+        setPagination(data.pagination || {});
         setGateInfo(null);
         setClassInfo(null);
-        return data.boards;
+        return data;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return [];
+        return err.name !== "AbortError" ? handleAuthError(err) : null;
       } finally {
         setLoading(false);
       }
@@ -65,22 +78,18 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const fetchBoardsByGate = useCallback(
     async (gateId, filters = {}, signal) => {
-      if (!token || !gateId) {
-        setError("Authentication or gate ID missing.");
-        return [];
-      }
+      if (!token || !gateId) return setError("Authentication or gate ID missing.");
       setLoading(true);
       setError(null);
       try {
         const data = await fetchBoardsByGateId(gateId, token, filters, signal);
-        setBoards(data.boards);
-        setGateInfo(data.gate);
-        setPagination(data.pagination);
+        setBoards(data.boards || []);
+        setGateInfo(data.gate || null);
+        setPagination(data.pagination || {});
         setClassInfo(null);
-        return data.boards;
+        return data;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return [];
+        return err.name !== "AbortError" ? handleAuthError(err) : null;
       } finally {
         setLoading(false);
       }
@@ -90,22 +99,18 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const fetchBoardsByClass = useCallback(
     async (classId, filters = {}, signal) => {
-      if (!token || !classId) {
-        setError("Authentication or class ID missing.");
-        return [];
-      }
+      if (!token || !classId) return setError("Authentication or class ID missing.");
       setLoading(true);
       setError(null);
       try {
         const data = await fetchBoardsByClassId(classId, token, filters, signal);
-        setBoards(data.boards);
-        setClassInfo(data.class);
-        setPagination(data.pagination);
+        setBoards(data.boards || []);
+        setClassInfo(data.class || null);
+        setPagination(data.pagination || {});
         setGateInfo(null);
-        return data.boards;
+        return data;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return [];
+        return err.name !== "AbortError" ? handleAuthError(err) : null;
       } finally {
         setLoading(false);
       }
@@ -115,19 +120,15 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const fetchBoard = useCallback(
     async (boardId, gateId, classId, signal) => {
-      if (!token || !boardId) {
-        setError("Authentication or board ID missing.");
-        return null;
-      }
+      if (!token || !boardId) return setError("Authentication or board ID missing.");
       setLoading(true);
       setError(null);
       try {
         const data = await fetchBoardById(boardId, gateId, classId, token, signal);
-        setBoardData(data);
+        setBoardData(data || null);
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return null;
+        return err.name !== "AbortError" ? handleAuthError(err) : null;
       } finally {
         setLoading(false);
       }
@@ -137,10 +138,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const createNewBoard = useCallback(
     async (boardData) => {
-      if (!token || !boardData) {
-        setError("Authentication or board data missing.");
-        return null;
-      }
+      if (!token || !boardData) return setError("Authentication or board data missing.");
       setLoading(true);
       setError(null);
       try {
@@ -148,8 +146,7 @@ export const useBoards = (token, onLogout, navigate) => {
         setBoards((prev) => [...prev, newBoard]);
         return newBoard;
       } catch (err) {
-        handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -159,10 +156,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const createNewBoardInGate = useCallback(
     async (gateId, boardData) => {
-      if (!token || !gateId || !boardData) {
-        setError("Authentication, gate ID, or board data missing.");
-        return null;
-      }
+      if (!token || !gateId || !boardData) return setError("Authentication, gate ID, or board data missing.");
       setLoading(true);
       setError(null);
       try {
@@ -170,8 +164,7 @@ export const useBoards = (token, onLogout, navigate) => {
         setBoards((prev) => [...prev, newBoard]);
         return newBoard;
       } catch (err) {
-        handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -181,10 +174,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const createNewBoardInClass = useCallback(
     async (classId, boardData) => {
-      if (!token || !classId || !boardData) {
-        setError("Authentication, class ID, or board data missing.");
-        return null;
-      }
+      if (!token || !classId || !boardData) return setError("Authentication, class ID, or board data missing.");
       setLoading(true);
       setError(null);
       try {
@@ -192,8 +182,7 @@ export const useBoards = (token, onLogout, navigate) => {
         setBoards((prev) => [...prev, newBoard]);
         return newBoard;
       } catch (err) {
-        handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -203,10 +192,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const updateExistingBoard = useCallback(
     async (boardId, gateId, classId, boardData) => {
-      if (!token || !boardId || !boardData) {
-        setError("Authentication, board ID, or data missing.");
-        return null;
-      }
+      if (!token || !boardId || !boardData) return setError("Authentication, board ID, or data missing.");
       setLoading(true);
       setError(null);
       try {
@@ -215,31 +201,7 @@ export const useBoards = (token, onLogout, navigate) => {
         setBoardData(updatedBoard);
         return updatedBoard;
       } catch (err) {
-        handleAuthError(err);
-        return null;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleAuthError]
-  );
-
-  const updateBoardStatusById = useCallback(
-    async (boardId, gateId, classId, statusData) => {
-      if (!token || !boardId || !statusData) {
-        setError("Authentication, board ID, or status data missing.");
-        return null;
-      }
-      setLoading(true);
-      setError(null);
-      try {
-        const updatedBoard = await updateBoardStatus(boardId, gateId, classId, statusData, token);
-        setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
-        setBoardData(updatedBoard);
-        return updatedBoard;
-      } catch (err) {
-        handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -249,18 +211,16 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const deleteExistingBoard = useCallback(
     async (boardId, gateId, classId) => {
-      if (!token || !boardId) {
-        setError("Authentication or board ID missing.");
-        return;
-      }
+      if (!token || !boardId) return setError("Authentication or board ID missing.");
       setLoading(true);
       setError(null);
       try {
         await deleteBoard(boardId, gateId, classId, token);
         setBoards((prev) => prev.filter((b) => b.board_id !== boardId));
         setBoardData(null);
+        return true;
       } catch (err) {
-        handleAuthError(err);
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -270,19 +230,15 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const fetchBoardMembersList = useCallback(
     async (boardId) => {
-      if (!token || !boardId) {
-        setError("Authentication or board ID missing.");
-        return [];
-      }
+      if (!token || !boardId) return setError("Authentication or board ID missing.");
       setLoading(true);
       setError(null);
       try {
-        const membersData = await fetchBoardMembers(boardId, token);
-        setMembers(membersData);
-        return membersData;
+        const data = await fetchBoardMembers(boardId, token);
+        setMembers(data.members || []);
+        return data;
       } catch (err) {
-        handleAuthError(err);
-        return [];
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -290,45 +246,55 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  const likeBoardById = useCallback(
+  const likeExistingBoard = useCallback(
     async (boardId) => {
-      if (!token || !boardId) {
-        setError("Authentication or board ID missing.");
-        return null;
-      }
+      if (!token || !boardId) return setError("Authentication or board ID missing.");
       setLoading(true);
       setError(null);
       try {
         const updatedBoard = await likeBoard(boardId, token);
         setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
-        setBoardData(updatedBoard);
+        if (boardData?.board_id === boardId) setBoardData(updatedBoard);
         return updatedBoard;
       } catch (err) {
-        handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, boardData, handleAuthError]
   );
 
-  const unlikeBoardById = useCallback(
+  const unlikeExistingBoard = useCallback(
     async (boardId) => {
-      if (!token || !boardId) {
-        setError("Authentication or board ID missing.");
-        return null;
-      }
+      if (!token || !boardId) return setError("Authentication or board ID missing.");
       setLoading(true);
       setError(null);
       try {
         const updatedBoard = await unlikeBoard(boardId, token);
         setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
-        setBoardData(updatedBoard);
+        if (boardData?.board_id === boardId) setBoardData(updatedBoard);
         return updatedBoard;
       } catch (err) {
-        handleAuthError(err);
-        return null;
+        return handleAuthError(err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, boardData, handleAuthError]
+  );
+
+  const fetchBoardStatistics = useCallback(
+    async (boardId) => {
+      if (!token || !boardId) return setError("Authentication or board ID missing.");
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchBoardStats(boardId, token);
+        setStats(data || null);
+        return data;
+      } catch (err) {
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -336,27 +302,103 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  const fetchBoardStatsData = useCallback(
-    async (boardId) => {
-      if (!token || !boardId) {
-        setError("Authentication or board ID missing.");
-        return null;
-      }
+  const inviteUserToBoard = useCallback(
+    async (boardId, anonymousId) => {
+      if (!token || !boardId || !anonymousId) return setError("Authentication, board ID, or user ID missing.");
       setLoading(true);
       setError(null);
       try {
-        const statsData = await fetchBoardStats(boardId, token);
-        setStats(statsData);
-        return statsData;
+        const updatedBoard = await inviteUser(boardId, { anonymous_id: anonymousId }, token);
+        if (boardData?.board_id === boardId) setBoardData(updatedBoard);
+        return updatedBoard;
       } catch (err) {
-        handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, boardData, handleAuthError]
   );
+
+  const acceptBoardInvite = useCallback(
+    async (boardId) => {
+      if (!token || !boardId) return setError("Authentication or board ID missing.");
+      setLoading(true);
+      setError(null);
+      try {
+        const updatedBoard = await acceptInvite(boardId, token);
+        if (boardData?.board_id === boardId) setBoardData(updatedBoard);
+        return updatedBoard;
+      } catch (err) {
+        return handleAuthError(err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, boardData, handleAuthError]
+  );
+
+  const addBoardMember = useCallback(
+    async (boardId, anonymousId, role = "viewer") => {
+      if (!token || !boardId || !anonymousId) return setError("Authentication, board ID, or user ID missing.");
+      setLoading(true);
+      setError(null);
+      try {
+        const updatedBoard = await addMember(boardId, { anonymous_id: anonymousId, role }, token);
+        if (boardData?.board_id === boardId) setBoardData(updatedBoard);
+        setMembers((prev) => [...prev, { anonymous_id: anonymousId, role }]);
+        return updatedBoard;
+      } catch (err) {
+        return handleAuthError(err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, boardData, handleAuthError]
+  );
+
+  const removeBoardMember = useCallback(
+    async (boardId, anonymousId) => {
+      if (!token || !boardId || !anonymousId) return setError("Authentication, board ID, or user ID missing.");
+      setLoading(true);
+      setError(null);
+      try {
+        const updatedBoard = await removeMember(boardId, { anonymous_id: anonymousId }, token);
+        if (boardData?.board_id === boardId) setBoardData(updatedBoard);
+        setMembers((prev) => prev.filter((m) => m.anonymous_id !== anonymousId));
+        return updatedBoard;
+      } catch (err) {
+        return handleAuthError(err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, boardData, handleAuthError]
+  );
+
+  const runBoardAIModeration = useCallback(
+    async (boardId) => {
+      if (!token || !boardId) return setError("Authentication or board ID missing.");
+      setLoading(true);
+      setError(null);
+      try {
+        const updatedBoard = await runAIModeration(boardId, token);
+        if (boardData?.board_id === boardId) setBoardData(updatedBoard);
+        return updatedBoard;
+      } catch (err) {
+        return handleAuthError(err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, boardData, handleAuthError]
+  );
+
+  useEffect(() => {
+    if (!token) {
+      resetState();
+    }
+  }, [token, resetState]);
 
   return {
     boards,
@@ -376,13 +418,15 @@ export const useBoards = (token, onLogout, navigate) => {
     createNewBoardInGate,
     createNewBoardInClass,
     updateExistingBoard,
-    updateBoardStatusById,
     deleteExistingBoard,
     fetchBoardMembersList,
-    likeBoardById,
-    unlikeBoardById,
-    fetchBoardStatsData,
+    likeExistingBoard,
+    unlikeExistingBoard,
+    fetchBoardStatistics,
+    inviteUserToBoard,
+    acceptBoardInvite,
+    addBoardMember,
+    removeBoardMember,
+    runBoardAIModeration,
   };
 };
-
-export default useBoards;
