@@ -55,14 +55,33 @@ export const useBoards = (token, onLogout, navigate) => {
     setError(null);
   }, []);
 
+  const sanitizeBoardData = (data, exclude = []) => {
+    const allowed = {
+      name: data.name,
+      description: data.description,
+      visibility: data.visibility,
+      is_public: data.is_public,
+      type: data.type,
+      tags: data.tags,
+      settings: data.settings,
+      gate_id: data.gate_id,
+      class_id: data.class_id,
+    };
+    exclude.forEach((key) => delete allowed[key]);
+    return allowed;
+  };
+
   const fetchBoardsList = useCallback(
     async (filters = {}, signal) => {
-      if (!token) return setError("Authentication required.");
+      if (!token) {
+        setError("Authentication required.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
         const data = await fetchBoards(token, filters, signal);
-        setBoards(data.boards || []);
+        setBoards((data.boards || []).filter((board) => board && board.board_id));
         setPagination(data.pagination || {});
         setGateInfo(null);
         setClassInfo(null);
@@ -78,12 +97,15 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const fetchBoardsByGate = useCallback(
     async (gateId, filters = {}, signal) => {
-      if (!token || !gateId) return setError("Authentication or gate ID missing.");
+      if (!token || !gateId) {
+        setError("Authentication or gate ID missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
         const data = await fetchBoardsByGateId(gateId, token, filters, signal);
-        setBoards(data.boards || []);
+        setBoards((data.boards || []).filter((board) => board && board.board_id));
         setGateInfo(data.gate || null);
         setPagination(data.pagination || {});
         setClassInfo(null);
@@ -99,12 +121,15 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const fetchBoardsByClass = useCallback(
     async (classId, filters = {}, signal) => {
-      if (!token || !classId) return setError("Authentication or class ID missing.");
+      if (!token || !classId) {
+        setError("Authentication or class ID missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
         const data = await fetchBoardsByClassId(classId, token, filters, signal);
-        setBoards(data.boards || []);
+        setBoards((data.boards || []).filter((board) => board && board.board_id));
         setClassInfo(data.class || null);
         setPagination(data.pagination || {});
         setGateInfo(null);
@@ -120,7 +145,10 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const fetchBoard = useCallback(
     async (boardId, gateId, classId, signal) => {
-      if (!token || !boardId) return setError("Authentication or board ID missing.");
+      if (!token || !boardId) {
+        setError("Authentication or board ID missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -138,11 +166,15 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const createNewBoard = useCallback(
     async (boardData) => {
-      if (!token || !boardData) return setError("Authentication or board data missing.");
+      if (!token || !boardData) {
+        setError("Authentication or board data missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
-        const newBoard = await createBoard(boardData, token);
+        const sanitizedBoardData = sanitizeBoardData(boardData);
+        const newBoard = await createBoard(sanitizedBoardData, token);
         setBoards((prev) => [...prev, newBoard]);
         return newBoard;
       } catch (err) {
@@ -156,11 +188,15 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const createNewBoardInGate = useCallback(
     async (gateId, boardData) => {
-      if (!token || !gateId || !boardData) return setError("Authentication, gate ID, or board data missing.");
+      if (!token || !gateId || !boardData) {
+        setError("Authentication, gate ID, or board data missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
-        const newBoard = await createBoardInGate(gateId, boardData, token);
+        const sanitizedBoardData = sanitizeBoardData(boardData, ['gate_id', 'class_id']);
+        const newBoard = await createBoardInGate(gateId, sanitizedBoardData, token);
         setBoards((prev) => [...prev, newBoard]);
         return newBoard;
       } catch (err) {
@@ -174,11 +210,15 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const createNewBoardInClass = useCallback(
     async (classId, boardData) => {
-      if (!token || !classId || !boardData) return setError("Authentication, class ID, or board data missing.");
+      if (!token || !classId || !boardData) {
+        setError("Authentication, class ID, or board data missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
-        const newBoard = await createBoardInClass(classId, boardData, token);
+        const sanitizedBoardData = sanitizeBoardData(boardData, ['gate_id', 'class_id']);
+        const newBoard = await createBoardInClass(classId, sanitizedBoardData, token);
         setBoards((prev) => [...prev, newBoard]);
         return newBoard;
       } catch (err) {
@@ -192,11 +232,28 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const updateExistingBoard = useCallback(
     async (boardId, gateId, classId, boardData) => {
-      if (!token || !boardId || !boardData) return setError("Authentication, board ID, or data missing.");
+      if (!token || !boardId || !boardData) {
+        setError("Authentication, board ID, or data missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
-        const updatedBoard = await updateBoard(boardId, gateId, classId, boardData, token);
+        const payload = {
+          name: boardData.name,
+          description: boardData.description,
+          visibility: boardData.visibility,
+          is_public: boardData.is_public,
+          type: boardData.type,
+          tags: boardData.tags,
+          settings: boardData.settings,
+          gate_id: boardData.gate_id,
+          class_id: boardData.class_id,
+        };
+        const updatedBoard = await updateBoard(boardId, gateId, classId, payload, token);
+        if (!updatedBoard || !updatedBoard.board_id) {
+          throw new Error("Invalid board data received from server");
+        }
         setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
         setBoardData(updatedBoard);
         return updatedBoard;
@@ -211,7 +268,10 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const deleteExistingBoard = useCallback(
     async (boardId, gateId, classId) => {
-      if (!token || !boardId) return setError("Authentication or board ID missing.");
+      if (!token || !boardId) {
+        setError("Authentication or board ID missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -230,12 +290,15 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const fetchBoardMembersList = useCallback(
     async (boardId) => {
-      if (!token || !boardId) return setError("Authentication or board ID missing.");
+      if (!token || !boardId) {
+        setError("Authentication or board ID missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
         const data = await fetchBoardMembers(boardId, token);
-        setMembers(data.members || []);
+        setMembers(data || []);
         return data;
       } catch (err) {
         return handleAuthError(err);
@@ -248,7 +311,10 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const likeExistingBoard = useCallback(
     async (boardId) => {
-      if (!token || !boardId) return setError("Authentication or board ID missing.");
+      if (!token || !boardId) {
+        setError("Authentication or board ID missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -267,7 +333,10 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const unlikeExistingBoard = useCallback(
     async (boardId) => {
-      if (!token || !boardId) return setError("Authentication or board ID missing.");
+      if (!token || !boardId) {
+        setError("Authentication or board ID missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -286,7 +355,10 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const fetchBoardStatistics = useCallback(
     async (boardId) => {
-      if (!token || !boardId) return setError("Authentication or board ID missing.");
+      if (!token || !boardId) {
+        setError("Authentication or board ID missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -304,7 +376,10 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const inviteUserToBoard = useCallback(
     async (boardId, anonymousId) => {
-      if (!token || !boardId || !anonymousId) return setError("Authentication, board ID, or user ID missing.");
+      if (!token || !boardId || !anonymousId) {
+        setError("Authentication, board ID, or user ID missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -322,12 +397,16 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const acceptBoardInvite = useCallback(
     async (boardId) => {
-      if (!token || !boardId) return setError("Authentication or board ID missing.");
+      if (!token || !boardId) {
+        setError("Authentication or board ID missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
         const updatedBoard = await acceptInvite(boardId, token);
         if (boardData?.board_id === boardId) setBoardData(updatedBoard);
+        setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
         return updatedBoard;
       } catch (err) {
         return handleAuthError(err);
@@ -340,7 +419,10 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const addBoardMember = useCallback(
     async (boardId, anonymousId, role = "viewer") => {
-      if (!token || !boardId || !anonymousId) return setError("Authentication, board ID, or user ID missing.");
+      if (!token || !boardId || !anonymousId) {
+        setError("Authentication, board ID, or user ID missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -359,7 +441,10 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const removeBoardMember = useCallback(
     async (boardId, anonymousId) => {
-      if (!token || !boardId || !anonymousId) return setError("Authentication, board ID, or user ID missing.");
+      if (!token || !boardId || !anonymousId) {
+        setError("Authentication, board ID, or user ID missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -378,7 +463,10 @@ export const useBoards = (token, onLogout, navigate) => {
 
   const runBoardAIModeration = useCallback(
     async (boardId) => {
-      if (!token || !boardId) return setError("Authentication or board ID missing.");
+      if (!token || !boardId) {
+        setError("Authentication or board ID missing.");
+        return null;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -402,6 +490,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
   return {
     boards,
+    setBoards,
     boardData,
     members,
     stats,

@@ -47,7 +47,7 @@ const BoardsFilters = ({ quickFilter, setQuickFilter, searchQuery, setSearchQuer
           flexWrap: "wrap",
         }}
       >
-        <Box sx={{ display: "flex", gap: 2 }}>
+        <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
           <Button
             variant={quickFilter === "all" ? "contained" : "outlined"}
             onClick={() => setQuickFilter("all")}

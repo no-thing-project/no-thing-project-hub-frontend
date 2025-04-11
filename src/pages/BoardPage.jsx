@@ -11,8 +11,7 @@ import { useNotification } from "../context/NotificationContext";
 const BoardPage = () => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
-  
-  // Хуки авторизації
+
   const {
     token,
     authData,
@@ -21,131 +20,135 @@ const BoardPage = () => {
     loading: authLoading,
   } = useAuth(navigate);
 
-  // Параметр з URL (/board/:board_id)
   const { board_id } = useParams();
 
-  // Хуки для роботи з дошками
   const {
     fetchBoard,
     fetchBoardMembersList,
-    likeBoardById,
-    unlikeBoardById,
+    likeExistingBoard,
+    unlikeExistingBoard,
     updateExistingBoard,
-    fetchBoardsList,
+    inviteUserToBoard,
+    acceptBoardInvite,
+    addBoardMember,
+    removeBoardMember,
+    runBoardAIModeration,
     error: boardError,
   } = useBoards(token, handleLogout, navigate);
 
-  // Локальні стани для даних
   const [localBoardData, setLocalBoardData] = useState(null);
   const [localMembers, setLocalMembers] = useState([]);
-
-  // Стейт для індикації, що всі запити завершені
   const [isFullyLoaded, setIsFullyLoaded] = useState(false);
   const [success, setSuccess] = useState("");
   const [editingBoard, setEditingBoard] = useState(null);
 
-  // Завантаження даних дошки та учасників
-  const loadBoardData = useCallback(
-    async (signal) => {
-      if (!board_id || !token) {
-        showNotification("Board ID or authentication missing.", "error");
-        return;
+  const loadBoardData = useCallback(async (signal) => {
+    if (!board_id || !token) return;
+    setIsFullyLoaded(false);
+    try {
+      const [board, members] = await Promise.all([
+        fetchBoard(board_id, null, null, signal),
+        fetchBoardMembersList(board_id, signal),
+      ]);
+      setLocalBoardData(board || null);
+      setLocalMembers(members || []);
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        showNotification(err.message || "Failed to load board data.", "error");
       }
-      // Показуємо лоудер, доки не завантажимо всі дані
-      setIsFullyLoaded(false);
-      try {
-        const [fetchedBoard, fetchedMembers] = await Promise.all([
-          fetchBoard(board_id, null, null, signal),
-          fetchBoardMembersList(board_id, signal),
-        ]);
+    } finally {
+      setIsFullyLoaded(true);
+    }
+  }, [board_id, token, fetchBoard, fetchBoardMembersList, showNotification]);
 
-        if (!fetchedBoard) {
-          // Якщо з сервера повернулося нічого (404 чи null)
-          showNotification("Board not found", "error");
-        }
-        setLocalBoardData(fetchedBoard || null);
-        setLocalMembers(fetchedMembers || []);
-      } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Error loading board data:", err);
-          showNotification(err.message || "Failed to load board data.", "error");
-        }
-      } finally {
-        setIsFullyLoaded(true);
-      }
-    },
-    [board_id, token, fetchBoard, fetchBoardMembersList, showNotification]
-  );
-
-  // Виклик завантаження при монтуванні
   useEffect(() => {
     if (!isAuthenticated) return;
     const controller = new AbortController();
     loadBoardData(controller.signal);
-    return () => {
-      controller.abort();
-    };
+    return () => controller.abort();
   }, [isAuthenticated, loadBoardData]);
 
-  // Оновлення дошки
   const handleUpdateBoard = useCallback(async () => {
     if (!editingBoard?.name.trim()) {
       showNotification("Board name is required!", "error");
       return;
     }
     try {
-      await updateExistingBoard(editingBoard.board_id, null, null, {
-        name: editingBoard.name,
-        description: editingBoard.description,
-        is_public: editingBoard.visibility === "Public",
-      });
-      setSuccess("Board updated successfully!");
+      const updated = await updateExistingBoard(editingBoard.board_id, null, null, editingBoard);
       setEditingBoard(null);
-      await fetchBoardsList();
-      // Після оновлення можна перезавантажити дані
-      await loadBoardData();
+      setLocalBoardData(updated);
+      setSuccess("Board updated");
     } catch (err) {
-      showNotification(
-        err.response?.data?.errors?.[0] || "Failed to update board",
-        "error"
-      );
+      showNotification(err.message || "Failed to update board", "error");
     }
-  }, [editingBoard, updateExistingBoard, fetchBoardsList, loadBoardData, showNotification]);
+  }, [editingBoard, updateExistingBoard, showNotification]);
 
-  // Лайк / анлайк дошки
   const handleLike = useCallback(async () => {
     try {
-      const updatedBoard = localBoardData?.is_liked
-        ? await unlikeBoardById(board_id)
-        : await likeBoardById(board_id);
-      if (updatedBoard) {
-        setSuccess(
-          `Board ${localBoardData?.is_liked ? "unliked" : "liked"} successfully!`
-        );
-        // Перезавантажуємо дані після лайку
-        await loadBoardData();
-      }
+      const alreadyLiked = localBoardData?.liked_by?.some((l) => l.anonymous_id === authData.anonymous_id);
+      const updated = alreadyLiked
+        ? await unlikeExistingBoard(board_id)
+        : await likeExistingBoard(board_id);
+      setLocalBoardData(updated);
     } catch (err) {
-      showNotification(
-        `Failed to ${localBoardData?.is_liked ? "unlike" : "like"} board`,
-        "error"
-      );
+      showNotification("Failed to toggle like", "error");
     }
-  }, [board_id, localBoardData, likeBoardById, unlikeBoardById, loadBoardData, showNotification]);
+  }, [board_id, localBoardData, authData, likeExistingBoard, unlikeExistingBoard, showNotification]);
 
-  // Логіка для відображення помилки
+  const handleInviteUser = useCallback(async (anonymousId) => {
+    try {
+      const updated = await inviteUserToBoard(board_id, anonymousId);
+      setLocalBoardData(updated);
+    } catch (err) {
+      showNotification(err.message || "Failed to invite user", "error");
+    }
+  }, [board_id, inviteUserToBoard, showNotification]);
+
+  const handleAcceptInvite = useCallback(async () => {
+    try {
+      const updated = await acceptBoardInvite(board_id);
+      setLocalBoardData(updated);
+    } catch (err) {
+      showNotification(err.message || "Failed to accept invite", "error");
+    }
+  }, [board_id, acceptBoardInvite, showNotification]);
+
+  const handleAddMember = useCallback(async (anonymousId, role) => {
+    try {
+      const updated = await addBoardMember(board_id, anonymousId, role);
+      setLocalBoardData(updated);
+      setLocalMembers((prev) => [...prev, { anonymous_id: anonymousId, role }]);
+    } catch (err) {
+      showNotification(err.message || "Failed to add member", "error");
+    }
+  }, [board_id, addBoardMember, showNotification]);
+
+  const handleRemoveMember = useCallback(async (anonymousId) => {
+    try {
+      const updated = await removeBoardMember(board_id, anonymousId);
+      setLocalBoardData(updated);
+      setLocalMembers((prev) => prev.filter((m) => m.anonymous_id !== anonymousId));
+    } catch (err) {
+      showNotification(err.message || "Failed to remove member", "error");
+    }
+  }, [board_id, removeBoardMember, showNotification]);
+
+  const handleRunAIModeration = useCallback(async () => {
+    try {
+      const updated = await runBoardAIModeration(board_id);
+      setLocalBoardData(updated);
+    } catch (err) {
+      showNotification(err.message || "Failed to run AI moderation", "error");
+    }
+  }, [board_id, runBoardAIModeration, showNotification]);
+
   useEffect(() => {
     if (boardError) {
       showNotification(boardError, "error");
     }
   }, [boardError, showNotification]);
 
-  // Поки або авторизація не завершена або дані не завантажені повністю — показуємо лоудер
-  if (authLoading || !isFullyLoaded) {
-    return <LoadingSpinner />;
-  }
-
-  // Якщо користувач не авторизований — редірект
+  if (authLoading || !isFullyLoaded) return <LoadingSpinner />;
   if (!isAuthenticated) {
     navigate("/login");
     return null;
@@ -162,17 +165,24 @@ const BoardPage = () => {
         members={localMembers}
         boardTitle={localBoardData?.name || "Untitled Board"}
         onLike={handleLike}
+        onInviteUser={handleInviteUser}
+        onAcceptInvite={handleAcceptInvite}
+        onAddMember={handleAddMember}
+        onRemoveMember={handleRemoveMember}
+        onRunAIModeration={handleRunAIModeration}
         setEditingBoard={setEditingBoard}
       />
 
       {editingBoard && (
         <BoardFormDialog
-          open={Boolean(editingBoard)}
+          open={true}
           title="Edit Board"
           board={editingBoard}
           setBoard={setEditingBoard}
           onSave={handleUpdateBoard}
           onCancel={() => setEditingBoard(null)}
+          availableGates={[]}
+          availableClasses={[]}
         />
       )}
     </Box>

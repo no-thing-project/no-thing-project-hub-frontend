@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, memo, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Button, Snackbar, Alert } from "@mui/material";
 import { Add } from "@mui/icons-material";
@@ -12,12 +12,15 @@ import BoardFormDialog from "../components/Dialogs/BoardFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
 import BoardsFilters from "../components/Boards/BoardsFilters";
 import BoardsGrid from "../components/Boards/BoardsGrid";
+import { useGates } from "../hooks/useGates"; // Import useGates
+import { useClasses } from "../hooks/useClasses"; // Import useClasses
 
 const BoardsPage = () => {
   const navigate = useNavigate();
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
   const {
     boards,
+    setBoards,
     loading: boardsLoading,
     error,
     fetchBoardsList,
@@ -26,18 +29,27 @@ const BoardsPage = () => {
     deleteExistingBoard,
     likeExistingBoard,
     unlikeExistingBoard,
+    gateInfo,
+    classInfo,
   } = useBoards(token, handleLogout, navigate);
+  const { gates, fetchGatesList } = useGates(token, handleLogout, navigate);
+  const { classes, fetchClassesList } = useClasses(token, handleLogout, navigate);
 
   const [editingBoard, setEditingBoard] = useState(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [popupBoard, setPopupBoard] = useState({
     name: "",
     description: "",
-    visibility: "restricted",
-    is_group: false,
-    is_personal: true,
+    visibility: "private",
+    type: "personal",
     tags: [],
-    settings: { tweet_cost: 1, like_cost: 1, points_to_creator: 1, max_members: 11 },
+    settings: {
+      tweet_cost: 1,
+      like_cost: 1,
+      points_to_creator: 1,
+      max_members: 11,
+      tweets_limit_trigger: 111,
+    },
     gate_id: null,
     class_id: null,
   });
@@ -51,8 +63,16 @@ const BoardsPage = () => {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    fetchBoardsList();
-  }, [isAuthenticated, fetchBoardsList]);
+    const controller = new AbortController();
+    Promise.all([
+      fetchBoardsList({}, controller.signal),
+      fetchGatesList({}, controller.signal),
+      fetchClassesList({}, controller.signal),
+    ]).catch((err) => {
+      if (err.name !== "AbortError") setErrorMessage(err.message || "Failed to load data");
+    });
+    return () => controller.abort();
+  }, [isAuthenticated, fetchBoardsList, fetchGatesList, fetchClassesList]);
 
   useEffect(() => {
     if (error) setErrorMessage(error);
@@ -62,53 +82,58 @@ const BoardsPage = () => {
     return boards.filter((board) => {
       const matchesSearch = board.name.toLowerCase().includes(searchQuery.toLowerCase());
       if (!matchesSearch) return false;
-      if (quickFilter === "all") return true;
-      if (quickFilter === "public") return board.is_public;
-      if (quickFilter === "private") return !board.is_public;
-      if (quickFilter === "liked") {
-        const isLiked = localLikes[board.board_id] !== undefined
-          ? localLikes[board.board_id]
-          : board.liked_by?.some((l) => l.anonymous_id === authData.anonymous_id);
-        return isLiked;
+      switch (quickFilter) {
+        case "all": return true;
+        case "public": return board.is_public;
+        case "private": return !board.is_public;
+        case "liked":
+          return localLikes[board.board_id] !== undefined
+            ? localLikes[board.board_id]
+            : board.liked_by?.some((l) => l.anonymous_id === authData.anonymous_id);
+        case "personal": return board.type === "personal";
+        case "group": return board.type === "group";
+        case "gate": return !!board.gate_id;
+        case "class": return !!board.class_id;
+        default: return true;
       }
-      if (quickFilter === "personal") return board.is_personal;
-      if (quickFilter === "group") return board.is_group;
-      return true;
     });
   }, [boards, quickFilter, searchQuery, localLikes, authData]);
 
-  const validateBoardData = useCallback((boardData) => {
-    if (!boardData.name.trim()) return "Board name is required";
-    if (boardData.is_personal && boardData.is_group) return "Board cannot be both personal and group";
-    if (boardData.settings.tweet_cost < 0 || boardData.settings.tweet_cost > 100) return "Tweet cost must be between 0 and 100";
-    if (boardData.settings.like_cost < 0 || boardData.settings.like_cost > 100) return "Like cost must be between 0 and 100";
-    if (boardData.settings.points_to_creator < 0 || boardData.settings.points_to_creator > 100) return "Points to creator must be between 0 and 100";
-    if (boardData.settings.max_members < 1) return "Max members must be at least 1";
+  const validateBoardData = useCallback((data) => {
+    if (!data.name?.trim()) return "Board name is required";
+    if (data.type === "group" && data.visibility === "public" && !data.gate_id && !data.class_id) {
+      return "Public group board must have a gate or class";
+    }
+    const s = data.settings || {};
+    if (s.tweet_cost < 0 || s.tweet_cost > 100) return "Tweet cost must be 0-100";
+    if (s.like_cost < 0 || s.like_cost > 100) return "Like cost must be 0-100";
+    if (s.points_to_creator < 0 || s.points_to_creator > 100) return "Points to creator must be 0-100";
+    if (s.max_members < 1) return "Max members must be at least 1";
+    if (s.tweets_limit_trigger < 11) return "Tweet limit trigger must be at least 11";
     return "";
   }, []);
 
-  const handleOpenCreateBoard = useCallback(() => {
+  const handleOpenCreateBoard = () => {
     setPopupBoard({
       name: "",
       description: "",
-      visibility: "restricted",
-      is_group: false,
-      is_personal: true,
+      visibility: "private",
+      type: "personal",
       tags: [],
-      settings: { tweet_cost: 1, like_cost: 1, points_to_creator: 1, max_members: 11 },
+      settings: {
+        tweet_cost: 1,
+        like_cost: 1,
+        points_to_creator: 1,
+        max_members: 11,
+        tweets_limit_trigger: 111,
+      },
       gate_id: null,
       class_id: null,
     });
-    setErrorMessage("");
     setCreateDialogOpen(true);
-  }, []);
+  };
 
-  const handleCancelCreateBoard = useCallback(() => {
-    setCreateDialogOpen(false);
-    setErrorMessage("");
-  }, []);
-
-  const handleCreateBoard = useCallback(async () => {
+  const handleCreateBoard = async () => {
     const validationError = validateBoardData(popupBoard);
     if (validationError) {
       setErrorMessage(validationError);
@@ -118,76 +143,56 @@ const BoardsPage = () => {
       const createdBoard = await createNewBoard(popupBoard);
       setSuccess("Board created successfully!");
       setCreateDialogOpen(false);
-      setPopupBoard({
-        name: "",
-        description: "",
-        visibility: "restricted",
-        is_group: false,
-        is_personal: true,
-        tags: [],
-        settings: { tweet_cost: 1, like_cost: 1, points_to_creator: 1, max_members: 11 },
-        gate_id: null,
-        class_id: null,
-      });
       navigate(`/board/${createdBoard.board_id}`);
     } catch (err) {
       setErrorMessage(err.message || "Failed to create board");
     }
-  }, [popupBoard, createNewBoard, navigate, validateBoardData]);
+  };
 
-  const handleUpdateBoard = useCallback(async () => {
+  const handleUpdateBoard = async () => {
     const validationError = validateBoardData(editingBoard);
     if (validationError) {
       setErrorMessage(validationError);
       return;
     }
     try {
-      await updateExistingBoard(editingBoard.board_id, null, null, editingBoard);
-      setSuccess("Board updated successfully!");
+      const updatedBoard = await updateExistingBoard(editingBoard.board_id, null, null, editingBoard);
+      setBoards((prev) => prev.map((b) => (b.board_id === updatedBoard.board_id ? updatedBoard : b)));
       setEditingBoard(null);
-      await fetchBoardsList();
+      setSuccess("Board updated successfully!");
     } catch (err) {
       setErrorMessage(err.message || "Failed to update board");
     }
-  }, [editingBoard, updateExistingBoard, fetchBoardsList, validateBoardData]);
+  };
 
-  const handleDeleteBoard = useCallback(async () => {
-    if (!boardToDelete) return;
+  const handleDeleteBoard = async () => {
     try {
       await deleteExistingBoard(boardToDelete, null, null);
-      setSuccess("Board deleted successfully!");
-      setDeleteDialogOpen(false);
+      setBoards((prev) => prev.filter((b) => b.board_id !== boardToDelete));
       setBoardToDelete(null);
-      await fetchBoardsList();
+      setDeleteDialogOpen(false);
+      setSuccess("Board deleted successfully!");
     } catch (err) {
       setErrorMessage(err.message || "Failed to delete board");
-      setDeleteDialogOpen(false);
-      setBoardToDelete(null);
     }
-  }, [boardToDelete, deleteExistingBoard, fetchBoardsList]);
+  };
 
-  const handleLike = useCallback(
-    async (board_id, isLiked) => {
-      const optimisticLiked = !isLiked;
-      setLocalLikes((prev) => ({ ...prev, [board_id]: optimisticLiked }));
-      try {
-        if (isLiked) await unlikeExistingBoard(board_id);
-        else await likeExistingBoard(board_id);
-        setSuccess(`Board ${isLiked ? "unliked" : "liked"} successfully!`);
-        await fetchBoardsList();
-        setLocalLikes((prev) => ({ ...prev, [board_id]: undefined }));
-      } catch (err) {
-        setLocalLikes((prev) => ({ ...prev, [board_id]: isLiked }));
-        setErrorMessage(`Failed to ${isLiked ? "unlike" : "like"} board`);
-      }
-    },
-    [likeExistingBoard, unlikeExistingBoard, fetchBoardsList]
-  );
+  const handleLike = async (board_id, isLiked) => {
+    const optimistic = !isLiked;
+    setLocalLikes((prev) => ({ ...prev, [board_id]: optimistic }));
+    try {
+      await (isLiked ? unlikeExistingBoard(board_id) : likeExistingBoard(board_id));
+      setSuccess(`Board ${isLiked ? "unliked" : "liked"} successfully!`);
+    } catch (err) {
+      setLocalLikes((prev) => ({ ...prev, [board_id]: isLiked }));
+      setErrorMessage("Failed to like/unlike board");
+    }
+  };
 
-  const handleCloseSnackbar = useCallback(() => {
+  const handleCloseSnackbar = () => {
     setSuccess("");
     setErrorMessage("");
-  }, []);
+  };
 
   if (authLoading || boardsLoading) return <LoadingSpinner />;
   if (!isAuthenticated) {
@@ -197,57 +202,61 @@ const BoardsPage = () => {
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-      <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
-        <ProfileHeader user={authData} isOwnProfile={true}>
-          <Button
-            variant="contained"
-            onClick={handleOpenCreateBoard}
-            startIcon={<Add />}
-            sx={actionButtonStyles}
-            aria-label="Create new board"
-          >
+      <Box sx={{ maxWidth: 1500, mx: "auto", px: 2, mt: 2 }}>
+        <ProfileHeader user={authData} isOwnProfile>
+          <Button variant="contained" startIcon={<Add />} onClick={handleOpenCreateBoard} sx={actionButtonStyles}>
             Create Board
           </Button>
         </ProfileHeader>
+
+        <BoardsFilters
+          quickFilter={quickFilter}
+          setQuickFilter={setQuickFilter}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          additionalFilters={["personal", "group", "gate", "class"]}
+        />
+
+        <BoardsGrid
+          filteredBoards={filteredBoards}
+          localLikes={localLikes}
+          handleLike={handleLike}
+          setEditingBoard={setEditingBoard}
+          setBoardToDelete={setBoardToDelete}
+          setDeleteDialogOpen={setDeleteDialogOpen}
+          navigate={navigate}
+        />
       </Box>
-
-      <BoardsFilters
-        quickFilter={quickFilter}
-        setQuickFilter={setQuickFilter}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        additionalFilters={["personal", "group"]}
-      />
-
-      <BoardsGrid
-        filteredBoards={filteredBoards}
-        localLikes={localLikes}
-        handleLike={handleLike}
-        setEditingBoard={setEditingBoard}
-        setBoardToDelete={setBoardToDelete}
-        setDeleteDialogOpen={setDeleteDialogOpen}
-        navigate={navigate}
-      />
 
       <BoardFormDialog
         open={createDialogOpen}
-        title="Create New Board"
+        title="Create Board"
         board={popupBoard}
         setBoard={setPopupBoard}
         onSave={handleCreateBoard}
-        onCancel={handleCancelCreateBoard}
+        onCancel={() => setCreateDialogOpen(false)}
         errorMessage={errorMessage}
+        availableGates={gates}
+        availableClasses={classes}
+        token={token}
+        onLogout={handleLogout}
+        navigate={navigate}
       />
 
       {editingBoard && (
         <BoardFormDialog
-          open={Boolean(editingBoard)}
+          open={true}
           title="Edit Board"
           board={editingBoard}
           setBoard={setEditingBoard}
           onSave={handleUpdateBoard}
           onCancel={() => setEditingBoard(null)}
           errorMessage={errorMessage}
+          availableGates={gates}
+          availableClasses={classes}
+          token={token}
+          onLogout={handleLogout}
+          navigate={navigate}
         />
       )}
 
@@ -260,6 +269,7 @@ const BoardsPage = () => {
       <Snackbar open={!!success} autoHideDuration={3000} onClose={handleCloseSnackbar}>
         <Alert severity="success" sx={{ width: "100%" }}>{success}</Alert>
       </Snackbar>
+
       <Snackbar open={!!errorMessage} autoHideDuration={3000} onClose={handleCloseSnackbar}>
         <Alert severity="error" sx={{ width: "100%" }}>{errorMessage}</Alert>
       </Snackbar>
@@ -267,4 +277,4 @@ const BoardsPage = () => {
   );
 };
 
-export default memo(BoardsPage);
+export default BoardsPage;

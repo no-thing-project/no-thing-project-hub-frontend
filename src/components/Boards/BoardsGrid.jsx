@@ -99,7 +99,7 @@ const BoardsGrid = ({
               </Typography>
               <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
                 Boards are discussion spaces for sharing and debating ideas. 
-                Tied to Classes, they’re where opinions flow, insights emerge, and conversations thrive.
+                They can be personal or group-based, tied to Gates or Classes, fostering vibrant conversations.
               </Typography>
             </motion.div>
             {boardCards}
