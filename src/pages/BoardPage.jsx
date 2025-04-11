@@ -1,46 +1,31 @@
-import { Box } from "@mui/material";
-import React, { useCallback, useEffect, useState } from "react";
+import { Box, Button, Menu, MenuItem } from "@mui/material";
+import React, { useState, useCallback, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import Board from "../components/social-features/Board/Board";
 import useAuth from "../hooks/useAuth";
 import { useBoards } from "../hooks/useBoards";
+import { useGates } from "../hooks/useGates";
+import { useClasses } from "../hooks/useClasses";
 import BoardFormDialog from "../components/Dialogs/BoardFormDialog";
 import { useNotification } from "../context/NotificationContext";
+import { MoreVert } from "@mui/icons-material";
 
 const BoardPage = () => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
-
-  const {
-    token,
-    authData,
-    handleLogout,
-    isAuthenticated,
-    loading: authLoading,
-  } = useAuth(navigate);
-
   const { board_id } = useParams();
 
-  const {
-    fetchBoard,
-    fetchBoardMembersList,
-    likeExistingBoard,
-    unlikeExistingBoard,
-    updateExistingBoard,
-    inviteUserToBoard,
-    acceptBoardInvite,
-    addBoardMember,
-    removeBoardMember,
-    runBoardAIModeration,
-    error: boardError,
-  } = useBoards(token, handleLogout, navigate);
+  const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
+  const { fetchBoard, fetchBoardMembersList, likeExistingBoard, unlikeExistingBoard, updateExistingBoard, inviteUserToBoard, acceptBoardInvite, addBoardMember, removeBoardMember, runBoardAIModeration, error: boardError } = useBoards(token, handleLogout, navigate);
+  const { gates } = useGates(token, handleLogout, navigate);
+  const { classes } = useClasses(token, handleLogout, navigate);
 
   const [localBoardData, setLocalBoardData] = useState(null);
   const [localMembers, setLocalMembers] = useState([]);
   const [isFullyLoaded, setIsFullyLoaded] = useState(false);
-  const [success, setSuccess] = useState("");
   const [editingBoard, setEditingBoard] = useState(null);
+  const [anchorEl, setAnchorEl] = useState(null);
 
   const loadBoardData = useCallback(async (signal) => {
     if (!board_id || !token) return;
@@ -77,76 +62,32 @@ const BoardPage = () => {
       const updated = await updateExistingBoard(editingBoard.board_id, null, null, editingBoard);
       setEditingBoard(null);
       setLocalBoardData(updated);
-      setSuccess("Board updated");
+      showNotification("Board updated successfully", "success");
+      if (updated.is_public === false && localBoardData.is_public === true) {
+        setLocalMembers(updated.members || []);
+      }
     } catch (err) {
       showNotification(err.message || "Failed to update board", "error");
     }
-  }, [editingBoard, updateExistingBoard, showNotification]);
+  }, [editingBoard, updateExistingBoard, localBoardData, showNotification]);
 
   const handleLike = useCallback(async () => {
     try {
       const alreadyLiked = localBoardData?.liked_by?.some((l) => l.anonymous_id === authData.anonymous_id);
-      const updated = alreadyLiked
-        ? await unlikeExistingBoard(board_id)
-        : await likeExistingBoard(board_id);
+      const updated = alreadyLiked ? await unlikeExistingBoard(board_id) : await likeExistingBoard(board_id);
       setLocalBoardData(updated);
     } catch (err) {
       showNotification("Failed to toggle like", "error");
     }
   }, [board_id, localBoardData, authData, likeExistingBoard, unlikeExistingBoard, showNotification]);
 
-  const handleInviteUser = useCallback(async (anonymousId) => {
-    try {
-      const updated = await inviteUserToBoard(board_id, anonymousId);
-      setLocalBoardData(updated);
-    } catch (err) {
-      showNotification(err.message || "Failed to invite user", "error");
-    }
-  }, [board_id, inviteUserToBoard, showNotification]);
+  const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
+  const handleMenuClose = () => setAnchorEl(null);
 
-  const handleAcceptInvite = useCallback(async () => {
-    try {
-      const updated = await acceptBoardInvite(board_id);
-      setLocalBoardData(updated);
-    } catch (err) {
-      showNotification(err.message || "Failed to accept invite", "error");
-    }
-  }, [board_id, acceptBoardInvite, showNotification]);
-
-  const handleAddMember = useCallback(async (anonymousId, role) => {
-    try {
-      const updated = await addBoardMember(board_id, anonymousId, role);
-      setLocalBoardData(updated);
-      setLocalMembers((prev) => [...prev, { anonymous_id: anonymousId, role }]);
-    } catch (err) {
-      showNotification(err.message || "Failed to add member", "error");
-    }
-  }, [board_id, addBoardMember, showNotification]);
-
-  const handleRemoveMember = useCallback(async (anonymousId) => {
-    try {
-      const updated = await removeBoardMember(board_id, anonymousId);
-      setLocalBoardData(updated);
-      setLocalMembers((prev) => prev.filter((m) => m.anonymous_id !== anonymousId));
-    } catch (err) {
-      showNotification(err.message || "Failed to remove member", "error");
-    }
-  }, [board_id, removeBoardMember, showNotification]);
-
-  const handleRunAIModeration = useCallback(async () => {
-    try {
-      const updated = await runBoardAIModeration(board_id);
-      setLocalBoardData(updated);
-    } catch (err) {
-      showNotification(err.message || "Failed to run AI moderation", "error");
-    }
-  }, [board_id, runBoardAIModeration, showNotification]);
-
-  useEffect(() => {
-    if (boardError) {
-      showNotification(boardError, "error");
-    }
-  }, [boardError, showNotification]);
+  const handleEdit = () => {
+    setEditingBoard({ ...localBoardData });
+    handleMenuClose();
+  };
 
   if (authLoading || !isFullyLoaded) return <LoadingSpinner />;
   if (!isAuthenticated) {
@@ -156,6 +97,24 @@ const BoardPage = () => {
 
   return (
     <Box sx={{ position: "relative", width: "100%", height: "100vh" }}>
+      <Box sx={{ position: "absolute", top: 10, right: 10 }}>
+        <Button
+          aria-controls="board-menu"
+          aria-haspopup="true"
+          onClick={handleMenuOpen}
+          startIcon={<MoreVert />}
+        >
+          Options
+        </Button>
+        <Menu
+          id="board-menu"
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleMenuClose}
+        >
+          <MenuItem onClick={handleEdit}>Edit Board</MenuItem>
+        </Menu>
+      </Box>
       <Board
         token={token}
         currentUser={authData}
@@ -165,11 +124,11 @@ const BoardPage = () => {
         members={localMembers}
         boardTitle={localBoardData?.name || "Untitled Board"}
         onLike={handleLike}
-        onInviteUser={handleInviteUser}
-        onAcceptInvite={handleAcceptInvite}
-        onAddMember={handleAddMember}
-        onRemoveMember={handleRemoveMember}
-        onRunAIModeration={handleRunAIModeration}
+        onInviteUser={inviteUserToBoard}
+        onAcceptInvite={acceptBoardInvite}
+        onAddMember={addBoardMember}
+        onRemoveMember={removeBoardMember}
+        onRunAIModeration={runBoardAIModeration}
         setEditingBoard={setEditingBoard}
       />
 
@@ -181,8 +140,9 @@ const BoardPage = () => {
           setBoard={setEditingBoard}
           onSave={handleUpdateBoard}
           onCancel={() => setEditingBoard(null)}
-          availableGates={[]}
-          availableClasses={[]}
+          token={token}
+          onLogout={handleLogout}
+          navigate={navigate}
         />
       )}
     </Box>

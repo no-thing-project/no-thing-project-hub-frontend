@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, Button } from "@mui/material";
 import { Add } from "@mui/icons-material";
@@ -6,13 +6,13 @@ import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import { useGates } from "../hooks/useGates";
 import useAuth from "../hooks/useAuth";
+import { useNotification } from "../context/NotificationContext";
 import ProfileHeader from "../components/Headers/ProfileHeader";
 import { actionButtonStyles } from "../styles/BaseStyles";
 import GateFormDialog from "../components/Dialogs/GateFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
 import GatesFilters from "../components/Gates/GatesFilters";
 import GatesGrid from "../components/Gates/GatesGrid";
-import { useNotification } from "../context/NotificationContext";
 
 const GatesPage = () => {
   const navigate = useNavigate();
@@ -32,12 +32,7 @@ const GatesPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [editingGate, setEditingGate] = useState(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [popupGate, setPopupGate] = useState({
-    name: "",
-    description: "",
-    visibility: "Public",
-  });
-  const [success, setSuccess] = useState("");
+  const [popupGate, setPopupGate] = useState({ name: "", description: "", visibility: "Public" });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [gateToDelete, setGateToDelete] = useState(null);
   const [quickFilter, setQuickFilter] = useState("all");
@@ -50,14 +45,11 @@ const GatesPage = () => {
       setIsLoading(false);
       return;
     }
-
     setIsLoading(true);
     try {
       await fetchGatesList();
-      console.log("Gates loaded successfully");
     } catch (err) {
-      const errorMsg = err.response?.data?.errors?.[0] || err.message || "Failed to load gates";
-      showNotification(errorMsg, "error");
+      showNotification(err.message || "Failed to load gates", "error");
     } finally {
       setIsLoading(false);
     }
@@ -67,66 +59,51 @@ const GatesPage = () => {
     loadGatesData();
   }, [loadGatesData]);
 
-  const filteredGates = gates.filter((gate) => {
-    const matchesSearch = gate.name.toLowerCase().includes(searchQuery.toLowerCase());
-    if (!matchesSearch) return false;
-    if (quickFilter === "all") return true;
-    if (quickFilter === "public") return gate.is_public;
-    if (quickFilter === "private") return !gate.is_public;
-    if (quickFilter === "liked") {
-      const isLiked =
-        localLikes[gate.gate_id] !== undefined ? localLikes[gate.gate_id] : gate.is_liked;
-      return isLiked;
-    }
-    return true;
-  });
+  const filteredGates = useMemo(() => {
+    return gates.filter((gate) => {
+      const matchesSearch = gate.name.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+      if (quickFilter === "all") return true;
+      if (quickFilter === "public") return gate.is_public;
+      if (quickFilter === "private") return !gate.is_public;
+      if (quickFilter === "liked") return localLikes[gate.gate_id] ?? gate.is_liked;
+      return true;
+    });
+  }, [gates, quickFilter, searchQuery, localLikes]);
 
-  const handleOpenCreateGate = () => {
-    setPopupGate({ name: "", description: "", visibility: "Public" });
-    setCreateDialogOpen(true);
-  };
-
-  const handleCancelCreateGate = () => {
-    setCreateDialogOpen(false);
-  };
+  const handleOpenCreateGate = () => setCreateDialogOpen(true);
+  const handleCancelCreateGate = () => setCreateDialogOpen(false);
 
   const handleCreateGate = useCallback(async () => {
-    if (!popupGate.name.trim()) {
-      showNotification("Gate name is required!", "error");
-      return;
-    }
+    if (!popupGate.name.trim()) return showNotification("Gate name is required!", "error");
     try {
       const createdGate = await createNewGate({
         name: popupGate.name,
         description: popupGate.description,
         is_public: popupGate.visibility === "Public",
       });
-      setSuccess("Gate created successfully!");
       setCreateDialogOpen(false);
       setPopupGate({ name: "", description: "", visibility: "Public" });
+      showNotification("Gate created successfully!", "success");
       navigate(`/gate/${createdGate.gate_id}`);
     } catch (err) {
-      const errorMsg = err.response?.data?.errors?.[0] || err.message || "Failed to create gate";
-      showNotification(errorMsg, "error");
+      showNotification(err.message || "Failed to create gate", "error");
     }
   }, [popupGate, createNewGate, navigate, showNotification]);
 
   const handleUpdateGate = useCallback(async () => {
-    if (!editingGate?.name.trim()) {
-      showNotification("Gate name is required!", "error");
-      return;
-    }
+    if (!editingGate?.name.trim()) return showNotification("Gate name is required!", "error");
     try {
       await updateExistingGate(editingGate.gate_id, {
         name: editingGate.name,
         description: editingGate.description,
         is_public: editingGate.visibility === "Public",
       });
-      setSuccess("Gate updated successfully!");
       setEditingGate(null);
+      showNotification("Gate updated successfully!", "success");
       await loadGatesData();
     } catch (err) {
-      showNotification(err.response?.data?.errors?.[0] || "Failed to update gate", "error");
+      showNotification(err.message || "Failed to update gate", "error");
     }
   }, [editingGate, updateExistingGate, loadGatesData, showNotification]);
 
@@ -134,75 +111,56 @@ const GatesPage = () => {
     if (!gateToDelete) return;
     try {
       await deleteExistingGate(gateToDelete);
-      setSuccess("Gate deleted successfully!");
       setDeleteDialogOpen(false);
       setGateToDelete(null);
+      showNotification("Gate deleted successfully!", "success");
       await loadGatesData();
     } catch (err) {
-      showNotification(err.response?.data?.errors?.[0] || "Failed to delete gate", "error");
+      showNotification(err.message || "Failed to delete gate", "error");
       setDeleteDialogOpen(false);
       setGateToDelete(null);
     }
   }, [gateToDelete, deleteExistingGate, loadGatesData, showNotification]);
 
-  const handleLike = useCallback(
-    async (gate_id, isLiked) => {
-      const optimisticLiked = !isLiked;
-      setLocalLikes((prev) => ({ ...prev, [gate_id]: optimisticLiked }));
-      try {
-        if (isLiked) {
-          await unlikeGateById(gate_id);
-        } else {
-          await likeGateById(gate_id);
-        }
-        setSuccess(`Gate ${isLiked ? "unliked" : "liked"} successfully!`);
-        await loadGatesData();
-        setLocalLikes({});
-      } catch (err) {
-        setLocalLikes((prev) => ({ ...prev, [gate_id]: isLiked }));
-        showNotification(`Failed to ${isLiked ? "unlike" : "like"} gate`, "error");
-      }
-    },
-    [likeGateById, unlikeGateById, loadGatesData, showNotification]
-  );
-
-  const handleCloseSnackbar = () => {
-    setSuccess("");
-  };
+  const handleLike = useCallback(async (gate_id, isLiked) => {
+    setLocalLikes((prev) => ({ ...prev, [gate_id]: !isLiked }));
+    try {
+      isLiked ? await unlikeGateById(gate_id) : await likeGateById(gate_id);
+      showNotification(`Gate ${isLiked ? "unliked" : "liked"} successfully!`, "success");
+      await loadGatesData();
+    } catch (err) {
+      setLocalLikes((prev) => ({ ...prev, [gate_id]: isLiked }));
+      showNotification(`Failed to ${isLiked ? "unlike" : "like"} gate`, "error");
+    }
+  }, [likeGateById, unlikeGateById, loadGatesData, showNotification]);
 
   if (isLoading || authLoading || gatesLoading) return <LoadingSpinner />;
-  if (!isAuthenticated) {
-    navigate("/login");
-    return null;
-  }
+  if (!isAuthenticated) return navigate("/login") || null;
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
         <ProfileHeader user={authData} isOwnProfile={true}>
-          <Button variant="contained" onClick={handleOpenCreateGate} startIcon={<Add />} sx={actionButtonStyles}>
+          <Button onClick={handleOpenCreateGate} startIcon={<Add />} sx={actionButtonStyles}>
             Create Gate
           </Button>
         </ProfileHeader>
+        <GatesFilters
+          quickFilter={quickFilter}
+          setQuickFilter={setQuickFilter}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+        />
+        <GatesGrid
+          filteredGates={filteredGates}
+          localLikes={localLikes}
+          handleLike={handleLike}
+          setEditingGate={setEditingGate}
+          setGateToDelete={setGateToDelete}
+          setDeleteDialogOpen={setDeleteDialogOpen}
+          navigate={navigate}
+        />
       </Box>
-
-      <GatesFilters
-        quickFilter={quickFilter}
-        setQuickFilter={setQuickFilter}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-      />
-
-      <GatesGrid
-        filteredGates={filteredGates}
-        localLikes={localLikes}
-        handleLike={handleLike}
-        setEditingGate={setEditingGate}
-        setGateToDelete={setGateToDelete}
-        setDeleteDialogOpen={setDeleteDialogOpen}
-        navigate={navigate}
-      />
-
       <GateFormDialog
         open={createDialogOpen}
         title="Create New Gate"
@@ -211,10 +169,9 @@ const GatesPage = () => {
         onSave={handleCreateGate}
         onCancel={handleCancelCreateGate}
       />
-
       {editingGate && (
         <GateFormDialog
-          open={Boolean(editingGate)}
+          open={true}
           title="Edit Gate"
           gate={editingGate}
           setGate={setEditingGate}
@@ -222,12 +179,11 @@ const GatesPage = () => {
           onCancel={() => setEditingGate(null)}
         />
       )}
-
       <DeleteConfirmationDialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDeleteGate}
-        message="Are you sure you want to delete this gate? This action cannot be undone."
+        message="Are you sure you want to delete this gate?"
       />
     </AppLayout>
   );

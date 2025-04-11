@@ -14,10 +14,12 @@ import {
   FavoriteBorder,
   Public,
   Lock,
+  LockOpen,
   Group,
   Visibility,
   Forum,
   AutoAwesome,
+  People,
 } from "@mui/icons-material";
 
 const BoardCard = ({
@@ -48,6 +50,18 @@ const BoardCard = ({
     }
   };
 
+  const getVisibilityIcon = () => {
+    if (board.is_public && board.type === "group") {
+      return <Public fontSize="small" />;
+    } else if (board.is_public && board.type === "personal") {
+      return <LockOpen fontSize="small" color="primary" />;
+    } else if (!board.is_public && board.type === "group") {
+      return <Lock fontSize="small" color="primary" />;
+    } else {
+      return <Lock fontSize="small" color="error" />;
+    }
+  };
+
   return (
     <Box
       key={board.board_id}
@@ -59,7 +73,7 @@ const BoardCard = ({
         cursor: "pointer",
         display: "flex",
         flexDirection: "column",
-        minHeight: 230,
+        minHeight: 250,
         transition: "all 0.3s ease-in-out",
         ":hover": {
           backgroundColor: "background.hover",
@@ -139,12 +153,12 @@ const BoardCard = ({
           <Chip label={`Likes: ${board.stats?.like_count ?? 0}`} size="small" />
           <Chip label={`Views: ${board.stats?.view_count ?? 0}`} size="small" />
           <Chip label={`Points: ${board.stats?.points_earned ?? 0}`} size="small" />
+          {board.tags?.length > 0 && (
+            <Chip label={`Tags: ${board.tags.join(", ")}`} size="small" />
+          )}
           {board.parent_board_id && <Chip label="Has Parent" size="small" />}
           {board.child_board_ids?.length > 0 && (
-            <Chip
-              label={`Childs: ${board.child_board_ids.length}`}
-              size="small"
-            />
+            <Chip label={`Children: ${board.child_board_ids.length}`} size="small" />
           )}
           {board.settings?.max_tweets && (
             <Chip label={`Max Tweets: ${board.settings.max_tweets}`} size="small" />
@@ -164,32 +178,23 @@ const BoardCard = ({
             <Chip label={`Class: ${board.class.name}`} size="small" />
           )}
           {board.settings?.tweet_cost && (
-            <Chip
-              label={`Tweet Cost: ${board.settings.tweet_cost}`}
-              size="small"
-            />
+            <Chip label={`Tweet Cost: ${board.settings.tweet_cost}`} size="small" />
           )}
           {board.settings?.like_cost && (
             <Chip label={`Like Cost: ${board.settings.like_cost}`} size="small" />
           )}
           {board.settings?.points_to_creator && (
-            <Chip
-              label={`Creator Reward: ${board.settings.points_to_creator}`}
-              size="small"
-            />
+            <Chip label={`Creator Reward: ${board.settings.points_to_creator}`} size="small" />
+          )}
+          {board.type === "group" && board.members?.length > 0 && (
+            <Chip label={`Members: ${board.members.length}`} size="small" icon={<People />} />
           )}
         </Box>
       </Box>
 
       <Box sx={{ mt: 2, display: "flex", justifyContent: "space-between" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          {board.is_public ? (
-            <Public fontSize="small" />
-          ) : board.visibility === "restricted" ? (
-            <Lock fontSize="small" color="warning" />
-          ) : (
-            <Lock fontSize="small" color="error" />
-          )}
+          {getVisibilityIcon()}
           <Typography variant="caption">
             {board.visibility.charAt(0).toUpperCase() + board.visibility.slice(1)}
           </Typography>

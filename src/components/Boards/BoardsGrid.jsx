@@ -38,7 +38,7 @@ const BoardsGrid = ({
   }, [filteredBoards, localLikes, handleLike, setEditingBoard, setBoardToDelete, setDeleteDialogOpen, navigate]);
 
   return (
-    <AnimatePresence exitBeforeEnter>
+    <AnimatePresence>
       {filteredBoards.length === 0 ? (
         <motion.div
           key="no-boards"
@@ -68,7 +68,6 @@ const BoardsGrid = ({
           variants={containerVariants}
           initial="hidden"
           animate="visible"
-          exit="exit"
           transition={{ duration: 0.3 }}
         >
           <Box
@@ -81,7 +80,6 @@ const BoardsGrid = ({
               mx: "auto",
               my: 6,
               px: 3,
-              color: "text.primary",
             }}
           >
             <motion.div
