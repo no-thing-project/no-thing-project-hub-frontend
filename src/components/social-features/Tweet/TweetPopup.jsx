@@ -1,15 +1,17 @@
-//src/components/Tweet/TweetPopup.js
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { Paper, TextField, Button, Box } from "@mui/material";
 import theme from "../../../Theme";
 import { actionButtonStyles, cancelButtonStyle, inputStyles } from "../../../styles/BaseStyles";
 
 const TweetPopup = ({ x, y, draft, onDraftChange, onSubmit, onClose }) => {
+  const [scheduledAt, setScheduledAt] = useState("");
+
   const handleSubmit = useCallback(() => {
     if (!draft.trim()) return;
-    onSubmit(draft, x, y);
+    onSubmit(draft, x, y, scheduledAt);
     onDraftChange("");
-  }, [draft, x, y, onSubmit, onDraftChange]);
+    setScheduledAt("");
+  }, [draft, x, y, scheduledAt, onSubmit, onDraftChange]);
 
   const handleKeyPress = useCallback(
     (e) => {
@@ -45,6 +47,16 @@ const TweetPopup = ({ x, y, draft, onDraftChange, onSubmit, onClose }) => {
         maxRows={4}
         margin="dense"
         InputProps={{ notched: false }}
+        sx={inputStyles}
+      />
+      <TextField
+        label="Schedule (optional)"
+        type="datetime-local"
+        value={scheduledAt}
+        onChange={(e) => setScheduledAt(e.target.value)}
+        fullWidth
+        margin="dense"
+        InputLabelProps={{ shrink: true }}
         sx={inputStyles}
       />
       <Box sx={{ display: "flex", justifyContent: "space-evenly", mt: theme.spacing(2) }}>

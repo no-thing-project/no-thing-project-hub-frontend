@@ -8,28 +8,26 @@ import {
   deleteTweetApi,
   getTweetCommentsApi,
   updateTweetStatusApi,
+  moveTweetApi,
 } from "../api/tweetsApi";
 import { normalizeTweet } from "../utils/tweetUtils";
 
 export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
   const [tweets, setTweets] = useState([]);
   const [tweet, setTweet] = useState(null);
-  const [comments, setComments] = useState([]);
+  const [comments, setComments] = useState(null);
   const [pagination, setPagination] = useState({});
   const [boardInfo, setBoardInfo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleAuthError = useCallback(
-    (err) => {
-      if (err.status === 401 || err.status === 403) {
-        onLogout("Session expired. Please log in again.");
-        navigate("/login");
-      }
-      setError(err.message || "Authentication error");
-    },
-    [onLogout, navigate]
-  );
+  const handleAuthError = useCallback((err) => {
+    if (err.status === 401 || err.status === 403) {
+      onLogout("Session expired. Please log in again.");
+      navigate("/login");
+    }
+    setError(err.message || "Authentication error");
+  }, [onLogout, navigate]);
 
   const withLoading = useCallback(async (fn) => {
     setLoading(true);
@@ -43,18 +41,22 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
 
   const fetchTweets = useCallback(
     async (options = { status: "approved", page: 1, limit: 20, sort: "created_at:-1" }, signal) => {
-      if (!boardId) {
-        setError("Board ID is required to fetch tweets");
-        return [];
-      }
+      if (!boardId) return setError("Board ID is required to fetch tweets"), [];
       return withLoading(async () => {
         const data = await fetchTweetsApi(boardId, token, options, signal);
-        const normalizedTweets = data.tweets.map((tweet) => normalizeTweet(tweet, currentUser));
-        setTweets(normalizedTweets);
+        function flattenTweets(tweet, acc = []) {
+          acc.push(tweet);
+          if (tweet.children?.length) {
+            tweet.children.forEach(child => flattenTweets(child, acc));
+          }
+          return acc;
+        }
+        const allTweets = data.tweets.flatMap(t => flattenTweets(normalizeTweet(t, currentUser)));
+        setTweets(allTweets);        
         setBoardInfo(data.board);
         setPagination(data.pagination);
-        return normalizedTweets;
-      }).catch((err) => {
+        return flattenTweets;
+      }).catch(err => {
         if (err.name !== "AbortError") handleAuthError(err);
         return [];
       });
@@ -64,16 +66,13 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
 
   const fetchTweet = useCallback(
     async (tweetId, signal) => {
-      if (!boardId || !tweetId) {
-        setError("Board ID and Tweet ID are required to fetch tweet");
-        return null;
-      }
+      if (!boardId || !tweetId) return setError("Board ID and Tweet ID are required to fetch tweet"), null;
       return withLoading(async () => {
         const tweetData = await fetchTweetById(boardId, tweetId, token, signal);
         const normalizedTweet = normalizeTweet(tweetData, currentUser);
         setTweet(normalizedTweet);
         return normalizedTweet;
-      }).catch((err) => {
+      }).catch(err => {
         if (err.name !== "AbortError") handleAuthError(err);
         return null;
       });
@@ -82,34 +81,36 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
   );
 
   const createNewTweet = useCallback(
-    async (content, x, y, parentTweetId = null, isAnonymous = false) => {
-      if (!boardId) {
-        setError("Board ID is required to create a tweet");
-        return null;
-      }
+    async (content, x, y, parentTweetId = null, isAnonymous = false, status = "approved", scheduledAt = null) => {
+      if (!boardId) return setError("Board ID is required to create a tweet"), null;
       const optimisticTweet = {
         tweet_id: `temp-${Date.now()}`,
-        content: { type: "text", value: content },
+        content: typeof content === "string" ? { type: "text", value: content } : content,
         position: { x, y },
         parent_tweet_id: parentTweetId,
+        child_tweet_ids: [],
         is_anonymous: isAnonymous,
-        creator_id: currentUser.anonymous_id,
+        anonymous_id: currentUser.anonymous_id,
         created_at: new Date().toISOString(),
-        likes: [],
-        like_count: 0,
+        liked_by: [],
+        stats: { likes: 0, like_count: 0 },
+        status,
+        scheduled_at: scheduledAt,
       };
-      setTweets((prev) => [normalizeTweet(optimisticTweet, currentUser), ...prev]);
+      setTweets(prev => parentTweetId ? prev : [normalizeTweet(optimisticTweet, currentUser), ...prev]);
       return withLoading(async () => {
-        const createdTweet = await createTweetApi(boardId, content, x, y, parentTweetId, isAnonymous, token);
-        const normalizedTweet = normalizeTweet(
-          { ...createdTweet, position: createdTweet.position || { x, y } },
-          currentUser
-        );
-        setTweets((prev) => prev.map((t) => (t.tweet_id === optimisticTweet.tweet_id ? normalizedTweet : t)));
+        const createdTweet = await createTweetApi(boardId, content, x, y, parentTweetId, isAnonymous, status, scheduledAt, token);
+        const normalizedTweet = normalizeTweet({ ...createdTweet, position: createdTweet.position || { x, y } }, currentUser);
+        setTweets(prev => {
+          if (parentTweetId) {
+            return prev.map(t => t.tweet_id === parentTweetId ? { ...t, children: [...(t.children || []), normalizedTweet] } : t);
+          }
+          return prev.map(t => t.tweet_id === optimisticTweet.tweet_id ? normalizedTweet : t);
+        });
         return normalizedTweet;
-      }).catch((err) => {
+      }).catch(err => {
         handleAuthError(err);
-        setTweets((prev) => prev.filter((t) => t.tweet_id !== optimisticTweet.tweet_id));
+        setTweets(prev => parentTweetId ? prev : prev.filter(t => t.tweet_id !== optimisticTweet.tweet_id));
         return null;
       });
     },
@@ -118,17 +119,14 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
 
   const updateExistingTweet = useCallback(
     async (tweetId, updates) => {
-      if (!boardId || !tweetId) {
-        setError("Board ID and Tweet ID are required to update a tweet");
-        return null;
-      }
+      if (!boardId || !tweetId) return setError("Board ID and Tweet ID are required to update a tweet"), null;
       return withLoading(async () => {
         const updatedTweet = await updateTweetApi(boardId, tweetId, updates, token);
         const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
-        setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? normalizedTweet : t)));
+        setTweets(prev => prev.map(t => t.tweet_id === tweetId ? normalizedTweet : t));
         setTweet(normalizedTweet);
         return normalizedTweet;
-      }).catch((err) => {
+      }).catch(err => {
         handleAuthError(err);
         return null;
       });
@@ -138,100 +136,86 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
 
   const toggleLikeTweet = useCallback(
     async (tweetId, isLiked) => {
-      if (!boardId || !tweetId) {
-        setError("Board ID and Tweet ID are required to toggle like");
-        return null;
-      }
-      setTweets((prev) =>
-        prev.map((t) =>
-          t.tweet_id === tweetId
-            ? {
-                ...t,
-                likes: isLiked
-                  ? t.likes.filter((l) => l.anonymous_id !== currentUser.anonymous_id)
-                  : [...t.likes, { anonymous_id: currentUser.anonymous_id }],
-                like_count: isLiked ? t.like_count - 1 : t.like_count + 1,
-              }
-            : t
-        )
-      );
+      if (!tweetId) return setError("Tweet ID is required to toggle like"), null;
+      setTweets(prev => prev.map(t => t.tweet_id === tweetId ? {
+        ...t,
+        liked_by: isLiked ? t.liked_by.filter(l => l.anonymous_id !== currentUser.anonymous_id) : [...t.liked_by, { anonymous_id: currentUser.anonymous_id }],
+        stats: { ...t.stats, likes: isLiked ? t.stats.likes - 1 : t.stats.likes + 1, like_count: isLiked ? t.stats.like_count - 1 : t.stats.like_count + 1 },
+      } : t));
       return withLoading(async () => {
         const updatedTweet = await toggleLikeApi(tweetId, isLiked, token);
         const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
-        setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? normalizedTweet : t)));
+        setTweets(prev => prev.map(t => t.tweet_id === tweetId ? normalizedTweet : t));
         setTweet(normalizedTweet);
         return normalizedTweet;
-      }).catch((err) => {
+      }).catch(err => {
         handleAuthError(err);
-        setTweets((prev) =>
-          prev.map((t) =>
-            t.tweet_id === tweetId
-              ? {
-                  ...t,
-                  likes: isLiked
-                    ? [...t.likes, { anonymous_id: currentUser.anonymous_id }]
-                    : t.likes.filter((l) => l.anonymous_id !== currentUser.anonymous_id),
-                  like_count: isLiked ? t.like_count + 1 : t.like_count - 1,
-                }
-              : t
-          )
-        );
+        setTweets(prev => prev.map(t => t.tweet_id === tweetId ? {
+          ...t,
+          liked_by: isLiked ? [...t.liked_by, { anonymous_id: currentUser.anonymous_id }] : t.liked_by.filter(l => l.anonymous_id !== currentUser.anonymous_id),
+          stats: { ...t.stats, likes: isLiked ? t.stats.likes + 1 : t.stats.likes - 1, like_count: isLiked ? t.stats.like_count + 1 : t.stats.like_count - 1 },
+        } : t));
         return null;
       });
     },
-    [boardId, token, currentUser, handleAuthError, withLoading]
+    [token, currentUser, handleAuthError, withLoading]
   );
 
   const deleteExistingTweet = useCallback(
     async (tweetId) => {
-      if (!boardId || !tweetId) {
-        setError("Board ID and Tweet ID are required to delete a tweet");
-        return;
-      }
+      if (!boardId || !tweetId) return setError("Board ID and Tweet ID are required to delete a tweet");
       return withLoading(async () => {
         await deleteTweetApi(boardId, tweetId, token);
-        setTweets((prev) => prev.filter((t) => t.tweet_id !== tweetId));
+        setTweets(prev => prev.filter(t => t.tweet_id !== tweetId));
         setTweet(null);
-      }).catch((err) => {
-        handleAuthError(err);
-      });
+      }).catch(err => handleAuthError(err));
     },
     [boardId, token, handleAuthError, withLoading]
   );
 
   const fetchTweetComments = useCallback(
-    async (tweetId, options = { page: 1, limit: 20 }, signal) => {
-      if (!boardId || !tweetId) {
-        setError("Board ID and Tweet ID are required to fetch comments");
-        return [];
-      }
+    async (tweetId, signal) => {
+      if (!tweetId) return setError("Tweet ID is required to fetch comments"), null;
       return withLoading(async () => {
-        const data = await getTweetCommentsApi(tweetId, token, options, signal);
-        const normalizedComments = data.comments.map((comment) => normalizeTweet(comment, currentUser));
+        const data = await getTweetCommentsApi(tweetId, token, signal);
+        const normalizedComments = normalizeTweet(data, currentUser);
         setComments(normalizedComments);
-        setPagination(data.pagination);
         return normalizedComments;
-      }).catch((err) => {
+      }).catch(err => {
         if (err.name !== "AbortError") handleAuthError(err);
-        return [];
+        return null;
+      });
+    },
+    [token, currentUser, handleAuthError, withLoading]
+  );
+
+  const updateTweetStatus = useCallback(
+    async (tweetId, status) => {
+      if (!boardId || !tweetId) return setError("Board ID and Tweet ID are required to update tweet status"), null;
+      return withLoading(async () => {
+        const updatedTweet = await updateTweetStatusApi(boardId, tweetId, status, token);
+        const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
+        setTweets(prev => prev.map(t => t.tweet_id === tweetId ? normalizedTweet : t));
+        setTweet(normalizedTweet);
+        return normalizedTweet;
+      }).catch(err => {
+        handleAuthError(err);
+        return null;
       });
     },
     [boardId, token, currentUser, handleAuthError, withLoading]
   );
 
-  const updateTweetStatus = useCallback(
-    async (tweetId, status) => {
-      if (!boardId || !tweetId) {
-        setError("Board ID and Tweet ID are required to update tweet status");
-        return null;
-      }
+  const moveTweet = useCallback(
+    async (tweetId, targetBoardId) => {
+      if (!boardId || !tweetId || !targetBoardId) return setError("Board ID, Tweet ID, and Target Board ID are required to move a tweet"), null;
       return withLoading(async () => {
-        const updatedTweet = await updateTweetStatusApi(boardId, tweetId, status, token);
+        const updatedTweet = await moveTweetApi(tweetId, targetBoardId, token);
         const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
-        setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? normalizedTweet : t)));
+        setTweets(prev => prev.filter(t => t.tweet_id !== tweetId)); // Видаляємо з поточного борду
         setTweet(normalizedTweet);
         return normalizedTweet;
-      }).catch((err) => {
+      }).catch(err => {
         handleAuthError(err);
         return null;
       });
@@ -255,6 +239,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
     deleteExistingTweet,
     fetchTweetComments,
     updateTweetStatus,
+    moveTweet,
   };
 };
 

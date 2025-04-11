@@ -1,9 +1,16 @@
-// src/components/Tweet/TweetContent.jsx
 import React, { useEffect, useState } from "react";
-import { Paper, Typography, Box, IconButton } from "@mui/material";
+import {
+  Paper,
+  Typography,
+  Box,
+  IconButton,
+  Menu,
+  MenuItem,
+} from "@mui/material";
 import ThumbUpIcon from "@mui/icons-material/ThumbUp";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 
 const TweetContent = React.memo(
   ({
@@ -13,32 +20,35 @@ const TweetContent = React.memo(
     onDelete,
     onReply,
     onReplyHover,
+    onEdit,
+    onMove,
+    onChangeType,
     isParentHighlighted = false,
     replyCount = 0,
     parentTweetText = null,
   }) => {
     const isLiked = tweet.liked_by?.some(
-      (u) => u.user_id === currentUser?.anonymous_id
+      (u) => u.anonymous_id === currentUser?.anonymous_id
     );
-    const tweetAuthor = tweet.user?.username || tweet.username || "Someone";
+    const tweetAuthor = tweet.username || tweet.user?.username || "Someone";
 
     const [animate, setAnimate] = useState(false);
     useEffect(() => {
       setAnimate(true);
       const timer = setTimeout(() => setAnimate(false), 300);
       return () => clearTimeout(timer);
-    }, [tweet.likes]);
+    }, [tweet.stats?.likes]);
 
     const [hovered, setHovered] = useState(false);
     const handleMouseEnter = () => {
       setHovered(true);
-      if (tweet.parent_tweet_id && onReplyHover) {
-        onReplyHover(tweet.parent_tweet_id);
+      if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
+        onReplyHover(tweet.parent_tweet_id || tweet.tweet_id);
       }
     };
     const handleMouseLeave = () => {
       setHovered(false);
-      if (tweet.parent_tweet_id && onReplyHover) {
+      if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
         onReplyHover(null);
       }
     };
@@ -67,14 +77,16 @@ const TweetContent = React.memo(
       }
     };
 
+    const [anchorEl, setAnchorEl] = useState(null);
+    const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
+    const handleMenuClose = () => setAnchorEl(null);
+
     return (
       <Paper
         id={`tweet-${tweet.tweet_id}`}
         className="tweet-card"
         elevation={3}
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
+        onClick={(e) => e.stopPropagation()}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         sx={{
@@ -86,12 +98,14 @@ const TweetContent = React.memo(
           boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
           transition: "all 0.2s ease-in-out",
           "&:hover": {
-            transition: "all 0.2s ease-in-out",
             transform: "scale(1.01)",
             boxShadow: "0 6px 16px rgba(0,0,0,0.15)",
           },
           ...(isParentHighlighted && {
             backgroundColor: "background.hover",
+          }),
+          ...(tweet.status === "pending" && {
+            border: "1px dashed #888",
           }),
         }}
       >
@@ -110,13 +124,22 @@ const TweetContent = React.memo(
             Reply to: {parentTweetText}
           </Box>
         )}
+
         {renderContent(tweet.content)}
+
         <Typography
           variant="body1"
           sx={{ color: "text.secondary", fontSize: "1rem" }}
         >
           Author: {tweetAuthor}
         </Typography>
+        <Typography
+          variant="caption"
+          sx={{ color: "text.secondary", fontSize: "0.8rem" }}
+        >
+          Status: {tweet.status}
+        </Typography>
+
         <Box
           sx={{
             display: "flex",
@@ -148,9 +171,8 @@ const TweetContent = React.memo(
                 transition: "transform 300ms ease",
               }}
             >
-              {tweet.likes}
+              {tweet.stats?.likes || 0}
             </Typography>
-            {/* Іконка відповіді */}
             <IconButton
               size="small"
               onClick={(e) => {
@@ -159,42 +181,36 @@ const TweetContent = React.memo(
               }}
               sx={{ ml: 1 }}
             >
-              <ChatBubbleOutlineIcon
-                fontSize="small"
-                sx={{ color: "text.secondary" }}
-              />
+              <ChatBubbleOutlineIcon fontSize="small" sx={{ color: "text.secondary" }} />
             </IconButton>
-            {/* Відображення каунтера відповідей для батьківського твіту */}
             {replyCount > 0 && (
-              <Typography
-                variant="caption"
-                sx={{
-                  marginLeft: 0.5,
-                  color: "text.secondary",
-                }}
-              >
+              <Typography variant="caption" sx={{ marginLeft: 0.5, color: "text.secondary" }}>
                 {replyCount}
               </Typography>
             )}
           </Box>
-          {((tweet?.user?.anonymous_id || tweet.user_id) ===
-            currentUser?.anonymous_id) && (
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(tweet.tweet_id);
-              }}
-              color="error"
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
+
+          {(tweet?.anonymous_id || tweet.user_id) === currentUser?.anonymous_id && (
+            <Box>
+              <IconButton size="small" onClick={handleMenuOpen}>
+                <MoreVertIcon fontSize="small" />
+              </IconButton>
+              <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={handleMenuClose}
+              >
+                <MenuItem onClick={() => { onEdit(tweet); handleMenuClose(); }}>Edit Tweet</MenuItem>
+                <MenuItem onClick={() => { onMove(tweet); handleMenuClose(); }}>Move to Another Board</MenuItem>
+                <MenuItem onClick={() => { onChangeType(tweet); handleMenuClose(); }}>Change Type</MenuItem>
+                <MenuItem onClick={() => { onDelete(tweet.tweet_id); handleMenuClose(); }} sx={{ color: "error.main" }}>Delete</MenuItem>
+              </Menu>
+            </Box>
           )}
         </Box>
       </Paper>
     );
   }
 );
-
 
 export default TweetContent;

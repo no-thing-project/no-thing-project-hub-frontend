@@ -60,7 +60,8 @@ const BoardPage = () => {
     }
     try {
       const updated = await updateExistingBoard(editingBoard.board_id, null, null, editingBoard);
-      setEditingBoard(null);
+      setEditingBoard({ ...localBoardData });
+      
       setLocalBoardData(updated);
       showNotification("Board updated successfully", "success");
       if (updated.is_public === false && localBoardData.is_public === true) {
@@ -89,6 +90,11 @@ const BoardPage = () => {
     handleMenuClose();
   };
 
+  const handleNavigateToChildBoard = (childBoardId) => {
+    navigate(`/board/${childBoardId}`);
+    handleMenuClose();
+  };
+
   if (authLoading || !isFullyLoaded) return <LoadingSpinner />;
   if (!isAuthenticated) {
     navigate("/login");
@@ -113,6 +119,13 @@ const BoardPage = () => {
           onClose={handleMenuClose}
         >
           <MenuItem onClick={handleEdit}>Edit Board</MenuItem>
+          {localBoardData?.child_board_ids?.length > 0 && (
+            localBoardData.child_board_ids.map(childId => (
+              <MenuItem key={childId} onClick={() => handleNavigateToChildBoard(childId)}>
+                Go to Child Board {childId.slice(0, 8)}
+              </MenuItem>
+            ))
+          )}
         </Menu>
       </Box>
       <Board

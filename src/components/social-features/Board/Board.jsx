@@ -67,6 +67,7 @@ const Board = ({
     updateExistingTweet,
     toggleLikeTweet,
     deleteExistingTweet,
+    boardInfo,
     error: tweetsError,
   } = useTweets(token, boardId, currentUser, onLogout, navigate);
 
@@ -101,7 +102,7 @@ const Board = ({
     })();
 
     return () => controller.abort();
-  }, [boardId]);
+  }, [boardId, fetchTweets, getPoints]);
 
   const handleCreateTweet = useCallback(
     async (text, x, y) => {
@@ -156,7 +157,6 @@ const Board = ({
     setHighlightedParentId(parentTweetId);
   }, []);
 
-  // Логіка зуму та перетягування
   const {
     scale,
     offset,
@@ -169,15 +169,12 @@ const Board = ({
     handleMouseUp,
   } = useBoardInteraction(boardMainRef);
 
-  // Логіка відповіді
   const handleReply = useCallback(
     (tweet) => {
       const tweetElement = document.getElementById(`tweet-${tweet.tweet_id}`);
-      // Отримуємо висоту елемента в пікселях
       const parentTweetHeight = tweetElement
         ? tweetElement.getBoundingClientRect().height
         : 150;
-      // Перераховуємо висоту в координати дошки (ділимо на scale) і додаємо додатковий відступ (10 пікселів також перераховано)
       setReplyTweet(tweet);
       setTweetPopup({
         visible: true,
@@ -188,14 +185,11 @@ const Board = ({
     [scale]
   );
 
-  // Формуємо масив DraggableTweet
   const renderedTweets = useMemo(() => {
     return tweets.map((tweet) => {
-      // Обчислюємо кількість відповідей для поточного твіту
       const replyCount = tweets.filter(
         (t) => t.parent_tweet_id === tweet.tweet_id
       ).length;
-      // Якщо твіт є відповіддю, шукаємо текст батьківського твіту
       let parentTweetText = null;
       if (tweet.parent_tweet_id) {
         const parentTweet = tweets.find(
@@ -209,12 +203,12 @@ const Board = ({
         <DraggableTweet
           key={tweet.tweet_id}
           tweet={tweet}
-          currentUser={currentUser}
           onStop={(e, data) =>
             handleUpdateTweet(tweet.tweet_id, {
               position: { x: data.x, y: data.y },
             })
           }
+          currentUser={currentUser}
         >
           <TweetContent
             tweet={tweet}
@@ -223,7 +217,7 @@ const Board = ({
             onDelete={handleDeleteTweet}
             onReply={handleReply}
             onReplyHover={handleReplyHover}
-            isParentHighlighted={tweet.tweet_id === highlightedParentId}
+            isParentHighlighted={tweet.tweet_id === highlightedParentId || tweet.parent_tweet_id === highlightedParentId}
             replyCount={replyCount}
             parentTweetText={parentTweetText}
           />
@@ -241,7 +235,6 @@ const Board = ({
     highlightedParentId,
   ]);
 
-  // Центруємо дошку після того, як зникне спінер (boardLoading === false)
   useEffect(() => {
     if (!boardLoading && boardMainRef.current) {
       console.log("Centering board after data load...");
@@ -249,7 +242,6 @@ const Board = ({
     }
   }, [boardLoading, centerBoard]);
 
-  // Обробка сабміту з попапа
   const handlePopupSubmit = useCallback(
     (text, x, y) => {
       handleCreateTweet(text, x, y);
@@ -259,7 +251,6 @@ const Board = ({
     [handleCreateTweet]
   );
 
-  // Показ попапа на mouseUp
   const handleMouseUpWithPopup = useCallback(
     (e) =>
       handleMouseUp(e, (x, y) => {
@@ -268,17 +259,14 @@ const Board = ({
     [handleMouseUp]
   );
 
-  // Якщо помилка у твітів
   if (tweetsError) {
     errorMessage = tweetsError;
   }
 
-  // Якщо ще вантажиться — показуємо спінер
   if (boardLoading) {
     return <LoadingSpinner />;
   }
 
-  // Плавна анімація появи контенту (AnimatePresence + motion.div)
   return (
     <AnimatePresence>
       <motion.div
@@ -302,7 +290,6 @@ const Board = ({
             position: "relative",
           }}
         >
-          {/* Кнопка повернення */}
           <Box
             sx={{
               position: "absolute",
@@ -320,7 +307,6 @@ const Board = ({
             </IconButton>
           </Box>
 
-          {/* Основна площа дошки */}
           <Box
             ref={boardMainRef}
             sx={{
@@ -380,7 +366,6 @@ const Board = ({
                 transformOrigin: "top left",
               }}
             >
-              {/* Напівпрозорий заголовок дошки */}
               <Box
                 sx={{
                   position: "absolute",
@@ -403,10 +388,8 @@ const Board = ({
                 </Typography>
               </Box>
 
-              {/* Рендер твіти */}
               {renderedTweets}
 
-              {/* Попап для створення/редагування твіта */}
               {tweetPopup.visible && (
                 <Box onClick={(e) => e.stopPropagation()}>
                   <TweetPopup
@@ -423,7 +406,6 @@ const Board = ({
               )}
             </Box>
 
-            {/* Плашка з поінтами */}
             <Box
               className="user_points"
               sx={{
@@ -447,11 +429,9 @@ const Board = ({
                 </IconButton>
               </Tooltip>
               <AnimatedPoints points={pointsData?.total_points} />
-              {/* Умовно рендеримо анімацію витрачання, якщо потрібно */}
               {isPointsSpent && <PointsDeductionAnimation />}
             </Box>
 
-            {/* Контрол зуму */}
             <Box
               className="zoom-controls"
               sx={{
@@ -515,7 +495,6 @@ const Board = ({
               </IconButton>
             </Box>
 
-            {/* Верхні кнопки (видимість, учасники, лайк, шейр, редагування) */}
             <Box
               className="board-top-controls"
               sx={{
@@ -584,9 +563,15 @@ const Board = ({
                   <Edit />
                 </IconButton>
               </Tooltip>
+              {boardInfo?.child_board_ids?.length > 0 && (
+                <Tooltip title="Child Boards">
+                  <IconButton onClick={() => navigate(`/board/${boardInfo.child_board_ids[0]}`)}>
+                    <Typography variant="caption">Child Boards ({boardInfo.child_board_ids.length})</Typography>
+                  </IconButton>
+                </Tooltip>
+              )}
             </Box>
 
-            {/* Поповер зі списком учасників */}
             <Popover
               open={Boolean(membersAnchorEl)}
               anchorEl={membersAnchorEl}
