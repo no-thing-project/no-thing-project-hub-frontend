@@ -34,9 +34,11 @@ const TweetContent = React.memo(
 
     const [animate, setAnimate] = useState(false);
     useEffect(() => {
-      setAnimate(true);
-      const timer = setTimeout(() => setAnimate(false), 300);
-      return () => clearTimeout(timer);
+      if (tweet.stats?.likes !== undefined) {
+        setAnimate(true);
+        const timer = setTimeout(() => setAnimate(false), 300);
+        return () => clearTimeout(timer);
+      }
     }, [tweet.stats?.likes]);
 
     const [hovered, setHovered] = useState(false);
@@ -78,7 +80,10 @@ const TweetContent = React.memo(
     };
 
     const [anchorEl, setAnchorEl] = useState(null);
-    const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
+    const handleMenuOpen = (event) => {
+      event.stopPropagation();
+      setAnchorEl(event.currentTarget);
+    };
     const handleMenuClose = () => setAnchorEl(null);
 
     return (
@@ -86,7 +91,13 @@ const TweetContent = React.memo(
         id={`tweet-${tweet.tweet_id}`}
         className="tweet-card"
         elevation={3}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          // зупини клік всередині меню, щоб не активував draggable onStop
+          if (e.target.closest(".tweet-menu")) {
+            e.stopPropagation();
+            return;
+          }
+        }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         sx={{
@@ -192,7 +203,7 @@ const TweetContent = React.memo(
 
           {(tweet?.anonymous_id || tweet.user_id) === currentUser?.anonymous_id && (
             <Box>
-              <IconButton size="small" onClick={handleMenuOpen}>
+              <IconButton size="small" onClick={handleMenuOpen} className="tweet-menu">
                 <MoreVertIcon fontSize="small" />
               </IconButton>
               <Menu

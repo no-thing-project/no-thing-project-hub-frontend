@@ -1,3 +1,27 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Badge,
+  Box,
+  IconButton,
+  List,
+  ListItem,
+  Popover,
+  Tooltip,
+  Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  TextField,
+  DialogActions,
+  Button,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+} from "@mui/material";
+import { AnimatePresence, motion } from "framer-motion";
+import PropTypes from "prop-types";
 import { Edit, RestartAlt, Toll } from "@mui/icons-material";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -8,26 +32,6 @@ import PeopleIcon from "@mui/icons-material/People";
 import PublicIcon from "@mui/icons-material/Public";
 import RemoveIcon from "@mui/icons-material/Remove";
 import ShareIcon from "@mui/icons-material/Share";
-import {
-  Badge,
-  Box,
-  IconButton,
-  List,
-  ListItem,
-  Popover,
-  Tooltip,
-  Typography,
-} from "@mui/material";
-import { AnimatePresence, motion } from "framer-motion";
-import PropTypes from "prop-types";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { useNavigate } from "react-router-dom";
 import { BOARD_SIZE, useBoardInteraction } from "../../../hooks/useBoard";
 import usePoints from "../../../hooks/usePoints";
 import { useTweets } from "../../../hooks/useTweets";
@@ -58,6 +62,24 @@ const Board = ({
   const [replyTweet, setReplyTweet] = useState(null);
   const [highlightedParentId, setHighlightedParentId] = useState(null);
   const [membersAnchorEl, setMembersAnchorEl] = useState(null);
+  const [editTweetModal, setEditTweetModal] = useState(null);
+  const [availableBoards, setAvailableBoards] = useState([]);
+  const [selectedBoardId, setSelectedBoardId] = useState("");
+  const [newStatus, setNewStatus] = useState("");
+  const [boardLoading, setBoardLoading] = useState(true);
+
+  // Ініціалізація useBoardInteraction на початку, перед усіма залежними функціями
+  const {
+    scale,
+    offset,
+    dragging,
+    centerBoard,
+    handleZoomButton,
+    handleWheel,
+    handleMouseDown,
+    handleMouseMove,
+    handleMouseUp,
+  } = useBoardInteraction(boardMainRef);
 
   const {
     tweets,
@@ -67,8 +89,11 @@ const Board = ({
     updateExistingTweet,
     toggleLikeTweet,
     deleteExistingTweet,
+    moveTweet,
+    updateTweetStatus,
     boardInfo,
     error: tweetsError,
+    loading: tweetsLoading,
   } = useTweets(token, boardId, currentUser, onLogout, navigate);
 
   const { pointsData, getPoints } = usePoints(token, onLogout, navigate);
@@ -85,24 +110,36 @@ const Board = ({
     return () => clearTimeout(timerRef.current);
   }, [pointsData?.total_points]);
 
-  const [boardLoading, setBoardLoading] = useState(true);
-
   useEffect(() => {
     if (!boardId) return;
     const controller = new AbortController();
-
     (async () => {
       try {
         setBoardLoading(true);
-        await getPoints(controller.signal);
-        await fetchTweets({ signal: controller.signal });
+        await Promise.all([
+          getPoints(controller.signal),
+          fetchTweets({ signal: controller.signal }),
+        ]);
+      } catch (err) {
+        console.error("Error loading board data:", err);
       } finally {
         setBoardLoading(false);
       }
     })();
-
     return () => controller.abort();
   }, [boardId, fetchTweets, getPoints]);
+
+  const loadAvailableBoards = useCallback(async () => {
+    try {
+      const res = await fetch("/api/boards", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setAvailableBoards(data?.content || []);
+    } catch (err) {
+      console.error("Failed to load boards", err);
+    }
+  }, [token]);
 
   const handleCreateTweet = useCallback(
     async (text, x, y) => {
@@ -153,21 +190,58 @@ const Board = ({
     [deleteExistingTweet, getPoints]
   );
 
+  const handleEditTweet = useCallback(
+    async (tweet) => {
+      await loadAvailableBoards();
+      setSelectedBoardId(tweet.board_id || boardId);
+      setNewStatus(tweet.status || "approved");
+      setEditTweetModal({ ...tweet });
+    },
+    [loadAvailableBoards, boardId]
+  );
+
+  const handleSaveEditedTweet = useCallback(async () => {
+    if (!editTweetModal) return;
+    try {
+      await updateExistingTweet(editTweetModal.tweet_id, {
+        content: editTweetModal.content,
+        status: newStatus,
+        position: editTweetModal.position,
+      });
+      if (editTweetModal.board_id !== selectedBoardId) {
+        await moveTweet(editTweetModal.tweet_id, selectedBoardId);
+      }
+      setEditTweetModal(null);
+      fetchTweets();
+    } catch (err) {
+      console.error("Error saving edited tweet:", err);
+    }
+  }, [
+    editTweetModal,
+    updateExistingTweet,
+    moveTweet,
+    fetchTweets,
+    newStatus,
+    selectedBoardId,
+  ]);
+
+  const handleMoveTweet = useCallback(
+    async (tweet) => {
+      await loadAvailableBoards();
+      setSelectedBoardId(tweet.board_id || boardId);
+      setEditTweetModal({ ...tweet });
+    },
+    [loadAvailableBoards, boardId]
+  );
+
+  const handleChangeTweetType = useCallback((tweet) => {
+    setNewStatus(tweet.status || "approved");
+    setEditTweetModal({ ...tweet });
+  }, []);
+
   const handleReplyHover = useCallback((parentTweetId) => {
     setHighlightedParentId(parentTweetId);
   }, []);
-
-  const {
-    scale,
-    offset,
-    dragging,
-    centerBoard,
-    handleZoomButton,
-    handleWheel,
-    handleMouseDown,
-    handleMouseMove,
-    handleMouseUp,
-  } = useBoardInteraction(boardMainRef);
 
   const handleReply = useCallback(
     (tweet) => {
@@ -195,9 +269,7 @@ const Board = ({
         const parentTweet = tweets.find(
           (t) => t.tweet_id === tweet.parent_tweet_id
         );
-        if (parentTweet && parentTweet.content && parentTweet.content.value) {
-          parentTweetText = parentTweet.content.value;
-        }
+        parentTweetText = parentTweet?.content?.value || null;
       }
       return (
         <DraggableTweet
@@ -217,7 +289,13 @@ const Board = ({
             onDelete={handleDeleteTweet}
             onReply={handleReply}
             onReplyHover={handleReplyHover}
-            isParentHighlighted={tweet.tweet_id === highlightedParentId || tweet.parent_tweet_id === highlightedParentId}
+            onEdit={handleEditTweet}
+            onMove={handleMoveTweet}
+            onChangeType={handleChangeTweetType}
+            isParentHighlighted={
+              tweet.tweet_id === highlightedParentId ||
+              tweet.parent_tweet_id === highlightedParentId
+            }
             replyCount={replyCount}
             parentTweetText={parentTweetText}
           />
@@ -232,6 +310,9 @@ const Board = ({
     handleDeleteTweet,
     handleReply,
     handleReplyHover,
+    handleEditTweet,
+    handleMoveTweet,
+    handleChangeTweetType,
     highlightedParentId,
   ]);
 
@@ -259,13 +340,8 @@ const Board = ({
     [handleMouseUp]
   );
 
-  if (tweetsError) {
-    errorMessage = tweetsError;
-  }
-
-  if (boardLoading) {
-    return <LoadingSpinner />;
-  }
+  if (tweetsError) errorMessage = tweetsError;
+  if (boardLoading || tweetsLoading) return <LoadingSpinner />;
 
   return (
     <AnimatePresence>
@@ -275,12 +351,7 @@ const Board = ({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.4 }}
-        style={{
-          display: "flex",
-          width: "100%",
-          height: "100%",
-          overflow: "hidden",
-        }}
+        style={{ display: "flex", width: "100%", height: "100%", overflow: "hidden" }}
       >
         <Box
           sx={{
@@ -290,14 +361,7 @@ const Board = ({
             position: "relative",
           }}
         >
-          <Box
-            sx={{
-              position: "absolute",
-              top: 16,
-              left: 16,
-              zIndex: 1100,
-            }}
-          >
+          <Box sx={{ position: "absolute", top: 16, left: 16, zIndex: 1100 }}>
             <IconButton
               onClick={() => navigate(-1)}
               className="return-button"
@@ -358,8 +422,7 @@ const Board = ({
                 width: BOARD_SIZE,
                 height: BOARD_SIZE,
                 backgroundColor: "background.paper",
-                backgroundImage:
-                  "radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)",
+                backgroundImage: "radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)",
                 backgroundSize: "20px 20px",
                 boxShadow: "inset 0 0 10px rgba(0,0,0,0.1)",
                 transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
@@ -398,9 +461,7 @@ const Board = ({
                     draft={tweetDraft}
                     onDraftChange={setTweetDraft}
                     onSubmit={handlePopupSubmit}
-                    onClose={() =>
-                      setTweetPopup((prev) => ({ ...prev, visible: false }))
-                    }
+                    onClose={() => setTweetPopup((prev) => ({ ...prev, visible: false }))}
                   />
                 </Box>
               )}
@@ -480,9 +541,7 @@ const Board = ({
               >
                 <RemoveIcon sx={{ color: "text.primary" }} />
               </IconButton>
-              <Typography variant="body2">
-                {Math.round(scale * 100)}%
-              </Typography>
+              <Typography variant="body2">{Math.round(scale * 100)}%</Typography>
               <IconButton
                 onClick={(e) => {
                   e.stopPropagation();
@@ -531,9 +590,7 @@ const Board = ({
                   </Badge>
                 </IconButton>
               </Tooltip>
-              <Tooltip
-                title={boardData?.is_liked ? "Unlike Board" : "Like Board"}
-              >
+              <Tooltip title={boardData?.is_liked ? "Unlike Board" : "Like Board"}>
                 <IconButton onClick={onLike} aria-label="Like or unlike board">
                   {boardData?.is_liked ? (
                     <FavoriteIcon sx={{ color: "red" }} />
@@ -565,8 +622,12 @@ const Board = ({
               </Tooltip>
               {boardInfo?.child_board_ids?.length > 0 && (
                 <Tooltip title="Child Boards">
-                  <IconButton onClick={() => navigate(`/board/${boardInfo.child_board_ids[0]}`)}>
-                    <Typography variant="caption">Child Boards ({boardInfo.child_board_ids.length})</Typography>
+                  <IconButton
+                    onClick={() => navigate(`/board/${boardInfo.child_board_ids[0]}`)}
+                  >
+                    <Typography variant="caption">
+                      Child Boards ({boardInfo.child_board_ids.length})
+                    </Typography>
                   </IconButton>
                 </Tooltip>
               )}
@@ -576,14 +637,8 @@ const Board = ({
               open={Boolean(membersAnchorEl)}
               anchorEl={membersAnchorEl}
               onClose={() => setMembersAnchorEl(null)}
-              anchorOrigin={{
-                vertical: "bottom",
-                horizontal: "right",
-              }}
-              transformOrigin={{
-                vertical: "top",
-                horizontal: "right",
-              }}
+              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+              transformOrigin={{ vertical: "top", horizontal: "right" }}
             >
               <Box sx={{ p: 2, maxHeight: 300, overflowY: "auto" }}>
                 <Typography variant="h6" gutterBottom>
@@ -593,29 +648,17 @@ const Board = ({
                   <List dense>
                     {members.map((member) => (
                       <ListItem key={member.anonymous_id}>
-                        <Box
-                          sx={{
-                            display: "flex",
-                            gap: 1,
-                            alignItems: "center",
-                            mb: 2,
-                          }}
-                        >
+                        <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 2 }}>
                           <ProfileAvatar
                             user={member}
                             badgeSize={10}
                             status={member.status}
                           />
-                          <Box
-                            sx={{ display: "flex", flexDirection: "column" }}
-                          >
+                          <Box sx={{ display: "flex", flexDirection: "column" }}>
                             <Typography variant="body2">
                               {member.username || "Anonymous"}
                             </Typography>
-                            <Typography
-                              variant="caption"
-                              sx={{ color: "text.secondary" }}
-                            >
+                            <Typography variant="caption" sx={{ color: "text.secondary" }}>
                               {member.role || "Member"}
                             </Typography>
                           </Box>
@@ -629,6 +672,65 @@ const Board = ({
               </Box>
             </Popover>
           </Box>
+
+          {editTweetModal && (
+            <Dialog
+              open
+              onClose={() => setEditTweetModal(null)}
+              maxWidth="sm"
+              fullWidth
+            >
+              <DialogTitle>Edit Tweet</DialogTitle>
+              <DialogContent>
+                <TextField
+                  multiline
+                  fullWidth
+                  label="Tweet Content"
+                  value={editTweetModal.content?.value || ""}
+                  onChange={(e) =>
+                    setEditTweetModal((prev) => ({
+                      ...prev,
+                      content: { ...prev.content, value: e.target.value },
+                    }))
+                  }
+                  sx={{ mt: 2 }}
+                />
+                <FormControl fullWidth sx={{ mt: 2 }}>
+                  <InputLabel>Tweet Type</InputLabel>
+                  <Select
+                    value={newStatus}
+                    label="Tweet Type"
+                    onChange={(e) => setNewStatus(e.target.value)}
+                  >
+                    <MenuItem value="approved">Approved</MenuItem>
+                    <MenuItem value="pinned">Pinned</MenuItem>
+                    <MenuItem value="reminder">Reminder</MenuItem>
+                    <MenuItem value="announcement">Announcement</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl fullWidth sx={{ mt: 2 }}>
+                  <InputLabel>Move to Board</InputLabel>
+                  <Select
+                    value={selectedBoardId}
+                    label="Move to Board"
+                    onChange={(e) => setSelectedBoardId(e.target.value)}
+                  >
+                    {availableBoards.map((b) => (
+                      <MenuItem key={b.board_id} value={b.board_id}>
+                        {b.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setEditTweetModal(null)}>Cancel</Button>
+                <Button onClick={handleSaveEditedTweet} variant="contained">
+                  Save
+                </Button>
+              </DialogActions>
+            </Dialog>
+          )}
         </Box>
       </motion.div>
     </AnimatePresence>
@@ -644,6 +746,8 @@ Board.propTypes = {
   members: PropTypes.array.isRequired,
   boardTitle: PropTypes.string.isRequired,
   onLike: PropTypes.func.isRequired,
+  setEditingBoard: PropTypes.func.isRequired,
+  errorMessage: PropTypes.string,
 };
 
 export default Board;
