@@ -1,5 +1,4 @@
-// src/hooks/useGates.js
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   fetchGates,
   fetchGateById,
@@ -24,31 +23,40 @@ export const useGates = (token, onLogout, navigate) => {
 
   const handleAuthError = useCallback(
     (err) => {
-      if (err.status === 401 || err.status === 403) {
+      const status = err.status || 500;
+      if (status === 401 || status === 403) {
         onLogout("Your session has expired. Please log in again.");
         navigate("/login");
       }
       setError(err.message || "An error occurred.");
+      return null;
     },
     [onLogout, navigate]
   );
+
+  const resetState = useCallback(() => {
+    setGates([]);
+    setGate(null);
+    setMembers([]);
+    setPagination({});
+    setError(null);
+  }, []);
 
   const fetchGatesList = useCallback(
     async (filters = {}, signal) => {
       if (!token) {
         setError("Authentication required.");
-        return [];
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
         const data = await fetchGates(token, filters, signal);
-        setGates(data.gates);
-        setPagination(data.pagination);
-        return data.gates;
+        setGates(data.gates || []);
+        setPagination(data.pagination || {});
+        return data;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return [];
+        return err.name !== "AbortError" ? handleAuthError(err) : null;
       } finally {
         setLoading(false);
       }
@@ -66,11 +74,10 @@ export const useGates = (token, onLogout, navigate) => {
       setError(null);
       try {
         const data = await fetchGateById(gateId, token, signal);
-        setGate(data);
+        setGate(data || null);
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return null;
+        return err.name !== "AbortError" ? handleAuthError(err) : null;
       } finally {
         setLoading(false);
       }
@@ -91,8 +98,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGates((prev) => [...prev, newGate]);
         return newGate;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -114,8 +120,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGate(updatedGate);
         return updatedGate;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -137,8 +142,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGate(updatedGate);
         return updatedGate;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -150,7 +154,7 @@ export const useGates = (token, onLogout, navigate) => {
     async (gateId) => {
       if (!token || !gateId) {
         setError("Authentication or gate ID missing.");
-        return;
+        return null;
       }
       setLoading(true);
       setError(null);
@@ -158,8 +162,9 @@ export const useGates = (token, onLogout, navigate) => {
         await deleteGate(gateId, token);
         setGates((prev) => prev.filter((g) => g.gate_id !== gateId));
         setGate(null);
+        return true;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -180,8 +185,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGate(updatedGate);
         return updatedGate;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -202,8 +206,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGate(updatedGate);
         return updatedGate;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -215,17 +218,16 @@ export const useGates = (token, onLogout, navigate) => {
     async (gateId) => {
       if (!token || !gateId) {
         setError("Authentication or gate ID missing.");
-        return [];
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
         const membersData = await fetchGateMembers(gateId, token);
-        setMembers(membersData);
+        setMembers(membersData || []);
         return membersData;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return [];
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -247,8 +249,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         return updatedGate;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -270,8 +271,7 @@ export const useGates = (token, onLogout, navigate) => {
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         return updatedGate;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -279,8 +279,15 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
+  useEffect(() => {
+    if (!token) {
+      resetState();
+    }
+  }, [token, resetState]);
+
   return {
     gates,
+    setGates,
     gate,
     members,
     pagination,

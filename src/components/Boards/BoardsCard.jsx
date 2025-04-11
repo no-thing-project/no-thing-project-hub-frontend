@@ -1,6 +1,24 @@
-import React from "react";
-import { Box, Typography, IconButton } from "@mui/material";
-import { Edit, Delete, Favorite, FavoriteBorder, Public, Lock } from "@mui/icons-material";
+import React, { memo } from "react";
+import {
+  Box,
+  Typography,
+  IconButton,
+  Tooltip,
+  Chip,
+  Divider,
+} from "@mui/material";
+import {
+  Edit,
+  Delete,
+  Favorite,
+  FavoriteBorder,
+  Public,
+  Lock,
+  Group,
+  Visibility,
+  Forum,
+  AutoAwesome,
+} from "@mui/icons-material";
 
 const BoardCard = ({
   board,
@@ -11,17 +29,24 @@ const BoardCard = ({
   setDeleteDialogOpen,
   navigate,
 }) => {
-  // Обчислення загальної довжини контенту для визначення span
-  const totalLength = board.name.length + (board.description ? board.description.length : 0);
+  const totalLength =
+    board.name.length + (board.description ? board.description.length : 0);
   let span = 1;
-  if (totalLength > 100) {
-    span = 3;
-  } else if (totalLength > 40) {
-    span = 2;
-  }
-  // Визначення статусу лайку: оптимістичне значення або з сервера
+  if (totalLength > 100) span = 3;
+  else if (totalLength > 40) span = 2;
+
   const isLiked =
-    localLikes[board.board_id] !== undefined ? localLikes[board.board_id] : board.is_liked;
+    localLikes[board.board_id] !== undefined
+      ? localLikes[board.board_id]
+      : board.liked_by?.some(
+          (l) => l.anonymous_id === board.current_user?.anonymous_id
+        );
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      navigate(`/board/${board.board_id}`);
+    }
+  };
 
   return (
     <Box
@@ -34,90 +59,156 @@ const BoardCard = ({
         cursor: "pointer",
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
-        minHeight: 200,
+        minHeight: 230,
         transition: "all 0.3s ease-in-out",
-        ":hover": { backgroundColor: "background.hover", transform: "scale(1.02)" },
+        ":hover": {
+          backgroundColor: "background.hover",
+          transform: "scale(1.02)",
+        },
       }}
       onClick={() => navigate(`/board/${board.board_id}`)}
+      onKeyPress={handleKeyPress}
+      tabIndex={0}
+      role="button"
+      aria-label={`View board ${board.name}`}
     >
-      {/* Верхня частина з кнопками */}
-      <Box sx={{ alignSelf: "flex-end", display: "flex", gap: 1, mb: 1 }}>
-        <IconButton
-          onClick={(e) => {
-            e.stopPropagation();
-            setEditingBoard({
-              board_id: board.board_id,
-              name: board.name,
-              description: board.description || "",
-              visibility: board.is_public ? "Public" : "Private",
-            });
-          }}
-          sx={{ p: 1, color: "text.primary" }}
-        >
-          <Edit />
-        </IconButton>
-        <IconButton
-          onClick={(e) => {
-            e.stopPropagation();
-            handleLike(board.board_id, isLiked);
-          }}
-          sx={{ p: 1, color: "text.primary" }}
-        >
-          {isLiked ? <Favorite color="text.primary" /> : <FavoriteBorder />}
-        </IconButton>
-        <IconButton
-          onClick={(e) => {
-            e.stopPropagation();
-            setBoardToDelete(board.board_id);
-            setDeleteDialogOpen(true)
-          }}
-          sx={{ p: 1, color: "error.dark" }}
-        >
-          <Delete />
-        </IconButton>
+      <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+          {board.slug}
+        </Typography>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          {board.ai_moderation?.is_enabled && (
+            <Tooltip title="AI Moderation Enabled">
+              <AutoAwesome fontSize="small" />
+            </Tooltip>
+          )}
+          <Tooltip title="Edit">
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingBoard({ ...board });
+              }}
+              size="small"
+            >
+              <Edit fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={isLiked ? "Unlike" : "Like"}>
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation();
+                handleLike(board.board_id, isLiked);
+              }}
+              size="small"
+            >
+              {isLiked ? <Favorite color="error" /> : <FavoriteBorder />}
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete">
+            <IconButton
+              onClick={(e) => {
+                e.stopPropagation();
+                setBoardToDelete(board.board_id);
+                setDeleteDialogOpen(true);
+              }}
+              size="small"
+            >
+              <Delete />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
-      {/* Середня частина з назвою та описом */}
-      <Box sx={{ flexGrow: 1, my: 1, alignContent: "center" }}>
-        <Typography variant="h6" sx={{ mb: 1, textAlign: "center" }}>
+
+      <Box sx={{ flexGrow: 1 }}>
+        <Typography variant="h6" sx={{ mb: 1 }}>
           {board.name}
         </Typography>
-        {board?.description && (
-          <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center" }}>
+        {board.description && (
+          <Typography variant="body2" sx={{ mb: 1, color: "text.secondary" }}>
             {board.description}
           </Typography>
         )}
+
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 1 }}>
+          <Chip
+            label={board.type === "group" ? "Group" : "Personal"}
+            icon={<Group />}
+            size="small"
+          />
+          <Chip label={`Tweets: ${board.stats?.tweet_count ?? 0}`} size="small" />
+          <Chip label={`Likes: ${board.stats?.like_count ?? 0}`} size="small" />
+          <Chip label={`Views: ${board.stats?.view_count ?? 0}`} size="small" />
+          <Chip label={`Points: ${board.stats?.points_earned ?? 0}`} size="small" />
+          {board.parent_board_id && <Chip label="Has Parent" size="small" />}
+          {board.child_board_ids?.length > 0 && (
+            <Chip
+              label={`Childs: ${board.child_board_ids.length}`}
+              size="small"
+            />
+          )}
+          {board.settings?.max_tweets && (
+            <Chip label={`Max Tweets: ${board.settings.max_tweets}`} size="small" />
+          )}
+          {board.settings?.max_members && (
+            <Chip label={`Max Members: ${board.settings.max_members}`} size="small" />
+          )}
+        </Box>
+
+        <Divider sx={{ my: 1 }} />
+
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+          {board.gate?.name && (
+            <Chip label={`Gate: ${board.gate.name}`} size="small" />
+          )}
+          {board.class?.name && (
+            <Chip label={`Class: ${board.class.name}`} size="small" />
+          )}
+          {board.settings?.tweet_cost && (
+            <Chip
+              label={`Tweet Cost: ${board.settings.tweet_cost}`}
+              size="small"
+            />
+          )}
+          {board.settings?.like_cost && (
+            <Chip label={`Like Cost: ${board.settings.like_cost}`} size="small" />
+          )}
+          {board.settings?.points_to_creator && (
+            <Chip
+              label={`Creator Reward: ${board.settings.points_to_creator}`}
+              size="small"
+            />
+          )}
+        </Box>
       </Box>
-      {/* Нижня частина з індикатором видимості */}
-      <Box sx={{ width: "100%", mt: 1 }} onClick={() => navigate(`/board/${board.board_id}`)}>
-        {board.is_public ? (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              color: "text.primary",
-            }}
-          >
-            <Public sx={{ mr: 1 }} />
-            <Typography variant="caption">Public</Typography>
-          </Box>
-        ) : (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              color: "error.dark",
-            }}
-          >
-            <Lock sx={{ mr: 1 }} />
-            <Typography variant="caption">Private</Typography>
-          </Box>
-        )}
+
+      <Box sx={{ mt: 2, display: "flex", justifyContent: "space-between" }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          {board.is_public ? (
+            <Public fontSize="small" />
+          ) : board.visibility === "restricted" ? (
+            <Lock fontSize="small" color="warning" />
+          ) : (
+            <Lock fontSize="small" color="error" />
+          )}
+          <Typography variant="caption">
+            {board.visibility.charAt(0).toUpperCase() + board.visibility.slice(1)}
+          </Typography>
+        </Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Forum fontSize="small" />
+          <Typography variant="caption">
+            {board.members?.length || 0} members
+          </Typography>
+        </Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Visibility fontSize="small" />
+          <Typography variant="caption">
+            {board.stats?.view_count || 0}
+          </Typography>
+        </Box>
       </Box>
     </Box>
   );
 };
 
-export default BoardCard;
+export default memo(BoardCard);

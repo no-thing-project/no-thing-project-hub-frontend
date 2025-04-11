@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   fetchClasses,
   fetchClassesByGateId,
@@ -22,31 +22,41 @@ export const useClasses = (token, onLogout, navigate) => {
 
   const handleAuthError = useCallback(
     (err) => {
-      if (err.status === 401 || err.status === 403) {
+      const status = err.status || 500;
+      if (status === 401 || status === 403) {
         onLogout("Your session has expired. Please log in again.");
         navigate("/login");
       }
       setError(err.message || "An error occurred.");
+      return null;
     },
     [onLogout, navigate]
   );
+
+  const resetState = useCallback(() => {
+    setClasses([]);
+    setClassData(null);
+    setMembers([]);
+    setPagination({});
+    setGateInfo(null);
+    setError(null);
+  }, []);
 
   const fetchClassesList = useCallback(
     async (filters = {}, signal) => {
       if (!token) {
         setError("Authentication required.");
-        return [];
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
         const data = await fetchClasses(token, filters, signal);
-        setClasses(data.classes);
-        setPagination(data.pagination);
-        return data.classes;
+        setClasses(data.classes || []);
+        setPagination(data.pagination || {});
+        return data;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return [];
+        return err.name !== "AbortError" ? handleAuthError(err) : null;
       } finally {
         setLoading(false);
       }
@@ -58,19 +68,18 @@ export const useClasses = (token, onLogout, navigate) => {
     async (gateId, filters = {}, signal) => {
       if (!token || !gateId) {
         setError("Authentication or gate ID missing.");
-        return [];
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
         const data = await fetchClassesByGateId(gateId, token, filters, signal);
-        setClasses(data.classes);
-        setGateInfo(data.gate);
-        setPagination(data.pagination);
-        return data.classes;
+        setClasses(data.classes || []);
+        setGateInfo(data.gate || null);
+        setPagination(data.pagination || {});
+        return data;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return [];
+        return err.name !== "AbortError" ? handleAuthError(err) : null;
       } finally {
         setLoading(false);
       }
@@ -88,11 +97,10 @@ export const useClasses = (token, onLogout, navigate) => {
       setError(null);
       try {
         const data = await fetchClassById(classId, token, signal);
-        setClassData(data);
+        setClassData(data || null);
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") handleAuthError(err);
-        return null;
+        return err.name !== "AbortError" ? handleAuthError(err) : null;
       } finally {
         setLoading(false);
       }
@@ -113,8 +121,7 @@ export const useClasses = (token, onLogout, navigate) => {
         setClasses((prev) => [...prev, newClass]);
         return newClass;
       } catch (err) {
-        handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -135,8 +142,7 @@ export const useClasses = (token, onLogout, navigate) => {
         setClasses((prev) => [...prev, newClass]);
         return newClass;
       } catch (err) {
-        handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -158,8 +164,7 @@ export const useClasses = (token, onLogout, navigate) => {
         setClassData(updatedClass);
         return updatedClass;
       } catch (err) {
-        handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -181,8 +186,7 @@ export const useClasses = (token, onLogout, navigate) => {
         setClassData(updatedClass);
         return updatedClass;
       } catch (err) {
-        handleAuthError(err);
-        return null;
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -194,7 +198,7 @@ export const useClasses = (token, onLogout, navigate) => {
     async (classId) => {
       if (!token || !classId) {
         setError("Authentication or class ID missing.");
-        return;
+        return null;
       }
       setLoading(true);
       setError(null);
@@ -202,8 +206,9 @@ export const useClasses = (token, onLogout, navigate) => {
         await deleteClass(classId, token);
         setClasses((prev) => prev.filter((c) => c.class_id !== classId));
         setClassData(null);
+        return true;
       } catch (err) {
-        handleAuthError(err);
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -215,17 +220,16 @@ export const useClasses = (token, onLogout, navigate) => {
     async (classId) => {
       if (!token || !classId) {
         setError("Authentication or class ID missing.");
-        return [];
+        return null;
       }
       setLoading(true);
       setError(null);
       try {
         const membersData = await fetchClassMembers(classId, token);
-        setMembers(membersData);
+        setMembers(membersData || []);
         return membersData;
       } catch (err) {
-        handleAuthError(err);
-        return [];
+        return handleAuthError(err);
       } finally {
         setLoading(false);
       }
@@ -233,8 +237,15 @@ export const useClasses = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
+  useEffect(() => {
+    if (!token) {
+      resetState();
+    }
+  }, [token, resetState]);
+
   return {
     classes,
+    setClasses,
     classData,
     members,
     pagination,
