@@ -44,6 +44,12 @@ const BoardCard = ({
           (l) => l.anonymous_id === board.current_user?.anonymous_id
         );
 
+  // Визначаємо роль користувача
+  const userRole = board.current_user?.role || "viewer"; // За замовчуванням "viewer", якщо ролі немає
+  const isOwner = board.creator_id === board.current_user?.anonymous_id;
+  const canEdit = isOwner || userRole === "editor";
+  const canDelete = isOwner;
+
   const handleKeyPress = (e) => {
     if (e.key === "Enter" || e.key === " ") {
       navigate(`/board/${board.board_id}`);
@@ -96,17 +102,19 @@ const BoardCard = ({
               <AutoAwesome fontSize="small" />
             </Tooltip>
           )}
-          <Tooltip title="Edit">
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditingBoard({ ...board });
-              }}
-              size="small"
-            >
-              <Edit fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          {canEdit && (
+            <Tooltip title="Edit">
+              <IconButton
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingBoard({ ...board });
+                }}
+                size="small"
+              >
+                <Edit fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title={isLiked ? "Unlike" : "Like"}>
             <IconButton
               onClick={(e) => {
@@ -118,18 +126,20 @@ const BoardCard = ({
               {isLiked ? <Favorite color="error" /> : <FavoriteBorder />}
             </IconButton>
           </Tooltip>
-          <Tooltip title="Delete">
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation();
-                setBoardToDelete(board.board_id);
-                setDeleteDialogOpen(true);
-              }}
-              size="small"
-            >
-              <Delete />
-            </IconButton>
-          </Tooltip>
+          {canDelete && (
+            <Tooltip title="Delete">
+              <IconButton
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBoardToDelete(board.board_id);
+                  setDeleteDialogOpen(true);
+                }}
+                size="small"
+              >
+                <Delete />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
       </Box>
 

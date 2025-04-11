@@ -29,6 +29,8 @@ const BoardsPage = () => {
     deleteExistingBoard,
     likeExistingBoard,
     unlikeExistingBoard,
+    addBoardMember,
+    removeBoardMember,
   } = useBoards(token, handleLogout, navigate);
   const { gates, fetchGatesList } = useGates(token, handleLogout, navigate);
   const { classes, fetchClassesList } = useClasses(token, handleLogout, navigate);
@@ -71,7 +73,13 @@ const BoardsPage = () => {
   }, [error]);
 
   const filteredBoards = useMemo(() => {
-    return boards.filter((board) => {
+    return boards.map((board) => ({
+      ...board,
+      current_user: {
+        anonymous_id: authData.anonymous_id,
+        role: board.creator_id === authData.anonymous_id ? "owner" : board.members?.find((m) => m.anonymous_id === authData.anonymous_id)?.role || "viewer",
+      },
+    })).filter((board) => {
       const matchesSearch =
         board.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         board.tags?.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -123,6 +131,16 @@ const BoardsPage = () => {
     const validationError = validateBoardData(editingBoard);
     if (validationError) return setErrorMessage(validationError);
     try {
+      const updatedMembers = editingBoard.members.filter((m) => !boards.find((b) => b.board_id === editingBoard.board_id)?.members.some((om) => om.anonymous_id === m.anonymous_id));
+      for (const member of updatedMembers) {
+        await addBoardMember(editingBoard.board_id, member.anonymous_id, member.role);
+      }
+      const removedMembers = boards
+        .find((b) => b.board_id === editingBoard.board_id)
+        ?.members.filter((om) => !editingBoard.members.some((m) => m.anonymous_id === om.anonymous_id));
+      for (const member of removedMembers || []) {
+        await removeBoardMember(editingBoard.board_id, member.anonymous_id);
+      }
       const updatedBoard = await updateExistingBoard(editingBoard.board_id, null, null, editingBoard);
       setBoards((prev) => prev.map((b) => (b.board_id === updatedBoard.board_id ? updatedBoard : b)));
       setEditingBoard(null);
@@ -130,7 +148,7 @@ const BoardsPage = () => {
     } catch (err) {
       setErrorMessage(err.message || "Failed to update board");
     }
-  }, [editingBoard, updateExistingBoard, setBoards]);
+  }, [editingBoard, updateExistingBoard, setBoards, addBoardMember, removeBoardMember, boards]);
 
   const handleDeleteBoard = useCallback(async () => {
     try {
