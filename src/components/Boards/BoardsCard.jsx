@@ -159,23 +159,10 @@ const BoardCard = ({
             icon={<Group />}
             size="small"
           />
-          <Chip label={`Tweets: ${board.stats?.tweet_count ?? 0}`} size="small" />
-          <Chip label={`Likes: ${board.stats?.like_count ?? 0}`} size="small" />
-          <Chip label={`Views: ${board.stats?.view_count ?? 0}`} size="small" />
-          <Chip label={`Points: ${board.stats?.points_earned ?? 0}`} size="small" />
-          {board.tags?.length > 0 && (
-            <Chip label={`Tags: ${board.tags.join(", ")}`} size="small" />
-          )}
-          {board.parent_board_id && <Chip label="Has Parent" size="small" />}
-          {board.child_board_ids?.length > 0 && (
-            <Chip label={`Children: ${board.child_board_ids.length}`} size="small" />
-          )}
-          {board.settings?.max_tweets && (
-            <Chip label={`Max Tweets: ${board.settings.max_tweets}`} size="small" />
-          )}
-          {board.settings?.max_members && (
-            <Chip label={`Max Members: ${board.settings.max_members}`} size="small" />
-          )}
+          {/* <Chip label={`Tweets: ${board.stats?.tweet_count ?? 0}`} size="small" /> */}
+          {/* <Chip label={`Likes: ${board.stats?.like_count ?? 0}`} size="small" /> */}
+          {/* <Chip label={`Views: ${board.stats?.view_count ?? 0}`} size="small" /> */}
+
         </Box>
 
         <Divider sx={{ my: 1 }} />
@@ -199,6 +186,20 @@ const BoardCard = ({
           {board.type === "group" && board.members?.length > 0 && (
             <Chip label={`Members: ${board.members.length}`} size="small" icon={<People />} />
           )}
+          <Chip label={`Points: ${board.stats?.points_earned ?? 0}`} size="small" />
+          {board.tags?.length > 0 && (
+            <Chip label={`Tags: ${board.tags.join(", ")}`} size="small" />
+          )}
+          {board.parent_board_id && <Chip label="Has Parent" size="small" />}
+          {board.child_board_ids?.length > 0 && (
+            <Chip label={`Children: ${board.child_board_ids.length}`} size="small" />
+          )}
+          {board.settings?.max_tweets && (
+            <Chip label={`Max Tweets: ${board.settings.max_tweets}`} size="small" />
+          )}
+          {board.settings?.max_members && (
+            <Chip label={`Max Members: ${board.settings.max_members}`} size="small" />
+          )}
         </Box>
       </Box>
 
@@ -212,7 +213,7 @@ const BoardCard = ({
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Forum fontSize="small" />
           <Typography variant="caption">
-            {board.members?.length || 0} members
+            {board.stats?.tweet_count ?? 0}
           </Typography>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
