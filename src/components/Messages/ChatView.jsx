@@ -1,33 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import PropTypes from "prop-types";
-import { Box, Modal, Typography, Select, MenuItem, Button } from "@mui/material";
-import ChatHeader from "./ChatHeader";
-import ChatMessages from "./ChatMessages";
-import ChatFooter from "./ChatFooter";
-import ChatSettingsModal from "./ChatSettingsModal";
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import PropTypes from 'prop-types';
+import { Box, Alert, Typography } from '@mui/material';
+import ChatHeader from './ChatHeader';
+import ChatMessages from './ChatMessages';
+import ChatFooter from './ChatFooter';
+import ChatSettingsModal from './ChatSettingsModal';
 
-const chatContainerStyles = {
-  display: "flex",
-  flexDirection: "column",
-  height: { xs: "80vh", md: "70vh" },
-  border: "1px solid",
-  borderColor: "grey.300",
-  borderRadius: 1,
-  backgroundColor: "background.paper",
-};
-
-const modalStyles = {
-  position: "absolute",
-  top: "50%",
-  left: "50%",
-  transform: "translate(-50%, -50%)",
-  bgcolor: "background.paper",
-  boxShadow: 24,
-  p: 2,
-  borderRadius: 2,
-  width: { xs: "90%", md: "400px" },
-};
-
+/**
+ * ChatView component for displaying a conversation
+ * @param {Object} props - Component props
+ * @returns {JSX.Element}
+ */
 const ChatView = ({
   currentUserId,
   recipient,
@@ -36,6 +19,7 @@ const ChatView = ({
   onMarkRead,
   onDeleteMessage,
   onEditMessage,
+  onForwardMessage,
   token,
   fetchMessagesList,
   pendingMediaList,
@@ -43,192 +27,284 @@ const ChatView = ({
   clearPendingMedia,
   isGroupChat,
   friends,
+  messages,
   setMessages,
+  searchMessages,
 }) => {
-  const [localMessages, setLocalMessages] = useState([]);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [forwardOpen, setForwardOpen] = useState(false);
-  const [forwardRecipient, setForwardRecipient] = useState("");
-  const [forwardMessage, setForwardMessage] = useState(null);
-  const [chatSettings, setChatSettings] = useState({ videoShape: "square", chatBackground: "default" });
-  const [replyToMessage, setReplyToMessage] = useState(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState(null);
-  const lastConversationId = useRef(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chatSettings, setChatSettings] = useState({
+    videoShape: 'square',
+    chatBackground: 'default',
+  });
+  const [replyToMessage, setReplyToMessage] = useState(null);
 
-  const conversationId = isGroupChat ? recipient?.group_id : recipient?.anonymous_id;
+  // Compute conversationId
+  const conversationId = useMemo(() => {
+    if (!recipient) return null;
+    return isGroupChat ? recipient.group_id : recipient.anonymous_id;
+  }, [recipient, isGroupChat]);
 
+  // Filter messages for the current conversation
+  const filteredMessages = useMemo(() => {
+    if (!conversationId) return [];
+    return messages.filter(
+      (m) => (isGroupChat ? m.group_id === conversationId : m.conversation_id === conversationId)
+    );
+  }, [messages, conversationId, isGroupChat]);
+
+  // Fetch messages for a specific page
   const fetchMessagesForPage = useCallback(
     async (targetPage, reset = false) => {
-      if (!conversationId || (isFetching && !reset)) return;
+      if (!conversationId || isFetching || !hasMore) return;
+
       setIsFetching(true);
+      setError(null);
+
       try {
-        const params = {
-          withUserId: isGroupChat ? null : conversationId,
-          groupId: isGroupChat ? conversationId : null,
+        const data = await fetchMessagesList(conversationId, {
           page: targetPage,
-        };
-        const newMessages = await fetchMessagesList(params);
-        setLocalMessages((prev) => {
-          const uniqueNewMessages = newMessages.filter((m) => !prev.some((pm) => pm.message_id === m.message_id));
-          const updatedMessages = reset
-            ? uniqueNewMessages
-            : [...uniqueNewMessages, ...prev].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-          setMessages((globalMessages) => {
-            const merged = [
-              ...globalMessages.filter((m) => m.group_id !== conversationId && (isGroupChat || m.receiver_id !== conversationId)),
-              ...updatedMessages,
-            ];
-            return merged.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-          });
-          return updatedMessages;
+          limit: 20,
+          reset,
         });
+
+        const newMessages = data?.messages || [];
+        setMessages((prev) => {
+          const filteredPrev = reset
+            ? prev.filter(
+                (m) => (isGroupChat ? m.group_id !== conversationId : m.conversation_id !== conversationId)
+              )
+            : prev;
+          return [...filteredPrev, ...newMessages].sort(
+            (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+          );
+        });
+
         setHasMore(newMessages.length === 20);
-        if (reset || targetPage > page) setPage(targetPage);
+        setPage(targetPage + 1);
       } catch (err) {
-        setError("Failed to fetch messages");
-        console.error(err);
+        setError('Failed to load messages. Please try again.');
+        console.error('Fetch messages error:', err);
       } finally {
         setIsFetching(false);
       }
     },
-    [fetchMessagesList, isGroupChat, conversationId, page, setMessages]
+    [conversationId, fetchMessagesList, isGroupChat, setMessages, hasMore, isFetching]
   );
 
-  const loadMoreMessages = useCallback(() => {
-    if (hasMore && !isFetching) fetchMessagesForPage(page + 1);
-  }, [fetchMessagesForPage, page, hasMore, isFetching]);
-
+  // Load initial messages
   useEffect(() => {
-    if (!conversationId || conversationId === lastConversationId.current) return;
-    setLocalMessages([]);
-    setPage(1);
-    setHasMore(true);
-    setError(null);
-    lastConversationId.current = conversationId;
-    fetchMessagesForPage(1, true);
+    if (conversationId) {
+      fetchMessagesForPage(1, true);
+    }
   }, [conversationId, fetchMessagesForPage]);
 
+  // Handle message sending
   const handleSendMessage = useCallback(
     async (messageData) => {
+      if (!conversationId) {
+        setError('No conversation selected.');
+        return;
+      }
+
+      const finalMessageData = {
+        ...messageData,
+        conversationId,
+      };
+
       try {
-        const finalMessageData = {
-          ...messageData,
-          media: (messageData.media || []).map((item) => ({ ...item, shape: item.shape || chatSettings.videoShape })),
+        const tempMessage = {
+          ...finalMessageData,
+          message_id: `temp-${Date.now()}`,
+          sender_id: currentUserId,
+          timestamp: new Date().toISOString(),
+          is_read: false,
+          status: 'sending',
         };
-        await onSendMediaMessage(finalMessageData);
-        fetchMessagesForPage(1, true);
+        setMessages((prev) => [...prev, tempMessage]);
+
+        const sentMessage = await onSendMediaMessage(finalMessageData);
+
+        setMessages((prev) => [
+          ...prev.filter((m) => m.message_id !== tempMessage.message_id),
+          sentMessage,
+        ]);
       } catch (err) {
-        setError("Failed to send message");
-        console.error(err);
+        setError('Failed to send message.');
+        console.error('Send message error:', err);
       }
     },
-    [onSendMediaMessage, chatSettings.videoShape, fetchMessagesForPage]
+    [conversationId, currentUserId, onSendMediaMessage, setMessages]
   );
 
-  const handleForwardMessage = useCallback((message) => {
-    setForwardMessage(message);
-    setForwardOpen(true);
+  // Handle loading more messages
+  const handleLoadMore = useCallback(() => {
+    if (!isFetching && hasMore) {
+      fetchMessagesForPage(page);
+    }
+  }, [fetchMessagesForPage, isFetching, hasMore, page]);
+
+  // Handle settings save
+  const handleSettingsSave = useCallback((newSettings) => {
+    setChatSettings(newSettings);
+    setSettingsOpen(false);
   }, []);
 
-  const confirmForward = useCallback(async () => {
-    if (!forwardRecipient || !forwardMessage) return;
-    try {
-      await onSendMediaMessage({
-        recipientId: forwardRecipient,
-        content: `Forwarded: ${forwardMessage.content || "Media"}`,
-        media: forwardMessage.media,
-        replyTo: forwardMessage.replyTo,
-      });
-      setForwardOpen(false);
-      setForwardRecipient("");
-      setForwardMessage(null);
-    } catch (err) {
-      setError("Failed to forward message");
-      console.error("Forward error:", err);
-    }
-  }, [forwardMessage, forwardRecipient, onSendMediaMessage]);
+  // Handle forward message
+  const handleForwardMessage = useCallback(
+    async (message) => {
+      const newConversationId = prompt('Enter conversation ID to forward to:');
+      if (newConversationId && newConversationId !== conversationId) {
+        try {
+          await onSendMediaMessage({
+            conversationId: newConversationId,
+            content: message.content,
+            media: message.media,
+          });
+        } catch (err) {
+          setError('Failed to forward message.');
+          console.error('Forward message error:', err);
+        }
+      }
+    },
+    [conversationId, onSendMediaMessage]
+  );
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      setMessages((prev) =>
+        prev.filter(
+          (m) => (isGroupChat ? m.group_id !== conversationId : m.conversation_id !== conversationId)
+        )
+      );
+    };
+  }, [conversationId, isGroupChat, setMessages]);
+
+  if (!recipient || !conversationId) {
+    return (
+      <Typography
+        variant="h6"
+        color="text.secondary"
+        sx={{ mt: 4, textAlign: 'center' }}
+        aria-label="No conversation selected"
+      >
+        Select a conversation to start chatting
+      </Typography>
+    );
+  }
 
   return (
-    <>
-      <Box sx={chatContainerStyles}>
-        <ChatHeader recipient={recipient} isGroupChat={isGroupChat} onSettingsOpen={() => setSettingsOpen(true)} />
-        {error && <Typography color="error" sx={{ p: 2 }}>{error}</Typography>}
-        <ChatMessages
-          messages={localMessages}
-          currentUserId={currentUserId}
-          recipient={recipient}
-          onDeleteMessage={onDeleteMessage}
-          onEditMessage={onEditMessage}
-          onSendMediaMessage={handleSendMessage}
-          onMarkRead={onMarkRead}
-          isFetching={isFetching}
-          hasMore={hasMore}
-          loadMoreMessages={loadMoreMessages}
-          chatBackground={chatSettings.chatBackground}
-          setReplyToMessage={setReplyToMessage}
-          onForwardMessage={handleForwardMessage}
-        />
-        <ChatFooter
-          recipient={recipient}
-          onSendMessage={onSendMessage}
-          onSendMediaMessage={handleSendMessage}
-          pendingMediaList={pendingMediaList}
-          setPendingMediaFile={setPendingMediaFile}
-          clearPendingMedia={clearPendingMedia}
-          defaultVideoShape={chatSettings.videoShape}
-          replyToMessage={replyToMessage}
-          setReplyToMessage={setReplyToMessage}
-          isGroupChat={isGroupChat}
-          token={token}
-          currentUserId={currentUserId}
-        />
-      </Box>
-      <ChatSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onSave={setChatSettings} initialSettings={chatSettings} />
-      <Modal open={forwardOpen} onClose={() => setForwardOpen(false)}>
-        <Box sx={modalStyles}>
-          <Typography variant="h6" gutterBottom>Select Recipient</Typography>
-          <Select
-            fullWidth
-            value={forwardRecipient}
-            onChange={(e) => setForwardRecipient(e.target.value)}
-            displayEmpty
-            sx={{ mb: 2 }}
-          >
-            <MenuItem value="" disabled>Select a friend</MenuItem>
-            {friends.map((friend) => (
-              <MenuItem key={friend.anonymous_id} value={friend.anonymous_id}>
-                {friend.username || `User (${friend.anonymous_id})`}
-              </MenuItem>
-            ))}
-          </Select>
-          <Button variant="contained" onClick={confirmForward} disabled={!forwardRecipient}>
-            Forward
-          </Button>
-        </Box>
-      </Modal>
-    </>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: { xs: 'calc(100vh - 64px)', md: 'calc(100vh - 100px)' },
+        border: '1px solid',
+        borderColor: 'grey.300',
+        borderRadius: 2,
+        overflow: 'hidden',
+      }}
+      aria-label="Chat view"
+    >
+      {error && (
+        <Alert severity="error" onClose={() => setError(null)} sx={{ m: 1 }}>
+          {error}
+        </Alert>
+      )}
+      <ChatHeader
+        recipient={recipient}
+        isGroupChat={isGroupChat}
+        onSettingsOpen={() => setSettingsOpen(true)}
+      />
+      <ChatMessages
+        messages={filteredMessages}
+        currentUserId={currentUserId}
+        recipient={recipient}
+        onDeleteMessage={onDeleteMessage}
+        onEditMessage={onEditMessage}
+        onSendMediaMessage={handleSendMessage}
+        onMarkRead={onMarkRead}
+        onForwardMessage={handleForwardMessage}
+        isFetching={isFetching}
+        hasMore={hasMore}
+        loadMoreMessages={handleLoadMore}
+        chatBackground={chatSettings.chatBackground}
+        setReplyToMessage={setReplyToMessage}
+        isGroupChat={isGroupChat}
+        friends={friends}
+        token={token}
+      />
+      <ChatFooter
+        conversationId={conversationId}
+        recipient={recipient}
+        onSendMessage={onSendMessage}
+        onSendMediaMessage={handleSendMessage}
+        pendingMediaList={pendingMediaList}
+        setPendingMediaFile={setPendingMediaFile}
+        clearPendingMedia={clearPendingMedia}
+        defaultVideoShape={chatSettings.videoShape}
+        replyToMessage={replyToMessage}
+        setReplyToMessage={setReplyToMessage}
+        isGroupChat={isGroupChat}
+        token={token}
+        currentUserId={currentUserId}
+        friends={friends}
+        chatBackground={chatSettings.chatBackground}
+      />
+      <ChatSettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSave={handleSettingsSave}
+        initialSettings={chatSettings}
+      />
+    </Box>
   );
 };
 
 ChatView.propTypes = {
   currentUserId: PropTypes.string.isRequired,
-  recipient: PropTypes.object.isRequired,
+  recipient: PropTypes.shape({
+    anonymous_id: PropTypes.string,
+    group_id: PropTypes.string,
+    name: PropTypes.string,
+    username: PropTypes.string,
+  }),
   onSendMessage: PropTypes.func.isRequired,
   onSendMediaMessage: PropTypes.func.isRequired,
   onMarkRead: PropTypes.func.isRequired,
   onDeleteMessage: PropTypes.func.isRequired,
   onEditMessage: PropTypes.func.isRequired,
+  onForwardMessage: PropTypes.func.isRequired,
   token: PropTypes.string.isRequired,
   fetchMessagesList: PropTypes.func.isRequired,
   pendingMediaList: PropTypes.array,
   setPendingMediaFile: PropTypes.func.isRequired,
   clearPendingMedia: PropTypes.func.isRequired,
   isGroupChat: PropTypes.bool.isRequired,
-  friends: PropTypes.array.isRequired,
+  friends: PropTypes.arrayOf(
+    PropTypes.shape({
+      anonymous_id: PropTypes.string.isRequired,
+      username: PropTypes.string,
+    })
+  ).isRequired,
+  messages: PropTypes.arrayOf(
+    PropTypes.shape({
+      message_id: PropTypes.string.isRequired,
+      conversation_id: PropTypes.string,
+      group_id: PropTypes.string,
+      content: PropTypes.string,
+      timestamp: PropTypes.string.isRequired,
+      is_read: PropTypes.bool,
+      sender_id: PropTypes.string,
+      receiver_id: PropTypes.string,
+    })
+  ).isRequired,
   setMessages: PropTypes.func.isRequired,
+  searchMessages: PropTypes.func.isRequired,
 };
 
-export default ChatView;
+export default React.memo(ChatView);

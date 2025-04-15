@@ -1,102 +1,272 @@
-import React, { useState } from "react";
-import PropTypes from "prop-types";
-import { Box, Typography, IconButton, Menu, MenuItem } from "@mui/material";
-import { Delete, Reply, Forward, Save, Edit } from "@mui/icons-material";
+import React, { useState, useCallback, useEffect } from 'react';
+import PropTypes from 'prop-types';
+import {
+  Box,
+  Typography,
+  IconButton,
+  Menu,
+  MenuItem,
+  Avatar,
+  Chip,
+} from '@mui/material';
+import { MoreVert, Reply, Edit, Delete, Forward } from '@mui/icons-material';
+import { format, isToday, isYesterday } from 'date-fns';
 
-const messageBubbleStyles = (isSentByCurrentUser) => ({
-  maxWidth: { xs: "85%", md: "70%" },
-  p: 1.5,
-  borderRadius: "20px",
-  backgroundColor: isSentByCurrentUser ? "primary.main" : "grey.200",
-  color: isSentByCurrentUser ? "white" : "text.primary",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-  position: "relative",
-  "&:before": {
-    content: '""',
-    position: "absolute",
-    width: 0,
-    height: 0,
-    border: "8px solid transparent",
-    top: "50%",
-    transform: "translateY(-50%)",
-    [isSentByCurrentUser ? "right" : "left"]: "-8px",
-    borderColor: isSentByCurrentUser ? "transparent transparent transparent primary.main" : "transparent grey.200 transparent transparent",
-  },
-});
-
-const mediaRenderers = {
-  image: (item) => <img src={item.content} alt="media" style={{ maxWidth: "100%", borderRadius: "10px" }} />,
-  video: (item) => <video controls src={item.content} style={{ maxWidth: "100%", borderRadius: "10px", clipPath: `url(#${item.shape || "square"})` }} />,
-  voice: (item) => <audio controls src={item.content} />,
-  sticker: (item) => <img src={item.content} alt="sticker" style={{ maxWidth: "100px", borderRadius: "10px" }} />,
-  file: (item) => <a href={item.content} download><Typography variant="body2" color="inherit">Download: {item.content.split("/").pop()}</Typography></a>,
+/**
+ * Formats timestamp for display
+ * @param {string} timestamp - ISO timestamp
+ * @returns {string} Formatted date/time
+ */
+const formatTimestamp = (timestamp) => {
+  const date = new Date(timestamp);
+  if (isToday(date)) return format(date, 'h:mm a');
+  if (isYesterday(date)) return `Yesterday ${format(date, 'h:mm a')}`;
+  return format(date, 'MMM d, yyyy h:mm a');
 };
 
-const MessageBubble = ({ message, isSentByCurrentUser, onDelete, onEdit, currentUserId, recipient, onSendMediaMessage, messages, setReplyToMessage, onForward }) => {
+/**
+ * MessageBubble component for rendering individual messages
+ * @param {Object} props - Component props
+ * @returns {JSX.Element}
+ */
+const MessageBubble = ({
+  message,
+  isSentByCurrentUser,
+  onDelete,
+  onEdit,
+  onSendMediaMessage,
+  currentUserId,
+  recipient,
+  messages,
+  setReplyToMessage,
+  onForward,
+  isGroupChat,
+  friends,
+  token,
+}) => {
   const [anchorEl, setAnchorEl] = useState(null);
+  const [mediaError, setMediaError] = useState(null);
 
-  const renderContent = () => {
-    const contents = [];
-    if (message.replyTo) {
-      const replied = messages.find((m) => m.message_id === message.replyTo);
-      if (replied) contents.push(
-        <Box key="reply" sx={{ backgroundColor: "rgba(0,0,0,0.1)", p: 1, borderRadius: "10px", mb: 1 }}>
-          <Typography variant="caption" sx={{ opacity: 0.8 }}>{replied.content.slice(0, 50) + (replied.content.length > 50 ? "..." : "")}</Typography>
-        </Box>
-      );
-    }
-    if (message.content) contents.push(<Typography key="content" variant="body1">{message.content}</Typography>);
-    message.media?.forEach((item, i) => contents.push(<Box key={`media-${i}`} sx={{ mt: 1 }}>{mediaRenderers[item.type]?.(item)}</Box>));
-    return contents;
-  };
+  // Get sender info for group chats
+  const sender = isGroupChat
+    ? friends.find((f) => f.anonymous_id === message.sender_id) || {
+        username: 'Unknown',
+      }
+    : null;
+  const senderName = isGroupChat ? sender.username : recipient?.username || 'User';
 
-  const handleEdit = () => {
-    const newContent = prompt("Edit message:", message.content);
-    if (newContent && newContent !== message.content) {
-      onEdit(message.message_id, newContent);
-    }
-    setAnchorEl(null);
-  };
+  // Handle menu actions
+  const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
+  const handleMenuClose = () => setAnchorEl(null);
+
+  const handleReply = useCallback(() => {
+    setReplyToMessage(message);
+    handleMenuClose();
+  }, [message, setReplyToMessage]);
+
+  const handleEdit = useCallback(() => {
+    onEdit(message.message_id, prompt('Edit message:', message.content));
+    handleMenuClose();
+  }, [message, onEdit]);
+
+  const handleDelete = useCallback(() => {
+    onDelete(message.message_id);
+    handleMenuClose();
+  }, [message, onDelete]);
+
+  const handleForward = useCallback(() => {
+    onForward(message);
+    handleMenuClose();
+  }, [message, onForward]);
+
+  // Cleanup for media elements
+  useEffect(() => {
+    return () => {
+      setMediaError(null);
+    };
+  }, [message.message_id]);
 
   return (
-    <Box sx={{ display: "flex", justifyContent: isSentByCurrentUser ? "flex-end" : "flex-start", mb: 2 }}>
-      <Box sx={messageBubbleStyles(isSentByCurrentUser)} onContextMenu={(e) => { e.preventDefault(); setAnchorEl(e.currentTarget); }}>
-        {renderContent()}
-        <Typography variant="caption" sx={{ mt: 0.5, opacity: 0.7, display: "block", textAlign: isSentByCurrentUser ? "right" : "left" }}>
-          {new Date(message.timestamp).toLocaleTimeString()}
-          {isSentByCurrentUser && (message.status === "read" ? " ✓✓" : message.status === "delivered" ? " ✓" : "")}
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: isSentByCurrentUser ? 'row-reverse' : 'row',
+        alignItems: 'flex-start',
+        mb: 2,
+        px: { xs: 1, md: 2 },
+      }}
+      aria-label={`Message from ${isSentByCurrentUser ? 'you' : senderName}`}
+    >
+      {isGroupChat && !isSentByCurrentUser && (
+        <Avatar
+          src={sender?.profile_image}
+          alt={`${senderName}'s avatar`}
+          sx={{ width: 32, height: 32, mr: 1, mt: 1 }}
+        >
+          {senderName.charAt(0).toUpperCase()}
+        </Avatar>
+      )}
+      <Box
+        sx={{
+          maxWidth: '70%',
+          bgcolor: isSentByCurrentUser ? 'primary.light' : 'grey.200',
+          borderRadius: 2,
+          p: 1,
+          position: 'relative',
+        }}
+      >
+        {isGroupChat && !isSentByCurrentUser && (
+          <Typography variant="caption" sx={{ fontWeight: 'medium', mb: 0.5 }}>
+            {senderName}
+          </Typography>
+        )}
+        {message.replyTo && (
+          <Box
+            sx={{
+              bgcolor: 'grey.300',
+              p: 1,
+              borderRadius: 1,
+              mb: 1,
+              fontStyle: 'italic',
+            }}
+            aria-label="Replied message"
+          >
+            <Typography variant="caption">
+              {messages.find((m) => m.message_id === message.replyTo)?.content ||
+                'Original message'}
+            </Typography>
+          </Box>
+        )}
+        {message.content && (
+          <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+            {message.content}
+          </Typography>
+        )}
+        {message.media?.map((media, index) => (
+          <Box key={index} sx={{ mt: 1 }}>
+            {media.type.startsWith('image') ? (
+              <img
+                src={media.url}
+                alt={`Media ${index + 1}`}
+                style={{
+                  maxWidth: '100%',
+                  borderRadius: '8px',
+                  display: 'block',
+                }}
+                onError={() => setMediaError(`Failed to load image ${index + 1}`)}
+                loading="lazy"
+              />
+            ) : media.type.startsWith('video') ? (
+              <video
+                src={media.url}
+                controls
+                style={{ maxWidth: '100%', borderRadius: '8px' }}
+                onError={() => setMediaError(`Failed to load video ${index + 1}`)}
+              />
+            ) : (
+              <Chip label="Unsupported media" size="small" />
+            )}
+          </Box>
+        ))}
+        {mediaError && (
+          <Typography
+            variant="caption"
+            color="error"
+            sx={{ mt: 1, display: 'block' }}
+          >
+            {mediaError}
+          </Typography>
+        )}
+        <Typography
+          variant="caption"
+          sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}
+        >
+          {formatTimestamp(message.timestamp)}
+          {isSentByCurrentUser && (message.is_read ? ' · Seen' : ' · Sent')}
         </Typography>
-      </Box>
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
-        <MenuItem onClick={() => { setReplyToMessage(message); setAnchorEl(null); }}><Reply sx={{ mr: 1 }} /> Reply</MenuItem>
-        <MenuItem onClick={() => { onForward(message); setAnchorEl(null); }}><Forward sx={{ mr: 1 }} /> Forward</MenuItem>
-        {message.media?.length > 0 && (
-          <MenuItem onClick={() => { const link = document.createElement("a"); link.href = message.media[0].content; link.download = message.media[0].content.split("/").pop(); link.click(); setAnchorEl(null); }}>
-            <Save sx={{ mr: 1 }} /> Save
+        <IconButton
+          size="small"
+          onClick={handleMenuOpen}
+          sx={{
+            position: 'absolute',
+            top: 4,
+            right: isSentByCurrentUser ? 4 : undefined,
+            left: !isSentByCurrentUser ? 4 : undefined,
+          }}
+          aria-label="Message options"
+        >
+          <MoreVert />
+        </IconButton>
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleMenuClose}
+          aria-label="Message actions menu"
+        >
+          <MenuItem onClick={handleReply} aria-label="Reply to message">
+            <Reply fontSize="small" sx={{ mr: 1 }} /> Reply
           </MenuItem>
-        )}
-        {isSentByCurrentUser && (
-          <>
-            <MenuItem onClick={handleEdit}><Edit sx={{ mr: 1 }} /> Edit</MenuItem>
-            <MenuItem onClick={() => { onDelete(message.message_id); setAnchorEl(null); }}><Delete sx={{ mr: 1 }} /> Delete</MenuItem>
-          </>
-        )}
-      </Menu>
+          {isSentByCurrentUser && message.content && (
+            <MenuItem onClick={handleEdit} aria-label="Edit message">
+              <Edit fontSize="small" sx={{ mr: 1 }} /> Edit
+            </MenuItem>
+          )}
+          {isSentByCurrentUser && (
+            <MenuItem onClick={handleDelete} aria-label="Delete message">
+              <Delete fontSize="small" sx={{ mr: 1 }} /> Delete
+            </MenuItem>
+          )}
+          <MenuItem onClick={handleForward} aria-label="Forward message">
+            <Forward fontSize="small" sx={{ mr: 1 }} /> Forward
+          </MenuItem>
+        </Menu>
+      </Box>
     </Box>
   );
 };
 
 MessageBubble.propTypes = {
-  message: PropTypes.object.isRequired,
+  message: PropTypes.shape({
+    message_id: PropTypes.string.isRequired,
+    conversation_id: PropTypes.string,
+    group_id: PropTypes.string,
+    content: PropTypes.string,
+    timestamp: PropTypes.string.isRequired,
+    is_read: PropTypes.bool,
+    sender_id: PropTypes.string.isRequired,
+    receiver_id: PropTypes.string,
+    media: PropTypes.arrayOf(
+      PropTypes.shape({
+        url: PropTypes.string.isRequired,
+        type: PropTypes.string.isRequired,
+      })
+    ),
+    replyTo: PropTypes.string,
+  }).isRequired,
   isSentByCurrentUser: PropTypes.bool.isRequired,
   onDelete: PropTypes.func.isRequired,
   onEdit: PropTypes.func.isRequired,
-  currentUserId: PropTypes.string.isRequired,
-  recipient: PropTypes.object,
   onSendMediaMessage: PropTypes.func.isRequired,
-  messages: PropTypes.array.isRequired,
+  currentUserId: PropTypes.string.isRequired,
+  recipient: PropTypes.shape({
+    anonymous_id: PropTypes.string,
+    group_id: PropTypes.string,
+    name: PropTypes.string,
+    username: PropTypes.string,
+    profile_image: PropTypes.string,
+  }).isRequired,
+  messages: PropTypes.arrayOf(PropTypes.object).isRequired,
   setReplyToMessage: PropTypes.func.isRequired,
   onForward: PropTypes.func.isRequired,
+  isGroupChat: PropTypes.bool.isRequired,
+  friends: PropTypes.arrayOf(
+    PropTypes.shape({
+      anonymous_id: PropTypes.string.isRequired,
+      username: PropTypes.string,
+      profile_image: PropTypes.string,
+    })
+  ).isRequired,
+  token: PropTypes.string.isRequired,
 };
 
 export default React.memo(MessageBubble);
