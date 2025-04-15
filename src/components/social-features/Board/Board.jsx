@@ -53,7 +53,6 @@ const Board = ({
   boardTitle,
   onLike,
   setEditingBoard,
-  errorMessage,
 }) => {
   const navigate = useNavigate();
   const boardMainRef = useRef(null);
@@ -68,7 +67,6 @@ const Board = ({
   const [newStatus, setNewStatus] = useState("");
   const [boardLoading, setBoardLoading] = useState(true);
 
-  // Ініціалізація useBoardInteraction на початку, перед усіма залежними функціями
   const {
     scale,
     offset,
@@ -101,6 +99,12 @@ const Board = ({
   const [isPointsSpent, setIsPointsSpent] = useState(false);
   const timerRef = useRef(null);
 
+  // Determine user role
+  const userRole = boardData?.creator_id === currentUser?.anonymous_id
+    ? "owner"
+    : boardData?.members?.find((m) => m.anonymous_id === currentUser?.anonymous_id)?.role || "viewer";
+  const canEdit = userRole === "owner" || userRole === "editor";
+
   useEffect(() => {
     if (pointsData?.total_points < prevPoints) {
       setIsPointsSpent(true);
@@ -108,7 +112,7 @@ const Board = ({
     }
     setPrevPoints(pointsData?.total_points);
     return () => clearTimeout(timerRef.current);
-  }, [pointsData?.total_points]);
+  }, [pointsData?.total_points, prevPoints]);
 
   useEffect(() => {
     if (!boardId) return;
@@ -259,6 +263,13 @@ const Board = ({
     [scale]
   );
 
+  const handleEditBoard = useCallback(async () => {
+    const latestBoard = await boardData();
+    if (latestBoard) {
+      setEditingBoard({ ...latestBoard });
+    }
+  }, [boardData, setEditingBoard]);
+
   const renderedTweets = useMemo(() => {
     return tweets.map((tweet) => {
       const replyCount = tweets.filter(
@@ -340,7 +351,7 @@ const Board = ({
     [handleMouseUp]
   );
 
-  if (tweetsError) errorMessage = tweetsError;
+  if (tweetsError) return <Typography color="error">{tweetsError}</Typography>;
   if (boardLoading || tweetsLoading) return <LoadingSpinner />;
 
   return (
@@ -604,22 +615,19 @@ const Board = ({
                   <ShareIcon sx={{ color: "text.primary" }} />
                 </IconButton>
               </Tooltip>
-              <Tooltip title="Edit Board">
-                <IconButton
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingBoard({
-                      board_id: boardData.board_id,
-                      name: boardData.name,
-                      description: boardData.description || "",
-                      visibility: boardData.is_public ? "Public" : "Private",
-                    });
-                  }}
-                  sx={{ p: 1, color: "text.primary" }}
-                >
-                  <Edit />
-                </IconButton>
-              </Tooltip>
+              {canEdit && (
+                <Tooltip title="Edit Board">
+                  <IconButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEditBoard();
+                    }}
+                    sx={{ p: 1, color: "text.primary" }}
+                  >
+                    <Edit />
+                  </IconButton>
+                </Tooltip>
+              )}
               {boardInfo?.child_board_ids?.length > 0 && (
                 <Tooltip title="Child Boards">
                   <IconButton
@@ -747,7 +755,6 @@ Board.propTypes = {
   boardTitle: PropTypes.string.isRequired,
   onLike: PropTypes.func.isRequired,
   setEditingBoard: PropTypes.func.isRequired,
-  errorMessage: PropTypes.string,
 };
 
 export default Board;

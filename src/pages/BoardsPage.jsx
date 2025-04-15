@@ -46,6 +46,7 @@ const BoardsPage = () => {
     settings: { tweet_cost: 1, like_cost: 1, points_to_creator: 1, max_members: 11, tweets_limit_trigger: 111 },
     gate_id: null,
     class_id: null,
+    members: [],
   });
   const [success, setSuccess] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -73,29 +74,33 @@ const BoardsPage = () => {
   }, [error]);
 
   const filteredBoards = useMemo(() => {
-    return boards.map((board) => ({
-      ...board,
-      current_user: {
-        anonymous_id: authData.anonymous_id,
-        role: board.creator_id === authData.anonymous_id ? "owner" : board.members?.find((m) => m.anonymous_id === authData.anonymous_id)?.role || "viewer",
-      },
-    })).filter((board) => {
+    const lowerSearchQuery = searchQuery.toLowerCase();
+    return boards.filter((board) => {
       const matchesSearch =
-        board.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        board.tags?.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+        board.name.toLowerCase().includes(lowerSearchQuery) ||
+        board.tags?.some((tag) => tag.toLowerCase().includes(lowerSearchQuery));
       if (!matchesSearch) return false;
+      const isLiked = localLikes[board.board_id] ?? board.liked_by?.some((l) => l.anonymous_id === authData.anonymous_id);
       switch (quickFilter) {
         case "all": return true;
         case "public": return board.is_public;
         case "private": return !board.is_public;
-        case "liked": return localLikes[board.board_id] ?? board.liked_by?.some((l) => l.anonymous_id === authData.anonymous_id);
+        case "liked": return isLiked;
         case "personal": return board.type === "personal";
         case "group": return board.type === "group";
         case "gate": return !!board.gate_id;
         case "class": return !!board.class_id;
         default: return true;
       }
-    });
+    }).map((board) => ({
+      ...board,
+      current_user: {
+        anonymous_id: authData.anonymous_id,
+        role: board.creator_id === authData.anonymous_id
+          ? "owner"
+          : board.members?.find((m) => m.anonymous_id === authData.anonymous_id)?.role || "viewer",
+      },
+    }));
   }, [boards, quickFilter, searchQuery, localLikes, authData]);
 
   const validateBoardData = useCallback((data) => {
@@ -116,11 +121,25 @@ const BoardsPage = () => {
 
   const handleCreateBoard = useCallback(async () => {
     const validationError = validateBoardData(popupBoard);
-    if (validationError) return setErrorMessage(validationError);
+    if (validationError) {
+      setErrorMessage(validationError);
+      return;
+    }
     try {
       const createdBoard = await createNewBoard(popupBoard);
       setSuccess("Board created successfully!");
       setCreateDialogOpen(false);
+      setPopupBoard({
+        name: "",
+        description: "",
+        visibility: "private",
+        type: "personal",
+        tags: [],
+        settings: { tweet_cost: 1, like_cost: 1, points_to_creator: 1, max_members: 11, tweets_limit_trigger: 111 },
+        gate_id: null,
+        class_id: null,
+        members: [],
+      });
       navigate(`/board/${createdBoard.board_id}`);
     } catch (err) {
       setErrorMessage(err.message || "Failed to create board");
@@ -129,15 +148,21 @@ const BoardsPage = () => {
 
   const handleUpdateBoard = useCallback(async () => {
     const validationError = validateBoardData(editingBoard);
-    if (validationError) return setErrorMessage(validationError);
+    if (validationError) {
+      setErrorMessage(validationError);
+      return;
+    }
     try {
-      const updatedMembers = editingBoard.members.filter((m) => !boards.find((b) => b.board_id === editingBoard.board_id)?.members.some((om) => om.anonymous_id === m.anonymous_id));
+      const originalBoard = boards.find((b) => b.board_id === editingBoard.board_id);
+      const updatedMembers = editingBoard.members.filter(
+        (m) => !originalBoard?.members.some((om) => om.anonymous_id === m.anonymous_id)
+      );
       for (const member of updatedMembers) {
         await addBoardMember(editingBoard.board_id, member.anonymous_id, member.role);
       }
-      const removedMembers = boards
-        .find((b) => b.board_id === editingBoard.board_id)
-        ?.members.filter((om) => !editingBoard.members.some((m) => m.anonymous_id === om.anonymous_id));
+      const removedMembers = originalBoard?.members.filter(
+        (om) => !editingBoard.members.some((m) => m.anonymous_id === om.anonymous_id)
+      );
       for (const member of removedMembers || []) {
         await removeBoardMember(editingBoard.board_id, member.anonymous_id);
       }
@@ -212,6 +237,7 @@ const BoardsPage = () => {
         token={token}
         onLogout={handleLogout}
         navigate={navigate}
+        userRole="owner"
       />
       {editingBoard && (
         <BoardFormDialog
@@ -225,6 +251,7 @@ const BoardsPage = () => {
           token={token}
           onLogout={handleLogout}
           navigate={navigate}
+          userRole={editingBoard.current_user?.role || "viewer"}
         />
       )}
       <DeleteConfirmationDialog
