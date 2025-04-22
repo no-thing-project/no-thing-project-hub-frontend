@@ -1,4 +1,4 @@
-import axios, { CancelToken } from 'axios'; // Explicitly import CancelToken
+import axios, { CancelToken } from 'axios';
 import api from './apiClient';
 import { handleApiError } from './apiClient';
 
@@ -22,7 +22,6 @@ const withRequest = async (key, fn, useCache = true) => {
     if (Date.now() - timestamp < CACHE_TTL) return data;
   }
 
-  // Attempt to create a cancel token
   let cancelToken = null;
   try {
     if (CancelToken) {
@@ -58,6 +57,153 @@ const withRequest = async (key, fn, useCache = true) => {
   }
 };
 
+// Conversations
+export const createConversation = (data, token) =>
+  withRequest(`createConversation:${data.friendId || data.name}`, (cancelToken) =>
+    api.post('api/v1/conversations/', data, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const fetchConversations = ({ page = 1, limit = 20, cursor } = {}, token) =>
+  withRequest(`fetchConversations:${page}:${cursor}`, (cancelToken) =>
+    api.get('api/v1/conversations/', {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { page, limit, cursor },
+      cancelToken,
+    })
+  );
+
+export const fetchConversation = (conversationId, token) =>
+  withRequest(`fetchConversation:${conversationId}`, (cancelToken) =>
+    api.get(`api/v1/conversations/${conversationId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const updateConversation = (conversationId, data, token) =>
+  withRequest(`updateConversation:${conversationId}`, (cancelToken) =>
+    api.patch(`api/v1/conversations/${conversationId}`, data, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const updateChatSettings = (conversationId, data, token) =>
+  withRequest(`updateChatSettings:${conversationId}`, (cancelToken) =>
+    api.patch(`api/v1/conversations/${conversationId}/settings`, data, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const updateEphemeralSettings = (conversationId, data, token) =>
+  withRequest(`updateEphemeralSettings:${conversationId}`, (cancelToken) =>
+    api.patch(`api/v1/conversations/${conversationId}/ephemeral`, data, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const addMembers = (conversationId, members, token) =>
+  withRequest(`addMembers:${conversationId}`, (cancelToken) =>
+    api.post(`api/v1/conversations/${conversationId}/members`, { members }, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const removeMembers = (conversationId, members, token) =>
+  withRequest(`removeMembers:${conversationId}`, (cancelToken) =>
+    api.delete(`api/v1/conversations/${conversationId}/members`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { members },
+      cancelToken,
+    })
+  );
+
+export const joinViaInvite = (inviteLink, token) =>
+  withRequest(`joinViaInvite:${inviteLink}`, (cancelToken) =>
+    api.post('api/v1/conversations/join', { inviteLink }, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const leaveConversation = (conversationId, token) =>
+  withRequest(`leaveConversation:${conversationId}`, (cancelToken) =>
+    api.delete(`api/v1/conversations/${conversationId}/leave`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const rotateKeys = (conversationId, token) =>
+  withRequest(`rotateKeys:${conversationId}`, (cancelToken) =>
+    api.post(`api/v1/conversations/${conversationId}/rotate-keys`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const deleteConversation = (conversationId, token) =>
+  withRequest(`deleteConversation:${conversationId}`, (cancelToken) =>
+    api.delete(`api/v1/conversations/${conversationId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const archiveConversation = (conversationId, token) =>
+  withRequest(`archiveConversation:${conversationId}`, (cancelToken) =>
+    api.post(`api/v1/conversations/${conversationId}/archive`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const unarchiveConversation = (conversationId, token) =>
+  withRequest(`unarchiveConversation:${conversationId}`, (cancelToken) =>
+    api.post(`api/v1/conversations/${conversationId}/unarchive`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const muteConversation = (conversationId, data, token) =>
+  withRequest(`muteConversation:${conversationId}`, (cancelToken) =>
+    api.post(`api/v1/conversations/${conversationId}/mute`, data, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const unmuteConversation = (conversationId, token) =>
+  withRequest(`unmuteConversation:${conversationId}`, (cancelToken) =>
+    api.post(`api/v1/conversations/${conversationId}/unmute`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const pinConversation = (conversationId, token) =>
+  withRequest(`pinConversation:${conversationId}`, (cancelToken) =>
+    api.post(`api/v1/conversations/${conversationId}/pin`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const unpinConversation = (conversationId, token) =>
+  withRequest(`unpinConversation:${conversationId}`, (cancelToken) =>
+    api.post(`api/v1/conversations/${conversationId}/unpin`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
 // Messages
 export const sendMessage = (messageData, token) =>
   withRequest(`sendMessage:${messageData.conversationId}`, (cancelToken) =>
@@ -67,11 +213,51 @@ export const sendMessage = (messageData, token) =>
     })
   );
 
-export const fetchMessages = (conversationId, { page = 1, limit = 20 } = {}, token) =>
-  withRequest(`fetchMessages:${conversationId}:${page}`, (cancelToken) =>
+export const fetchMessages = (conversationId, { page = 1, limit = 20, cursor } = {}, token) =>
+  withRequest(`fetchMessages:${conversationId}:${page}:${cursor}`, (cancelToken) =>
     api.get(`api/v1/messages/${conversationId}`, {
       headers: { Authorization: `Bearer ${token}` },
-      params: { page, limit },
+      params: { page, limit, cursor },
+      cancelToken,
+    })
+  );
+
+export const sendTyping = (conversationId, token) =>
+  withRequest(`sendTyping:${conversationId}`, (cancelToken) =>
+    api.post(`api/v1/messages/${conversationId}/typing`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const getReadReceipts = (messageId, token) =>
+  withRequest(`getReadReceipts:${messageId}`, (cancelToken) =>
+    api.get(`api/v1/messages/${messageId}/receipts`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const createPoll = (pollData, token) =>
+  withRequest(`createPoll:${pollData.conversationId}`, (cancelToken) =>
+    api.post('api/v1/messages/poll', pollData, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const votePoll = (messageId, optionIndex, token) =>
+  withRequest(`votePoll:${messageId}`, (cancelToken) =>
+    api.post(`api/v1/messages/${messageId}/vote`, { optionIndex }, {
+      headers: { Authorization: `Bearer ${token}` },
+      cancelToken,
+    })
+  );
+
+export const addReaction = (messageId, reaction, token) =>
+  withRequest(`addReaction:${messageId}`, (cancelToken) =>
+    api.post(`api/v1/messages/${messageId}/react`, { reaction }, {
+      headers: { Authorization: `Bearer ${token}` },
       cancelToken,
     })
   );
@@ -102,148 +288,41 @@ export const editMessage = ({ messageId, newContent }, token) =>
 
 export const searchMessages = (conversationId, query, { limit = 50 } = {}, token) =>
   withRequest(`searchMessages:${conversationId}:${query}`, (cancelToken) =>
-    api.get(`api/v1/messages/search/${conversationId}`, {
+    api.get(`api/v1/messages/${conversationId}/search`, {
       headers: { Authorization: `Bearer ${token}` },
       params: { query, limit },
       cancelToken,
     })
   );
 
-// Conversations
-export const createConversation = (friendId, token) =>
-  withRequest(`createConversation:${friendId}`, (cancelToken) =>
-    api.post('api/v1/conversations/', { friendId }, {
+export const pinMessage = (messageId, token) =>
+  withRequest(`pinMessage:${messageId}`, (cancelToken) =>
+    api.post(`api/v1/messages/${messageId}/pin`, {}, {
       headers: { Authorization: `Bearer ${token}` },
       cancelToken,
     })
   );
 
-export const fetchConversations = ({ page = 1, limit = 20 } = {}, token) =>
-  withRequest(`fetchConversations:${page}`, (cancelToken) =>
-    api.get('api/v1/conversations/', {
-      headers: { Authorization: `Bearer ${token}` },
-      params: { page, limit },
-      cancelToken,
-    })
-  );
-
-export const fetchConversation = (conversationId, token) =>
-  withRequest(`fetchConversation:${conversationId}`, (cancelToken) =>
-    api.get(`api/v1/conversations/${conversationId}`, {
+export const unpinMessage = (messageId, token) =>
+  withRequest(`unpinMessage:${messageId}`, (cancelToken) =>
+    api.post(`api/v1/messages/${messageId}/unpin`, {}, {
       headers: { Authorization: `Bearer ${token}` },
       cancelToken,
     })
   );
 
-export const updateConversation = (conversationId, { name }, token) =>
-  withRequest(`updateConversation:${conversationId}`, (cancelToken) =>
-    api.patch(`api/v1/conversations/${conversationId}`, { name }, {
+export const listScheduledMessages = (conversationId, { page = 1, limit = 20 } = {}, token) =>
+  withRequest(`listScheduledMessages:${conversationId}:${page}`, (cancelToken) =>
+    api.get('api/v1/messages/scheduled', {
       headers: { Authorization: `Bearer ${token}` },
+      params: { conversationId, page, limit },
       cancelToken,
     })
   );
 
-export const archiveConversation = (conversationId, token) =>
-  withRequest(`archiveConversation:${conversationId}`, (cancelToken) =>
-    api.post(`api/v1/conversations/${conversationId}/archive`, {}, {
-      headers: { Authorization: `Bearer ${token}` },
-      cancelToken,
-    })
-  );
-
-export const unarchiveConversation = (conversationId, token) =>
-  withRequest(`unarchiveConversation:${conversationId}`, (cancelToken) =>
-    api.post(`api/v1/conversations/${conversationId}/unarchive`, {}, {
-      headers: { Authorization: `Bearer ${token}` },
-      cancelToken,
-    })
-  );
-
-export const muteConversation = (conversationId, token) =>
-  withRequest(`muteConversation:${conversationId}`, (cancelToken) =>
-    api.post(`api/v1/conversations/${conversationId}/mute`, {}, {
-      headers: { Authorization: `Bearer ${token}` },
-      cancelToken,
-    })
-  );
-
-export const unmuteConversation = (conversationId, token) =>
-  withRequest(`unmuteConversation:${conversationId}`, (cancelToken) =>
-    api.post(`api/v1/conversations/${conversationId}/unmute`, {}, {
-      headers: { Authorization: `Bearer ${token}` },
-      cancelToken,
-    })
-  );
-
-export const pinConversation = (conversationId, token) =>
-  withRequest(`pinConversation:${conversationId}`, (cancelToken) =>
-    api.post(`api/v1/conversations/${conversationId}/pin`, {}, {
-      headers: { Authorization: `Bearer ${token}` },
-      cancelToken,
-    })
-  );
-
-export const unpinConversation = (conversationId, token) =>
-  withRequest(`unpinConversation:${conversationId}`, (cancelToken) =>
-    api.post(`api/v1/conversations/${conversationId}/unpin`, {}, {
-      headers: { Authorization: `Bearer ${token}` },
-      cancelToken,
-    })
-  );
-
-export const deleteConversation = (conversationId, token) =>
-  withRequest(`deleteConversation:${conversationId}`, (cancelToken) =>
-    api.delete(`api/v1/conversations/${conversationId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cancelToken,
-    })
-  );
-
-// Group Chats
-export const fetchGroupChats = (token) =>
-  withRequest('fetchGroupChats', (cancelToken) =>
-    api.get('api/v1/groups/', {
-      headers: { Authorization: `Bearer ${token}` },
-      cancelToken,
-    })
-  );
-
-export const createGroupChat = ({ name, members }, token) =>
-  withRequest(`createGroupChat:${name}`, (cancelToken) =>
-    api.post('api/v1/groups/', { name, members }, {
-      headers: { Authorization: `Bearer ${token}` },
-      cancelToken,
-    })
-  );
-
-export const updateGroupChat = (groupId, { name }, token) =>
-  withRequest(`updateGroupChat:${groupId}`, (cancelToken) =>
-    api.patch(`api/v1/groups/${groupId}`, { name }, {
-      headers: { Authorization: `Bearer ${token}` },
-      cancelToken,
-    })
-  );
-
-export const addGroupMembers = (groupId, { members }, token) =>
-  withRequest(`addGroupMembers:${groupId}`, (cancelToken) =>
-    api.post(`api/v1/groups/${groupId}/members`, { members }, {
-      headers: { Authorization: `Bearer ${token}` },
-      cancelToken,
-    })
-  );
-
-export const removeGroupMembers = (groupId, { members }, token) =>
-  withRequest(`removeGroupMembers:${groupId}`, (cancelToken) =>
-    api.delete(`api/v1/groups/${groupId}/members`, {
-      headers: { Authorization: `Bearer ${token}` },
-      data: { members },
-      cancelToken,
-    })
-  );
-
-export const deleteGroupChat = (groupId, token) =>
-  withRequest(`deleteGroupChat:${groupId}`, (cancelToken) =>
-    api.delete(`api/v1/groups/${groupId}`, {
+export const cancelScheduledMessage = (messageId, token) =>
+  withRequest(`cancelScheduledMessage:${messageId}`, (cancelToken) =>
+    api.delete(`api/v1/messages/${messageId}/scheduled`, {
       headers: { Authorization: `Bearer ${token}` },
       cancelToken,
     })
@@ -266,31 +345,8 @@ export const uploadFile = async (file, token) => {
     });
   }
 
-  // Chunked upload for large files
-  const chunks = Math.ceil(file.size / chunkSize);
-  let fileKey = null;
-  for (let i = 0; i < chunks; i++) {
-    const start = i * chunkSize;
-    const end = Math.min(start + chunkSize, file.size);
-    const chunk = file.slice(start, end);
-    const formData = new FormData();
-    formData.append('file', chunk);
-    formData.append('chunkIndex', i);
-    formData.append('totalChunks', chunks);
-    if (fileKey) formData.append('fileKey', fileKey);
-
-    const response = await withRequest(`uploadFileChunk:${file.name}:${i}`, (cancelToken) =>
-      api.post('api/v1/uploads/chunk', formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
-        },
-        cancelToken,
-      })
-    );
-    fileKey = response.fileKey || fileKey;
-  }
-  return { url: fileKey, fileKey };
+  // Chunked upload for large files (Note: Backend does not currently support chunked uploads)
+  throw new Error('Chunked uploads are not supported by the backend');
 };
 
 export const fetchFile = (fileKey, token) =>
@@ -310,49 +366,3 @@ export const deleteFile = (fileKey, token) =>
       cancelToken,
     })
   );
-
-
-// // Додаткові методи для роботи з користувачем
-// export const fetchUserConversations = async (token) => {
-//   try {
-//     const response = await api.get('api/v1/user/conversations', {
-//       headers: { Authorization: `Bearer ${token}` },
-//     });
-//     return processResponse(response);
-//   } catch (err) {
-//     return handleApiError(err);
-//   }
-// };
-
-// export const fetchUserGroups = async (token) => {
-//   try {
-//     const response = await api.get('api/v1/user/groups', {
-//       headers: { Authorization: `Bearer ${token}` },
-//     });
-//     return processResponse(response);
-//   } catch (err) {
-//     return handleApiError(err);
-//   }
-// };
-
-// export const fetchUserMessages = async (token) => {
-//   try {
-//     const response = await api.get('api/v1/user/messages', {
-//       headers: { Authorization: `Bearer ${token}` },
-//     });
-//     return processResponse(response);
-//   } catch (err) {
-//     return handleApiError(err);
-//   }
-// };
-
-// export const fetchUserStats = async (token) => {
-//   try {
-//     const response = await api.get('api/v1/user/stats', {
-//       headers: { Authorization: `Bearer ${token}` },
-//     });
-//     return processResponse(response);
-//   } catch (err) {
-//     return handleApiError(err);
-//   }
-// };

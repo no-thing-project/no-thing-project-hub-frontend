@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useReducer } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -6,257 +6,257 @@ import {
   Snackbar,
   Typography,
   Button,
-  TextField,
   CircularProgress,
+  useTheme,
 } from '@mui/material';
-import { GroupAdd, Search } from '@mui/icons-material';
+import { GroupAdd } from '@mui/icons-material';
+import io from 'socket.io-client';
 import AppLayout from '../components/Layout/AppLayout';
 import LoadingSpinner from '../components/Layout/LoadingSpinner';
 import useAuth from '../hooks/useAuth';
 import useMessages from '../hooks/useMessages';
+import useConversations from '../hooks/useConversations';
+import useUploads from '../hooks/useUploads';
 import useSocial from '../hooks/useSocial';
 import { useNotification } from '../context/NotificationContext';
 import ProfileHeader from '../components/Headers/ProfileHeader';
-import ConversationsList from '../components/Messages/ConversationsList';
-import ChatView from '../components/Messages/ChatView';
+import ConversationsList from '../components/Messages/Conversations/ConversationsList';
+import ChatView from '../components/Messages/Chat/ChatView';
 import GroupChatModal from '../components/Messages/GroupChatModal';
+import ForwardMessageModal from '../components/Messages/ForwardMessageModal';
 
-// State reducer for complex interactions
-const initialState = {
-  selectedConversation: null, // Store full conversation object
-  searchQuery: '',
-  groupModalOpen: false,
-  success: '',
-  error: '',
-};
+const MemoizedConversationsList = React.memo(ConversationsList);
+const MemoizedChatView = React.memo(ChatView);
 
-const reducer = (state, action) => {
-  switch (action.type) {
-    case 'SELECT_CONVERSATION':
-      console.log('Selected conversation:', action.payload); // Debug log
-      return { ...state, selectedConversation: action.payload };
-    case 'SET_SEARCH_QUERY':
-      return { ...state, searchQuery: action.payload };
-    case 'TOGGLE_GROUP_MODAL':
-      return { ...state, groupModalOpen: action.payload };
-    case 'SET_SUCCESS':
-      return { ...state, success: action.payload, error: '' };
-    case 'SET_ERROR':
-      return { ...state, error: action.payload, success: '' };
-    case 'CLEAR_NOTIFICATIONS':
-      return { ...state, success: '', error: '' };
-    default:
-      return state;
-  }
-};
-
-/**
- * Messages page component
- * @returns {JSX.Element}
- */
 const MessagesPage = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
   const { showNotification } = useNotification();
   const { token, authData, isAuthenticated, handleLogout, loading: authLoading } = useAuth(navigate);
   const {
     conversations,
-    groupChats,
-    messages,
-    setMessages,
-    loading: messagesLoading,
-    error: messagesError,
-    pendingMedia,
-    sendNewMessage,
-    sendMediaMessage,
-    addPendingMedia,
-    clearPendingMedia,
-    fetchConversationMessages,
-    markRead,
-    deleteMsg,
-    editMsg,
-    searchMsgs,
+    setConversations,
+    selectedConversation,
+    setSelectedConversation,
+    loadConversations,
     createNewConversation,
-    updateConv,
+    deleteConv,
     archiveConv,
     unarchiveConv,
     muteConv,
     unmuteConv,
     pinConv,
     unpinConv,
-    deleteConv,
-    createNewGroupChat,
-    updateGroup,
-    addMembers,
-    removeMembers,
-    deleteGroup,
-    uploadMediaFile,
-    fetchMediaFile,
-    deleteMediaFile,
     getOrCreateConversation,
-  } = useMessages(token, authData?.anonymous_id, handleLogout, navigate);
+    loading: convLoading,
+    error: convError,
+    clearError: clearConvError,
+  } = useConversations({ token, userId: authData?.anonymous_id, handleLogout, navigate });
+  const {
+    messages,
+    setMessages,
+    loadMessages,
+    sendNewMessage,
+    sendTypingIndicator,
+    createNewPoll,
+    voteInPoll,
+    addMessageReaction,
+    markRead,
+    deleteMsg,
+    editMsg,
+    searchMsgs,
+    pinMsg,
+    unpinMsg,
+    loading: messagesLoading,
+    error: messagesError,
+    clearError: clearMessagesError,
+  } = useMessages({ token, userId: authData?.anonymous_id, handleLogout, navigate });
+  const {
+    uploads,
+    uploadMediaFile,
+    loading: uploadsLoading,
+    error: uploadsError,
+    clearError: clearUploadsError,
+  } = useUploads({ token, userId: authData?.anonymous_id, handleLogout, navigate });
   const { friends, getFriends, loading: socialLoading } = useSocial(token, handleLogout, navigate);
 
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [forwardModalOpen, setForwardModalOpen] = useState(false);
+  const [forwardMessage, setForwardMessage] = useState(null);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
   const [friendsFetched, setFriendsFetched] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
+  const [socket, setSocket] = useState(null);
 
-  // Clear state on authentication change
+  // Initialize socket.io
+  useEffect(() => {
+    if (!token || !isAuthenticated) return;
+    const socketInstance = io('/messages', {
+      auth: { token },
+      transports: ['websocket'],
+      reconnectionAttempts: 5,
+    });
+    setSocket(socketInstance);
+
+    return () => {
+      socketInstance.disconnect();
+    };
+  }, [token, isAuthenticated]);
+
+  // Handle real-time message updates
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewMessage = (message) => {
+      if (!message?.message_id || !message?.conversation_id) return;
+      setMessages((prev) => {
+        const validPrev = Array.isArray(prev) ? prev : [];
+        return [message, ...validPrev.filter((m) => m?.message_id !== message.message_id)];
+      });
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.conversation_id === message.conversation_id
+            ? {
+                ...conv,
+                lastMessage: message,
+                unreadCount:
+                  message.sender_id !== authData.anonymous_id && !message.is_read
+                    ? (conv.unreadCount || 0) + 1
+                    : conv.unreadCount,
+              }
+            : conv
+        )
+      );
+    };
+
+    socket.on('message', handleNewMessage);
+
+    return () => {
+      socket.off('message', handleNewMessage);
+    };
+  }, [socket, setMessages, setConversations, authData?.anonymous_id]);
+
+  const clearNotifications = useCallback(() => {
+    setSuccess('');
+    setError('');
+    clearMessagesError();
+    clearConvError();
+    clearUploadsError();
+  }, [clearMessagesError, clearConvError, clearUploadsError]);
+
   useEffect(() => {
     if (!isAuthenticated) {
-      dispatch({ type: 'SELECT_CONVERSATION', payload: null });
-      dispatch({ type: 'CLEAR_NOTIFICATIONS' });
+      clearNotifications();
+      navigate('/login');
+    } else if (token) {
+      loadConversations();
+      if (!friendsFetched && friends.length === 0) {
+        getFriends().then(() => setFriendsFetched(true)).catch(() => setError('Failed to load friends'));
+      }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, token, loadConversations, getFriends, clearNotifications, navigate, friendsFetched, friends]);
 
-  // Debounced search
   useEffect(() => {
-    const handler = setTimeout(() => {
-      if (state.searchQuery && state.selectedConversation) {
-        setIsSearching(true);
-        handleSearch(state.selectedConversation).finally(() => setIsSearching(false));
-      }
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [state.searchQuery, state.selectedConversation]);
+    if (selectedConversation?.conversation_id) {
+      loadMessages(selectedConversation.conversation_id);
+    }
+  }, [selectedConversation, loadMessages]);
 
-  // Load friends
-  useEffect(() => {
-    if (!isAuthenticated || !token || socialLoading || friendsFetched || friends.length > 0) return;
-    const fetchFriends = async () => {
-      try {
-        await getFriends();
-        setFriendsFetched(true);
-      } catch (err) {
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to load friends list' });
-        showNotification('Failed to load friends list', 'error');
-      }
-    };
-    fetchFriends();
-  }, [isAuthenticated, token, socialLoading, friends, friendsFetched, getFriends, showNotification]);
-
-  // Create new conversation
-  const handleCreateConversation = useCallback(
-    async (friendId) => {
-      try {
-        const newConv = await getOrCreateConversation(friendId);
-        dispatch({ type: 'SELECT_CONVERSATION', payload: newConv });
-        dispatch({ type: 'SET_SUCCESS', payload: 'New chat created!' });
-        await fetchConversationMessages(newConv.conversation_id, { page: 1, limit: 20 });
-      } catch (err) {
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to create chat' });
-        showNotification(err.message || 'Failed to create chat', 'error');
+  const handleSelectConversation = useCallback(
+    (conv) => {
+      setSelectedConversation(conv);
+      if (conv?.conversation_id) {
+        loadMessages(conv.conversation_id);
       }
     },
-    [getOrCreateConversation, fetchConversationMessages, showNotification]
-  );
-
-  const handleMarkRead = useCallback(
-    async (messageId) => {
-      try {
-        await markRead(messageId);
-        dispatch({ type: 'SET_SUCCESS', payload: 'Message marked as read!' });
-      } catch (err) {
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to mark as read' });
-        showNotification(err.message || 'Failed to mark as read', 'error');
-      }
-    },
-    [markRead, showNotification]
-  );
-
-  const handleDeleteMessage = useCallback(
-    async (messageId) => {
-      try {
-        await deleteMsg(messageId);
-        dispatch({ type: 'SET_SUCCESS', payload: 'Message deleted!' });
-      } catch (err) {
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to delete message' });
-        showNotification(err.message || 'Failed to delete message', 'error');
-      }
-    },
-    [deleteMsg, showNotification]
-  );
-
-  const handleEditMessage = useCallback(
-    async (messageId, newContent) => {
-      try {
-        await editMsg(messageId, newContent);
-        dispatch({ type: 'SET_SUCCESS', payload: 'Message edited!' });
-      } catch (err) {
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to edit message' });
-        showNotification(err.message || 'Failed to edit message', 'error');
-      }
-    },
-    [editMsg, showNotification]
+    [loadMessages, setSelectedConversation]
   );
 
   const handleCreateGroup = useCallback(
     async (name, members) => {
       try {
-        const group = await createNewGroupChat(name, members);
-        const groupConv = { conversation_id: `group:${group.group_id}`, ...group, isGroup: true };
-        dispatch({ type: 'SELECT_CONVERSATION', payload: groupConv });
-        dispatch({ type: 'SET_SUCCESS', payload: `Group ${group.name} created!` });
-        dispatch({ type: 'TOGGLE_GROUP_MODAL', payload: false });
-        await fetchConversationMessages(`group:${group.group_id}`, { page: 1, limit: 20 });
+        const group = await createNewConversation({
+          type: 'group',
+          name,
+          members,
+        });
+        setSuccess(`Group ${group.name} created!`);
+        setGroupModalOpen(false);
+        await loadConversations();
+        if (group?.conversation_id) {
+          await loadMessages(group.conversation_id);
+          setSelectedConversation(group);
+        }
       } catch (err) {
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to create group' });
+        setError('Failed to create group');
         showNotification(err.message || 'Failed to create group', 'error');
       }
     },
-    [createNewGroupChat, fetchConversationMessages, showNotification]
+    [createNewConversation, loadConversations, loadMessages, setSelectedConversation, showNotification]
   );
 
   const handleSendMessage = useCallback(
     async ({ conversationId, content, mediaFiles = [], replyTo }) => {
+      if (!conversationId) {
+        setError('No conversation selected');
+        return;
+      }
       try {
-        await sendMediaMessage(conversationId, content, mediaFiles, replyTo);
-        dispatch({ type: 'SET_SUCCESS', payload: 'Message sent!' });
+        const uploadedMedia = await Promise.all(
+          mediaFiles.map(async (file) => {
+            const { url, fileKey, contentType } = await uploadMediaFile(file);
+            return { url, fileKey, type: contentType.split('/')[0] };
+          })
+        );
+        const message = await sendNewMessage(conversationId, content, uploadedMedia, replyTo);
+        setSuccess('Message sent!');
+        return message;
       } catch (err) {
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to send message' });
+        setError('Failed to send message');
         showNotification(err.message || 'Failed to send message', 'error');
       }
     },
-    [sendMediaMessage, showNotification]
+    [sendNewMessage, uploadMediaFile, showNotification]
   );
 
-  const handleSearch = useCallback(
-    async (conversation) => {
+  const handleForwardMessage = useCallback(
+    (message) => {
+      setForwardMessage(message);
+      setForwardModalOpen(true);
+    },
+    []
+  );
+
+  const handleForwardConfirm = useCallback(
+    async (recipients) => {
+      if (!forwardMessage || !recipients.length) return;
       try {
-        const conversationId = conversation.isGroup ? `group:${conversation.group_id}` : conversation.conversation_id;
-        const results = await searchMsgs(conversationId, state.searchQuery);
-        setMessages(results?.messages || []);
-        return results;
+        await Promise.all(
+          recipients.map(async (recipientId) => {
+            const conv = await getOrCreateConversation(recipientId);
+            await sendNewMessage(conv.conversation_id, forwardMessage.content, forwardMessage.media);
+          })
+        );
+        setSuccess('Message forwarded!');
+        setForwardModalOpen(false);
+        setForwardMessage(null);
       } catch (err) {
-        dispatch({ type: 'SET_ERROR', payload: 'Failed to search messages' });
-        showNotification(err.message || 'Failed to search messages', 'error');
+        setError('Failed to forward message');
+        showNotification(err.message || 'Failed to forward message', 'error');
       }
     },
-    [state.searchQuery, searchMsgs, setMessages, showNotification]
+    [forwardMessage, sendNewMessage, getOrCreateConversation, showNotification]
   );
 
-  const recipient = useMemo(() => {
-    if (!state.selectedConversation) {
-      console.log('No conversation selected'); // Debug log
-      return null;
-    }
-    console.log('Recipient computed:', state.selectedConversation); // Debug log
-    return state.selectedConversation;
-  }, [state.selectedConversation]);
-
   const filteredMessages = useMemo(() => {
-    if (!state.selectedConversation) return [];
-    const { conversation_id, isGroup, group_id } = state.selectedConversation;
-    return messages.filter((m) =>
-      isGroup ? m.group_id === group_id : m.conversation_id === conversation_id
+    if (!selectedConversation?.conversation_id) return [];
+    const validMessages = (messages || []).filter(
+      (m) => m && m.message_id && m.conversation_id
     );
-  }, [messages, state.selectedConversation]);
+    return validMessages.filter((m) => m.conversation_id === selectedConversation.conversation_id);
+  }, [messages, selectedConversation]);
 
   if (authLoading) return <LoadingSpinner />;
-
-  if (!isAuthenticated) {
-    navigate('/login');
-    return null;
-  }
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
@@ -265,75 +265,81 @@ const MessagesPage = () => {
           maxWidth: { xs: '100%', md: 1500 },
           margin: '0 auto',
           p: { xs: 1, md: 2 },
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          bgcolor: theme.palette.background.default,
+          boxSizing: 'border-box',
         }}
         role="main"
         aria-label="Messages Page"
       >
         <ProfileHeader user={authData} isOwnProfile />
-        {(messagesError || state.error) && (
-          <Alert severity="error" onClose={() => dispatch({ type: 'CLEAR_NOTIFICATIONS' })} sx={{ mt: 2 }}>
-            {state.error || messagesError}
+        {(messagesError || convError || uploadsError || error) && (
+          <Alert
+            severity="error"
+            onClose={clearNotifications}
+            sx={{ mt: 2, borderRadius: 1 }}
+          >
+            {error || messagesError || convError || uploadsError}
           </Alert>
         )}
         <Box
           sx={{
             display: 'flex',
-            justifyContent: 'space-between',
+            justifyContent: 'flex-end',
             mb: 2,
             gap: 2,
+            alignItems: 'center',
           }}
         >
-          <TextField
-            variant="outlined"
-            placeholder="Search messages..."
-            value={state.searchQuery}
-            onChange={(e) => dispatch({ type: 'SET_SEARCH_QUERY', payload: e.target.value })}
-            sx={{ flexGrow: 1 }}
-            InputProps={{
-              endAdornment: isSearching ? <CircularProgress size={20} /> : <Search aria-hidden="true" />,
-            }}
-            aria-label="Search messages"
-          />
           <Button
             variant="contained"
-            startIcon={<GroupAdd />}
-            onClick={() => dispatch({ type: 'TOGGLE_GROUP_MODAL', payload: true })}
+            startIcon={<GroupAdd aria-hidden="true" />}
+            onClick={() => setGroupModalOpen(true)}
             aria-label="Create new group chat"
             disabled={friends.length === 0}
+            sx={{ minWidth: 'fit-content', borderRadius: 1, px: 3 }}
           >
-            Create Group Chat
+            Create Group
           </Button>
         </Box>
-        {!friendsFetched && socialLoading && (
-          <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', my: 2 }}>
-            Loading friends...
-          </Typography>
-        )}
         <Box
           sx={{
+            flex: 1,
             display: 'flex',
             flexDirection: { xs: 'column', md: 'row' },
             gap: 2,
+            overflow: 'hidden',
+            borderRadius: 1,
+            boxShadow: theme.shadows[2],
+            boxSizing: 'border-box',
           }}
         >
           <Box
             sx={{
               flex: { xs: '1 1 100%', md: '1 1 30%' },
               maxWidth: { md: '400px' },
+              bgcolor: theme.palette.background.paper,
+              borderRadius: 1,
+              overflowY: 'auto',
+              boxSizing: 'border-box',
             }}
             aria-label="Conversations list"
           >
-            {messagesLoading ? (
-              <CircularProgress aria-label="Loading conversations" />
+            {(convLoading || messagesLoading || uploadsLoading) ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                <CircularProgress aria-label="Loading conversations" />
+              </Box>
             ) : (
-              <ConversationsList
+              <MemoizedConversationsList
                 conversations={conversations}
-                groupChats={groupChats}
+                groupChats={conversations.filter((c) => c.type === 'group')}
                 friends={friends}
                 currentUserId={authData.anonymous_id}
-                onSelectConversation={(conv) => dispatch({ type: 'SELECT_CONVERSATION', payload: conv })}
-                selectedConversation={state.selectedConversation}
-                onDeleteGroupChat={deleteGroup}
+                onSelectConversation={handleSelectConversation}
+                selectedConversation={selectedConversation}
+                onDeleteGroupChat={deleteConv}
                 onDeleteConversation={deleteConv}
                 messages={messages}
                 getOrCreateConversation={getOrCreateConversation}
@@ -343,29 +349,45 @@ const MessagesPage = () => {
                 unarchiveConv={unarchiveConv}
                 muteConv={muteConv}
                 unmuteConv={unmuteConv}
+                markRead={markRead}
+                socket={socket}
               />
             )}
           </Box>
-          <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 70%' } }}>
-            {state.selectedConversation ? (
-              <ChatView
+          <Box
+            sx={{
+              flex: { xs: '1 1 100%', md: '1 1 70%' },
+              bgcolor: theme.palette.background.paper,
+              borderRadius: 1,
+              overflow: 'hidden',
+              boxSizing: 'border-box',
+            }}
+          >
+            {selectedConversation ? (
+              <MemoizedChatView
                 currentUserId={authData.anonymous_id}
-                recipient={recipient}
+                conversation={selectedConversation}
                 onSendMessage={sendNewMessage}
                 onSendMediaMessage={handleSendMessage}
-                onMarkRead={handleMarkRead}
-                onDeleteMessage={handleDeleteMessage}
-                onEditMessage={handleEditMessage}
+                onMarkRead={markRead}
+                onDeleteMessage={deleteMsg}
+                onEditMessage={editMsg}
+                onForwardMessage={handleForwardMessage}
                 token={token}
-                fetchMessagesList={fetchConversationMessages}
-                pendingMediaList={pendingMedia}
-                setPendingMediaFile={addPendingMedia}
-                clearPendingMedia={clearPendingMedia}
-                isGroupChat={state.selectedConversation.isGroup}
+                fetchMessagesList={loadMessages}
+                pendingMediaList={uploads}
+                setPendingMediaFile={uploadMediaFile}
+                clearPendingMedia={() => {}} // Placeholder for future implementation
                 friends={friends}
                 messages={filteredMessages}
                 setMessages={setMessages}
-                searchMessages={handleSearch}
+                searchMessages={searchMsgs}
+                onAddReaction={addMessageReaction}
+                onCreatePoll={createNewPoll}
+                onVotePoll={voteInPoll}
+                onPinMessage={pinMsg}
+                onUnpinMessage={unpinMsg}
+                onSendTyping={sendTypingIndicator}
               />
             ) : (
               <Typography
@@ -380,24 +402,31 @@ const MessagesPage = () => {
           </Box>
         </Box>
         <Snackbar
-          open={!!state.success || !!state.error}
+          open={!!success || !!error}
           autoHideDuration={3000}
-          onClose={() => dispatch({ type: 'CLEAR_NOTIFICATIONS' })}
+          onClose={clearNotifications}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         >
-          <Alert
-            severity={state.success ? 'success' : 'error'}
-            onClose={() => dispatch({ type: 'CLEAR_NOTIFICATIONS' })}
-          >
-            {state.success || state.error}
+          <Alert severity={success ? 'success' : 'error'} onClose={clearNotifications}>
+            {success || error}
           </Alert>
         </Snackbar>
         <GroupChatModal
-          open={state.groupModalOpen}
-          onClose={() => dispatch({ type: 'TOGGLE_GROUP_MODAL', payload: false })}
+          open={groupModalOpen}
+          onClose={() => setGroupModalOpen(false)}
           friends={friends}
           currentUserId={authData.anonymous_id}
           onCreate={handleCreateGroup}
+        />
+        <ForwardMessageModal
+          open={forwardModalOpen}
+          onClose={() => {
+            setForwardModalOpen(false);
+            setForwardMessage(null);
+          }}
+          friends={friends}
+          currentUserId={authData.anonymous_id}
+          onForward={handleForwardConfirm}
         />
       </Box>
     </AppLayout>

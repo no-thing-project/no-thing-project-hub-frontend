@@ -3,11 +3,6 @@ import PropTypes from 'prop-types';
 import { Box } from '@mui/material';
 import ChatInput from './ChatInput';
 
-/**
- * ChatFooter component as a container for ChatInput
- * @param {Object} props - Component props
- * @returns {JSX.Element}
- */
 const ChatFooter = ({
   conversationId,
   recipient,
@@ -22,6 +17,7 @@ const ChatFooter = ({
   currentUserId,
   friends,
   chatBackground,
+  onSendTyping,
 }) => {
   return (
     <Box
@@ -29,6 +25,7 @@ const ChatFooter = ({
         borderTop: '1px solid',
         borderColor: 'grey.300',
         bgcolor: 'background.paper',
+        flexShrink: 0,
       }}
       aria-label="Chat footer"
     >
@@ -46,6 +43,7 @@ const ChatFooter = ({
         currentUserId={currentUserId}
         friends={friends}
         chatBackground={chatBackground}
+        onSendTyping={onSendTyping}
       />
     </Box>
   );
@@ -64,9 +62,10 @@ ChatFooter.propTypes = {
   setPendingMediaFile: PropTypes.func.isRequired,
   clearPendingMedia: PropTypes.func.isRequired,
   replyToMessage: PropTypes.shape({
-    message_id: PropTypes.string.isRequired,
+    message_id: PropTypes.string,
     content: PropTypes.string,
     sender_id: PropTypes.string,
+    selectedText: PropTypes.string,
   }),
   setReplyToMessage: PropTypes.func.isRequired,
   isGroupChat: PropTypes.bool.isRequired,
@@ -79,6 +78,7 @@ ChatFooter.propTypes = {
     })
   ).isRequired,
   chatBackground: PropTypes.string,
+  onSendTyping: PropTypes.func.isRequired,
 };
 
 export default React.memo(ChatFooter);

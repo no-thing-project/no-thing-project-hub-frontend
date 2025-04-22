@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
@@ -8,15 +8,15 @@ import {
   MenuItem,
   Avatar,
   Chip,
+  useTheme,
+  Tooltip,
+  Button,
 } from '@mui/material';
-import { MoreVert, Reply, Edit, Delete, Forward } from '@mui/icons-material';
+import { MoreVert, Reply, Edit, Delete, Forward, Done, DoneAll, EmojiEmotions, InsertDriveFile } from '@mui/icons-material';
 import { format, isToday, isYesterday } from 'date-fns';
+import { motion } from 'framer-motion';
+import EmojiPicker from 'emoji-picker-react';
 
-/**
- * Formats timestamp for display
- * @param {string} timestamp - ISO timestamp
- * @returns {string} Formatted date/time
- */
 const formatTimestamp = (timestamp) => {
   const date = new Date(timestamp);
   if (isToday(date)) return format(date, 'h:mm a');
@@ -24,11 +24,19 @@ const formatTimestamp = (timestamp) => {
   return format(date, 'MMM d, yyyy h:mm a');
 };
 
-/**
- * MessageBubble component for rendering individual messages
- * @param {Object} props - Component props
- * @returns {JSX.Element}
- */
+const getFontStyles = (fontSize, fontStyle) => {
+  const sizeMap = {
+    small: '0.875rem',
+    medium: '1rem',
+    large: '1.125rem',
+  };
+  return {
+    fontSize: sizeMap[fontSize] || sizeMap.medium,
+    fontStyle: fontStyle === 'italic' ? 'italic' : 'normal',
+    fontWeight: fontStyle === 'bold' ? 'bold' : 'normal',
+  };
+};
+
 const MessageBubble = ({
   message,
   isSentByCurrentUser,
@@ -40,14 +48,22 @@ const MessageBubble = ({
   messages,
   setReplyToMessage,
   onForward,
+  onContextMenu,
   isGroupChat,
   friends,
   token,
+  onAddReaction,
+  onPinMessage,
+  onUnpinMessage,
+  chatSettings,
+  onVotePoll,
 }) => {
+  const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
+  const [emojiAnchorEl, setEmojiAnchorEl] = useState(null);
   const [mediaError, setMediaError] = useState(null);
+  const messageRef = useRef(null);
 
-  // Get sender info for group chats
   const sender = isGroupChat
     ? friends.find((f) => f.anonymous_id === message.sender_id) || {
         username: 'Unknown',
@@ -55,17 +71,28 @@ const MessageBubble = ({
     : null;
   const senderName = isGroupChat ? sender.username : recipient?.username || 'User';
 
-  // Handle menu actions
-  const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
+  const handleMenuOpen = (event) => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+  };
   const handleMenuClose = () => setAnchorEl(null);
 
+  const handleEmojiOpen = (event) => {
+    event.stopPropagation();
+    setEmojiAnchorEl(event.currentTarget);
+  };
+  const handleEmojiClose = () => setEmojiAnchorEl(null);
+
   const handleReply = useCallback(() => {
-    setReplyToMessage(message);
+    setReplyToMessage({ ...message, selectedText: null });
     handleMenuClose();
   }, [message, setReplyToMessage]);
 
   const handleEdit = useCallback(() => {
-    onEdit(message.message_id, prompt('Edit message:', message.content));
+    const newContent = prompt('Edit message:', message.content);
+    if (newContent && newContent !== message.content) {
+      onEdit(message.message_id, newContent);
+    }
     handleMenuClose();
   }, [message, onEdit]);
 
@@ -79,157 +106,401 @@ const MessageBubble = ({
     handleMenuClose();
   }, [message, onForward]);
 
-  // Cleanup for media elements
+  const handleReaction = useCallback(
+    (emojiObject) => {
+      const emoji = emojiObject.emoji;
+      const existingReaction = message.reactions?.find(
+        (r) => r.emoji === emoji && r.user_id === currentUserId
+      );
+      if (existingReaction) {
+        onAddReaction(message.message_id, emoji, true); // Remove reaction
+      } else {
+        onAddReaction(message.message_id, emoji, false); // Add reaction
+      }
+      handleEmojiClose();
+    },
+    [message, currentUserId, onAddReaction]
+  );
+
+  const handlePin = useCallback(() => {
+    onPinMessage(message.message_id);
+    handleMenuClose();
+  }, [message.message_id, onPinMessage]);
+
+  const handleUnpin = useCallback(() => {
+    onUnpinMessage(message.message_id);
+    handleMenuClose();
+  }, [message.message_id, onUnpinMessage]);
+
   useEffect(() => {
     return () => {
       setMediaError(null);
     };
   }, [message.message_id]);
 
+  useEffect(() => {
+    const ref = messageRef.current;
+    if (ref) {
+      ref.addEventListener('contextmenu', (e) => onContextMenu(e, message));
+      return () => ref.removeEventListener('contextmenu', (e) => onContextMenu(e, message));
+    }
+  }, [onContextMenu, message]);
+
+  const renderDeliveryStatus = () => {
+    if (!isSentByCurrentUser) return null;
+    if (message.is_read) {
+      return <DoneAll sx={{ fontSize: 14, color: theme.palette.primary.main }} />;
+    }
+    if (message.delivery_status === 'delivered') {
+      return <Done sx={{ fontSize: 14, color: theme.palette.grey[600] }} />;
+    }
+    return <Done sx={{ fontSize: 14, color: theme.palette.grey[400] }} />;
+  };
+
+  const getVideoStyle = () => {
+    switch (chatSettings?.videoShape) {
+      case 'circle':
+        return { borderRadius: '50%', overflow: 'hidden' };
+      case 'square':
+        return { borderRadius: '8px' };
+      case 'rectangle':
+      default:
+        return { borderRadius: '8px', aspectRatio: '16/9' };
+    }
+  };
+
+  const reactionCounts = message.reactions?.reduce((acc, r) => {
+    acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+    return acc;
+  }, {});
+
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: isSentByCurrentUser ? 'row-reverse' : 'row',
-        alignItems: 'flex-start',
-        mb: 2,
-        px: { xs: 1, md: 2 },
-      }}
-      aria-label={`Message from ${isSentByCurrentUser ? 'you' : senderName}`}
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.2 }}
     >
-      {isGroupChat && !isSentByCurrentUser && (
-        <Avatar
-          src={sender?.profile_image}
-          alt={`${senderName}'s avatar`}
-          sx={{ width: 32, height: 32, mr: 1, mt: 1 }}
-        >
-          {senderName.charAt(0).toUpperCase()}
-        </Avatar>
-      )}
       <Box
         sx={{
-          maxWidth: '70%',
-          bgcolor: isSentByCurrentUser ? 'primary.light' : 'grey.200',
-          borderRadius: 2,
-          p: 1,
-          position: 'relative',
+          display: 'flex',
+          flexDirection: isSentByCurrentUser ? 'row-reverse' : 'row',
+          alignItems: 'flex-end',
+          mb: { xs: 1, sm: 2 },
+          px: { xs: 1, sm: 2 },
+          maxWidth: '100%',
         }}
+        aria-label={`Message from ${isSentByCurrentUser ? 'you' : senderName}`}
       >
         {isGroupChat && !isSentByCurrentUser && (
-          <Typography variant="caption" sx={{ fontWeight: 'medium', mb: 0.5 }}>
-            {senderName}
-          </Typography>
+          <Avatar
+            src={sender?.profile_image}
+            alt={`${senderName}'s avatar`}
+            sx={{ width: 32, height: 32, mr: 1, mt: 2 }}
+          />
         )}
-        {message.replyTo && (
+        <Box
+          sx={{
+            maxWidth: { xs: '85%', sm: '70%' },
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: isSentByCurrentUser ? 'flex-end' : 'flex-start',
+          }}
+          ref={messageRef}
+        >
+          {isGroupChat && !isSentByCurrentUser && (
+            <Typography
+              variant="caption"
+              sx={{ mb: 0.5, color: theme.palette.text.secondary }}
+            >
+              {senderName}
+            </Typography>
+          )}
+          {message.replyTo && (
+            <Box
+              sx={{
+                bgcolor: theme.palette.grey[100],
+                p: 1,
+                borderRadius: 1,
+                mb: 1,
+                maxWidth: '100%',
+                cursor: 'pointer',
+              }}
+              onClick={() => {
+                const repliedMessage = messages.find((m) => m.message_id === message.replyTo);
+                if (repliedMessage) {
+                  const element = document.getElementById(`message-${repliedMessage.message_id}`);
+                  element?.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              aria-label="Replied message preview"
+            >
+              <Typography
+                variant="caption"
+                sx={{ color: theme.palette.text.secondary, display: 'block' }}
+              >
+                {messages.find((m) => m.message_id === message.replyTo)?.sender_id ===
+                currentUserId
+                  ? 'You'
+                  : friends.find((f) => f.anonymous_id === messages.find((m) => m.message_id === message.replyTo)?.sender_id)?.username || 'Unknown'}
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  color: theme.palette.text.primary,
+                  ...getFontStyles(chatSettings?.fontSize, chatSettings?.fontStyle),
+                }}
+              >
+                {message.selectedText ||
+                  messages.find((m) => m.message_id === message.replyTo)?.content?.slice(0, 50) ||
+                  'Media message'}
+              </Typography>
+            </Box>
+          )}
           <Box
             sx={{
-              bgcolor: 'grey.300',
-              p: 1,
-              borderRadius: 1,
-              mb: 1,
-              fontStyle: 'italic',
+              bgcolor: isSentByCurrentUser
+                ? theme.palette.primary.light
+                : theme.palette.grey[200],
+              p: { xs: 1, sm: 1.5 },
+              borderRadius: 2,
+              borderTopLeftRadius: isSentByCurrentUser ? 16 : 0,
+              borderTopRightRadius: isSentByCurrentUser ? 0 : 16,
+              boxShadow: theme.shadows[1],
+              maxWidth: '100%',
+              position: 'relative',
+              '&:hover .message-actions': {
+                opacity: 1,
+              },
             }}
-            aria-label="Replied message"
+            id={`message-${message.message_id}`}
+            aria-label="Message content"
           >
-            <Typography variant="caption">
-              {messages.find((m) => m.message_id === message.replyTo)?.content ||
-                'Original message'}
-            </Typography>
-          </Box>
-        )}
-        {message.content && (
-          <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
-            {message.content}
-          </Typography>
-        )}
-        {message.media?.map((media, index) => (
-          <Box key={index} sx={{ mt: 1 }}>
-            {media.type.startsWith('image') ? (
-              <img
-                src={media.url}
-                alt={`Media ${index + 1}`}
-                style={{
-                  maxWidth: '100%',
-                  borderRadius: '8px',
-                  display: 'block',
+            {message.content && (
+              <Typography
+                variant="body1"
+                sx={{
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  ...getFontStyles(chatSettings?.fontSize, chatSettings?.fontStyle),
                 }}
-                onError={() => setMediaError(`Failed to load image ${index + 1}`)}
-                loading="lazy"
-              />
-            ) : media.type.startsWith('video') ? (
-              <video
-                src={media.url}
-                controls
-                style={{ maxWidth: '100%', borderRadius: '8px' }}
-                onError={() => setMediaError(`Failed to load video ${index + 1}`)}
-              />
-            ) : (
-              <Chip label="Unsupported media" size="small" />
+              >
+                {message.content}
+              </Typography>
             )}
+            {message.media?.map((media, index) => (
+              <Box key={index} sx={{ mt: message.content ? 1 : 0, maxWidth: '100%' }}>
+                {media.type === 'image' && (
+                  <img
+                    src={media.url}
+                    alt={`Media ${index + 1}`}
+                    style={{
+                      maxWidth: '100%',
+                      borderRadius: 8,
+                      display: 'block',
+                      maxHeight: '300px',
+                      objectFit: 'contain',
+                    }}
+                    onError={() => setMediaError(`Failed to load image ${index + 1}`)}
+                    loading="lazy"
+                  />
+                )}
+                {media.type === 'video' && (
+                  <video
+                    controls
+                    src={media.url}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '300px',
+                      display: 'block',
+                      ...getVideoStyle(),
+                    }}
+                    onError={() => setMediaError(`Failed to load video ${index + 1}`)}
+                  />
+                )}
+                {media.type === 'file' && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                    <InsertDriveFile sx={{ mr: 1 }} />
+                    <a
+                      href={media.url}
+                      download
+                      style={{ color: theme.palette.primary.main, textDecoration: 'none' }}
+                    >
+                      {media.fileKey || 'Download File'}
+                    </a>
+                  </Box>
+                )}
+              </Box>
+            ))}
+            {message.poll && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  {message.poll.question}
+                </Typography>
+                {message.poll.options.map((option, idx) => (
+                  <Box key={idx} sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+                    <Typography variant="body2" sx={{ flex: 1 }}>
+                      {option.text} ({option.votes || 0} votes)
+                    </Typography>
+                    <Button
+                      size="small"
+                      onClick={() => onVotePoll(message.message_id, idx)}
+                      disabled={message.poll.votedBy?.includes(currentUserId)}
+                    >
+                      Vote
+                    </Button>
+                  </Box>
+                ))}
+              </Box>
+            )}
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: isSentByCurrentUser ? 'flex-end' : 'flex-start',
+                alignItems: 'center',
+                mt: 0.5,
+                gap: 0.5,
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{ color: theme.palette.text.secondary }}
+              >
+                {formatTimestamp(message.timestamp)}
+              </Typography>
+              {renderDeliveryStatus()}
+            </Box>
+            {message.reactions?.length > 0 && (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                {Object.entries(reactionCounts).map(([emoji, count]) => (
+                  <Chip
+                    key={emoji}
+                    label={`${emoji} ${count}`}
+                    size="small"
+                    onClick={() => handleReaction({ emoji })}
+                    sx={{
+                      bgcolor: message.reactions.some(
+                        (r) => r.emoji === emoji && r.user_id === currentUserId
+                      )
+                        ? theme.palette.primary.light
+                        : theme.palette.grey[300],
+                      cursor: 'pointer',
+                    }}
+                  />
+                ))}
+              </Box>
+            )}
+            <Box
+              className="message-actions"
+              sx={{
+                position: 'absolute',
+                top: 8,
+                right: isSentByCurrentUser ? 8 : undefined,
+                left: isSentByCurrentUser ? undefined : 8,
+                display: 'flex',
+                gap: 0.5,
+                opacity: 0,
+                transition: 'opacity 0.2s',
+              }}
+            >
+              <Tooltip title="React">
+                <IconButton
+                  size="small"
+                  onClick={handleEmojiOpen}
+                  aria-label="Add reaction"
+                >
+                  <EmojiEmotions fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Reply">
+                <IconButton
+                  size="small"
+                  onClick={handleReply}
+                  aria-label="Reply to message"
+                >
+                  <Reply fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="More options">
+                <IconButton
+                  size="small"
+                  onClick={handleMenuOpen}
+                  aria-label="Message options"
+                >
+                  <MoreVert fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
           </Box>
-        ))}
-        {mediaError && (
-          <Typography
-            variant="caption"
-            color="error"
-            sx={{ mt: 1, display: 'block' }}
-          >
-            {mediaError}
-          </Typography>
-        )}
-        <Typography
-          variant="caption"
-          sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}
-        >
-          {formatTimestamp(message.timestamp)}
-          {isSentByCurrentUser && (message.is_read ? ' · Seen' : ' · Sent')}
-        </Typography>
-        <IconButton
-          size="small"
-          onClick={handleMenuOpen}
-          sx={{
-            position: 'absolute',
-            top: 4,
-            right: isSentByCurrentUser ? 4 : undefined,
-            left: !isSentByCurrentUser ? 4 : undefined,
-          }}
-          aria-label="Message options"
-        >
-          <MoreVert />
-        </IconButton>
-        <Menu
-          anchorEl={anchorEl}
-          open={Boolean(anchorEl)}
-          onClose={handleMenuClose}
-          aria-label="Message actions menu"
-        >
-          <MenuItem onClick={handleReply} aria-label="Reply to message">
-            <Reply fontSize="small" sx={{ mr: 1 }} /> Reply
-          </MenuItem>
-          {isSentByCurrentUser && message.content && (
-            <MenuItem onClick={handleEdit} aria-label="Edit message">
-              <Edit fontSize="small" sx={{ mr: 1 }} /> Edit
-            </MenuItem>
+          {mediaError && (
+            <Typography
+              variant="caption"
+              color="error"
+              sx={{ mt: 0.5 }}
+            >
+              {mediaError}
+            </Typography>
           )}
-          {isSentByCurrentUser && (
-            <MenuItem onClick={handleDelete} aria-label="Delete message">
-              <Delete fontSize="small" sx={{ mr: 1 }} /> Delete
-            </MenuItem>
-          )}
-          <MenuItem onClick={handleForward} aria-label="Forward message">
-            <Forward fontSize="small" sx={{ mr: 1 }} /> Forward
-          </MenuItem>
-        </Menu>
+        </Box>
       </Box>
-    </Box>
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+        aria-label="Message options menu"
+      >
+        <MenuItem onClick={handleReply} aria-label="Reply to message">
+          Reply
+        </MenuItem>
+        <MenuItem onClick={handleForward} aria-label="Forward message">
+          Forward
+        </MenuItem>
+        {isSentByCurrentUser && (
+          <MenuItem onClick={handleEdit} aria-label="Edit message">
+            Edit
+          </MenuItem>
+        )}
+        {message.pinned ? (
+          <MenuItem onClick={handleUnpin} aria-label="Unpin message">
+            Unpin
+          </MenuItem>
+        ) : (
+          <MenuItem onClick={handlePin} aria-label="Pin message">
+            Pin
+          </MenuItem>
+        )}
+        <MenuItem
+          onClick={handleDelete}
+          sx={{ color: theme.palette.error.main }}
+          aria-label="Delete message"
+        >
+          Delete
+        </MenuItem>
+      </Menu>
+      <Menu
+        anchorEl={emojiAnchorEl}
+        open={Boolean(emojiAnchorEl)}
+        onClose={handleEmojiClose}
+        aria-label="Emoji picker"
+      >
+        <Box sx={{ p: 1 }}>
+          <EmojiPicker
+            onEmojiClick={handleReaction}
+            previewConfig={{ showPreview: false }}
+            width={300}
+            height={400}
+          />
+        </Box>
+      </Menu>
+    </motion.div>
   );
 };
 
 MessageBubble.propTypes = {
   message: PropTypes.shape({
     message_id: PropTypes.string.isRequired,
-    conversation_id: PropTypes.string,
-    group_id: PropTypes.string,
     content: PropTypes.string,
     timestamp: PropTypes.string.isRequired,
     is_read: PropTypes.bool,
@@ -238,10 +509,30 @@ MessageBubble.propTypes = {
     media: PropTypes.arrayOf(
       PropTypes.shape({
         url: PropTypes.string.isRequired,
-        type: PropTypes.string.isRequired,
+        type: PropTypes.oneOf(['image', 'video', 'file']).isRequired,
+        fileKey: PropTypes.string,
       })
     ),
     replyTo: PropTypes.string,
+    selectedText: PropTypes.string,
+    reactions: PropTypes.arrayOf(
+      PropTypes.shape({
+        emoji: PropTypes.string.isRequired,
+        user_id: PropTypes.string.isRequired,
+      })
+    ),
+    poll: PropTypes.shape({
+      question: PropTypes.string,
+      options: PropTypes.arrayOf(
+        PropTypes.shape({
+          text: PropTypes.string.isRequired,
+          votes: PropTypes.number,
+        })
+      ),
+      votedBy: PropTypes.arrayOf(PropTypes.string),
+    }),
+    pinned: PropTypes.bool,
+    delivery_status: PropTypes.oneOf(['sent', 'delivered', 'read']),
   }).isRequired,
   isSentByCurrentUser: PropTypes.bool.isRequired,
   onDelete: PropTypes.func.isRequired,
@@ -253,11 +544,11 @@ MessageBubble.propTypes = {
     group_id: PropTypes.string,
     name: PropTypes.string,
     username: PropTypes.string,
-    profile_image: PropTypes.string,
   }).isRequired,
   messages: PropTypes.arrayOf(PropTypes.object).isRequired,
   setReplyToMessage: PropTypes.func.isRequired,
   onForward: PropTypes.func.isRequired,
+  onContextMenu: PropTypes.func.isRequired,
   isGroupChat: PropTypes.bool.isRequired,
   friends: PropTypes.arrayOf(
     PropTypes.shape({
@@ -267,6 +558,14 @@ MessageBubble.propTypes = {
     })
   ).isRequired,
   token: PropTypes.string.isRequired,
+  onAddReaction: PropTypes.func.isRequired,
+  onPinMessage: PropTypes.func.isRequired,
+  onUnpinMessage: PropTypes.func.isRequired,
+  chatSettings: PropTypes.shape({
+    videoShape: PropTypes.oneOf(['square', 'circle', 'rectangle']),
+    fontSize: PropTypes.oneOf(['small', 'medium', 'large']),
+    fontStyle: PropTypes.oneOf(['normal', 'italic', 'bold']),
+  }),
 };
 
 export default React.memo(MessageBubble);

@@ -14,6 +14,7 @@ import {
   Paper,
   Alert,
   Chip,
+  useTheme,
 } from '@mui/material';
 import {
   Send,
@@ -27,12 +28,11 @@ import {
   Reply,
   Clear,
   EmojiEmotions,
-  Gif,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import EmojiPicker from 'emoji-picker-react';
-import RecorderModal from './RecorderModal';
-import { actionButtonStyles } from '../../styles/BaseStyles';
+import RecorderModal from '../RecorderModal';
+import { actionButtonStyles } from '../../../styles/BaseStyles';
 
 const inputAreaStyles = {
   p: { xs: 1, md: 2 },
@@ -42,13 +42,10 @@ const inputAreaStyles = {
   flexDirection: 'column',
   gap: { xs: 0.5, md: 1 },
   backgroundColor: 'grey.50',
+  boxSizing: 'border-box',
+  minHeight: 80, // Ensure input area doesn't collapse
 };
 
-/**
- * ChatInput component for handling message input and sending
- * @param {Object} props - Component props
- * @returns {JSX.Element}
- */
 const ChatInput = ({
   conversationId,
   recipient,
@@ -64,6 +61,7 @@ const ChatInput = ({
   friends,
   chatBackground,
 }) => {
+  const theme = useTheme();
   const [messageInput, setMessageInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingType, setRecordingType] = useState('voice');
@@ -78,7 +76,6 @@ const ChatInput = ({
   const chunksRef = useRef([]);
   const fileInputRef = useRef(null);
 
-  // Timer for recording duration
   useEffect(() => {
     if (isRecording) {
       const timer = setInterval(() => setRecordingTime((prev) => prev + 1), 1000);
@@ -87,7 +84,6 @@ const ChatInput = ({
     setRecordingTime(0);
   }, [isRecording]);
 
-  // Cleanup on conversation change or unmount
   useEffect(() => {
     return () => {
       clearPendingMedia();
@@ -96,7 +92,6 @@ const ChatInput = ({
     };
   }, [recipient, clearPendingMedia, setReplyToMessage]);
 
-  // Handle message sending
   const handleSend = useCallback(async () => {
     if (!messageInput.trim() && !pendingMediaList.length) return;
     setIsSending(true);
@@ -107,6 +102,7 @@ const ChatInput = ({
       content: messageInput.trim() || (pendingMediaList.length ? 'Media message' : ''),
       media: pendingMediaList,
       replyTo: replyToMessage?.message_id || null,
+      selectedText: replyToMessage?.selectedText || null,
     };
 
     try {
@@ -130,7 +126,6 @@ const ChatInput = ({
     setReplyToMessage,
   ]);
 
-  // Handle file upload
   const handleFileUpload = useCallback(
     (event, type) => {
       const files = Array.from(event.target.files);
@@ -141,7 +136,6 @@ const ChatInput = ({
     [setPendingMediaFile]
   );
 
-  // Start recording (voice or video)
   const startRecording = useCallback(
     async (type) => {
       try {
@@ -179,7 +173,6 @@ const ChatInput = ({
     [setPendingMediaFile]
   );
 
-  // Stop recording
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
@@ -187,7 +180,6 @@ const ChatInput = ({
     }
   }, []);
 
-  // Cancel recording
   const cancelRecording = useCallback(() => {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
@@ -203,7 +195,6 @@ const ChatInput = ({
     chunksRef.current = [];
   }, [stream]);
 
-  // Handle Enter key for sending
   const handleKeyPress = useCallback(
     (event) => {
       if (event.key === 'Enter' && !event.shiftKey) {
@@ -214,13 +205,11 @@ const ChatInput = ({
     [handleSend]
   );
 
-  // Format recording time
   const formatTime = (seconds) =>
     `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60)
       .toString()
       .padStart(2, '0')}`;
 
-  // Get sender name for group chat replies
   const getSenderName = useCallback(
     (senderId) => {
       if (senderId === currentUserId) return 'You';
@@ -230,11 +219,10 @@ const ChatInput = ({
     [currentUserId, friends]
   );
 
-  // Render right button (send or record)
   const renderRightButton = () => {
     if (isRecording) {
       return (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
           <Typography
             variant="caption"
             color="error"
@@ -267,7 +255,7 @@ const ChatInput = ({
             onClick={handleSend}
             startIcon={isSending ? <CircularProgress size={16} /> : <Send />}
             disabled={isSending}
-            sx={{ ...actionButtonStyles, minWidth: '100px' }}
+            sx={{ ...actionButtonStyles, minWidth: '100px', borderRadius: 1, flexShrink: 0 }}
             aria-label="Send message"
           >
             {isSending ? 'Sending...' : 'Send'}
@@ -276,7 +264,7 @@ const ChatInput = ({
       );
     }
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
         <Tooltip
           title={recordingType === 'video' ? 'Switch to Voice' : 'Switch to Video'}
         >
@@ -285,219 +273,267 @@ const ChatInput = ({
             onClick={() =>
               setRecordingType(recordingType === 'video' ? 'voice' : 'video')
             }
-            aria-label={`Switch to ${recordingType === 'video' ? 'voice' : 'video'}`}
+            aria-label={`Switch to ${recordingType === 'video' ? 'voice' : 'video'} recording`}
           >
             {recordingType === 'video' ? <Mic /> : <Videocam />}
           </IconButton>
         </Tooltip>
-        <Tooltip title={`Record ${recordingType === 'video' ? 'Video' : 'Voice'}`}>
+        <Tooltip title={`Start ${recordingType} Recording`}>
           <IconButton
             size="small"
             onClick={() => startRecording(recordingType)}
-            aria-label={`Record ${recordingType}`}
+            aria-label={`Start ${recordingType} recording`}
           >
-            {recordingType === 'video' ? <Videocam /> : <Mic />}
+            {recordingType === 'voice' ? <Mic /> : <Videocam />}
           </IconButton>
         </Tooltip>
       </Box>
     );
   };
 
-  // Handle emoji selection
-  const handleEmojiClick = useCallback(
-    (emoji) => {
-      setMessageInput((prev) => prev + emoji.emoji);
-      setEmojiAnchorEl(null);
-    },
-    []
-  );
+  const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
+  const handleMenuClose = () => setAnchorEl(null);
+
+  const handleEmojiOpen = (event) => setEmojiAnchorEl(event.currentTarget);
+  const handleEmojiClose = () => setEmojiAnchorEl(null);
+
+  const handleEmojiClick = (emojiObject) => {
+    setMessageInput((prev) => prev + emojiObject.emoji);
+    handleEmojiClose();
+  };
+
+  const removeMedia = (index) => {
+    const updatedMedia = pendingMediaList.filter((_, i) => i !== index);
+    clearPendingMedia();
+    updatedMedia.forEach((media) => setPendingMediaFile(media));
+  };
+
+  const renderReplyPreview = () => {
+    if (!replyToMessage) return null;
+    const senderName = getSenderName(replyToMessage.sender_id);
+    const content = replyToMessage.selectedText || replyToMessage.content;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 10 }}
+        transition={{ duration: 0.2 }}
+      >
+        <Paper
+          elevation={1}
+          sx={{
+            p: 1,
+            mb: 1,
+            bgcolor: 'grey.100',
+            borderLeft: '3px solid',
+            borderColor: 'primary.main',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderRadius: 1,
+            minHeight: 40,
+          }}
+          aria-label="Reply preview"
+        >
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+              Replying to {senderName}
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{ display: 'block', color: 'text.secondary', mt: 0.5 }}
+              noWrap
+            >
+              {content.length > 50 ? `${content.slice(0, 50)}...` : content}
+            </Typography>
+          </Box>
+          <IconButton
+            size="small"
+            onClick={() => setReplyToMessage(null)}
+            aria-label="Cancel reply"
+          >
+            <Clear />
+          </IconButton>
+        </Paper>
+      </motion.div>
+    );
+  };
+
+  const renderMediaPreview = () => {
+    if (!pendingMediaList.length) return null;
+
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 1,
+          overflowX: 'auto',
+          mb: 1,
+          p: 1,
+          bgcolor: 'grey.100',
+          borderRadius: 1,
+          minHeight: 100,
+        }}
+        aria-label="Media preview"
+      >
+        <AnimatePresence>
+          {pendingMediaList.map((media, index) => (
+            <motion.div
+              key={index}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Box sx={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
+                {media.type.startsWith('image') ? (
+                  <img
+                    src={media.preview}
+                    alt={`Preview ${index + 1}`}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      borderRadius: '8px',
+                    }}
+                  />
+                ) : media.type.startsWith('video') ? (
+                  <video
+                    src={media.preview}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      borderRadius: '8px',
+                    }}
+                  />
+                ) : (
+                  <Chip label="File" size="small" />
+                )}
+                <IconButton
+                  size="small"
+                  onClick={() => removeMedia(index)}
+                  sx={{
+                    position: 'absolute',
+                    top: -8,
+                    right: -8,
+                    bgcolor: 'error.main',
+                    color: 'white',
+                    '&:hover': { bgcolor: 'error.dark' },
+                  }}
+                  aria-label={`Remove media ${index + 1}`}
+                >
+                  <Clear fontSize="small" />
+                </IconButton>
+              </Box>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </Box>
+    );
+  };
 
   return (
-    <Box sx={{ ...inputAreaStyles, bgcolor: chatBackground || 'grey.50' }} aria-label="Chat input area">
+    <Box sx={inputAreaStyles}>
       {error && (
-        <Alert
-          severity="error"
-          onClose={() => setError(null)}
-          sx={{ mb: 1, width: '100%' }}
-          aria-live="assertive"
-        >
+        <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 1 }}>
           {error}
         </Alert>
       )}
-      <AnimatePresence>
-        {replyToMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            style={{ width: '100%' }}
-          >
-            <Paper
-              sx={{
-                p: 1,
-                mb: 1,
-                display: 'flex',
-                alignItems: 'center',
-                bgcolor: 'grey.100',
-                borderRadius: 1,
-              }}
-              aria-label="Reply to message"
-            >
-              <Avatar sx={{ mr: 1, bgcolor: 'primary.main' }}>
-                <Reply />
-              </Avatar>
-              <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
-                <Typography variant="caption" color="text.secondary">
-                  Replying to {isGroupChat ? getSenderName(replyToMessage.sender_id) : 'message'}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {replyToMessage.content?.length > 50
-                    ? `${replyToMessage.content.slice(0, 50)}...`
-                    : replyToMessage.content || 'Media'}
-                </Typography>
-              </Box>
-              <IconButton
-                size="small"
-                onClick={() => setReplyToMessage(null)}
-                aria-label="Cancel reply"
-              >
-                <Clear />
-              </IconButton>
-            </Paper>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {pendingMediaList.length > 0 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
-          {pendingMediaList.map((media, index) => (
-            <Chip
-              key={index}
-              label={media.name || media.file?.name || `Media ${index + 1}`}
-              onDelete={() => {
-                const newList = pendingMediaList.filter((_, i) => i !== index);
-                clearPendingMedia();
-                newList.forEach((file) => setPendingMediaFile(file));
-              }}
-              sx={{ maxWidth: '200px' }}
-              aria-label={`Remove ${media.name || `Media ${index + 1}`}`}
-            />
-          ))}
-        </Box>
-      )}
-      <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
-        <input
-          type="file"
-          multiple
-          hidden
-          ref={fileInputRef}
-          onChange={handleFileUpload}
-          accept="image/*,video/*,audio/*"
-          aria-label="Upload media"
-        />
-        <Tooltip title="More Options">
-          <IconButton
-            size="small"
-            onClick={(e) => setAnchorEl(e.currentTarget)}
-            disabled={isRecording || isSending}
-            aria-label="More options"
-          >
-            <MoreVert />
-          </IconButton>
-        </Tooltip>
-        <Menu
-          anchorEl={anchorEl}
-          open={Boolean(anchorEl)}
-          onClose={() => setAnchorEl(null)}
-          aria-label="Media options menu"
+      {renderReplyPreview()}
+      {renderMediaPreview()}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 40 }}>
+        <IconButton
+          onClick={handleEmojiOpen}
+          aria-label="Open emoji picker"
+          sx={{ alignSelf: 'center', flexShrink: 0 }}
         >
-          <MenuItem component="label">
-            <AttachFile sx={{ mr: 1 }} /> File
-            <input
-              type="file"
-              hidden
-              onChange={(e) => handleFileUpload(e, 'file')}
-            />
-          </MenuItem>
-          <MenuItem component="label">
-            <PhotoCamera sx={{ mr: 1 }} /> Photo
-            <input
-              type="file"
-              hidden
-              accept="image/*"
-              onChange={(e) => handleFileUpload(e, 'image')}
-            />
-          </MenuItem>
-          <MenuItem component="label">
-            <Videocam sx={{ mr: 1 }} /> Video
-            <input
-              type="file"
-              hidden
-              accept="video/*"
-              onChange={(e) => handleFileUpload(e, 'video')}
-            />
-          </MenuItem>
-          <MenuItem component="label">
-            <MusicNote sx={{ mr: 1 }} /> Audio
-            <input
-              type="file"
-              hidden
-              accept="audio/*"
-              onChange={(e) => handleFileUpload(e, 'voice')}
-            />
-          </MenuItem>
-        </Menu>
-        <Tooltip title="Add Emoji">
-          <IconButton
-            size="small"
-            onClick={(e) => setEmojiAnchorEl(e.currentTarget)}
-            disabled={isRecording || isSending}
-            aria-label="Add emoji"
-          >
-            <EmojiEmotions />
-          </IconButton>
-        </Tooltip>
-        <Menu
-          anchorEl={emojiAnchorEl}
-          open={Boolean(emojiAnchorEl)}
-          onClose={() => setEmojiAnchorEl(null)}
-          aria-label="Emoji picker"
-        >
-          <EmojiPicker onEmojiClick={handleEmojiClick} />
-        </Menu>
+          <EmojiEmotions />
+        </IconButton>
         <TextField
           fullWidth
-          variant="outlined"
-          placeholder="Type a message..."
-          value={messageInput}
-          onChange={(e) => setMessageInput(e.target.value)}
-          onKeyDown={handleKeyPress}
-          sx={{ backgroundColor: 'white', flex: 1 }}
-          disabled={isRecording || isSending}
           multiline
           maxRows={4}
-          inputProps={{ 'aria-label': 'Message input' }}
+          value={messageInput}
+          onChange={(e) => setMessageInput(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="Type a message..."
+          variant="outlined"
+          sx={{
+            bgcolor: 'white',
+            borderRadius: 1,
+            '& .MuiOutlinedInput-root': {
+              borderRadius: 1,
+              minHeight: 40,
+            },
+            flex: 1,
+            minWidth: 0,
+          }}
+          disabled={isRecording}
+          aria-label="Message input"
         />
+        <IconButton
+          onClick={handleMenuOpen}
+          aria-label="Open attachment menu"
+          sx={{ alignSelf: 'center', flexShrink: 0 }}
+        >
+          <AttachFile />
+        </IconButton>
         {renderRightButton()}
       </Box>
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+        aria-label="Attachment menu"
+      >
+        <MenuItem
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Upload photo"
+        >
+          <PhotoCamera sx={{ mr: 1 }} /> Photo
+        </MenuItem>
+        <MenuItem
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Upload video"
+        >
+          <Videocam sx={{ mr: 1 }} /> Video
+        </MenuItem>
+        <MenuItem
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Upload audio"
+        >
+          <MusicNote sx={{ mr: 1 }} /> Audio
+        </MenuItem>
+      </Menu>
+      <Menu
+        anchorEl={emojiAnchorEl}
+        open={Boolean(emojiAnchorEl)}
+        onClose={handleEmojiClose}
+        aria-label="Emoji picker"
+      >
+        <MenuItem sx={{ p: 0 }}>
+          <EmojiPicker onEmojiClick={handleEmojiClick} />
+        </MenuItem>
+      </Menu>
+      <input
+        type="file"
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        accept="image/*,video/*,audio/*"
+        onChange={(e) => handleFileUpload(e, 'media')}
+        multiple
+        aria-hidden="true"
+      />
       <RecorderModal
-        open={isModalOpen && recordingType === 'video'}
+        open={isModalOpen}
         onClose={cancelRecording}
         stream={stream}
         recordingTime={recordingTime}
         onStop={stopRecording}
         onCancel={cancelRecording}
       />
-      <style>
-        {`@keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }`}
-      </style>
     </Box>
   );
 };
@@ -511,13 +547,20 @@ ChatInput.propTypes = {
     username: PropTypes.string,
   }).isRequired,
   onSendMediaMessage: PropTypes.func.isRequired,
-  pendingMediaList: PropTypes.arrayOf(PropTypes.any).isRequired,
+  pendingMediaList: PropTypes.arrayOf(
+    PropTypes.shape({
+      file: PropTypes.instanceOf(File),
+      type: PropTypes.string,
+      preview: PropTypes.string,
+    })
+  ).isRequired,
   setPendingMediaFile: PropTypes.func.isRequired,
   clearPendingMedia: PropTypes.func.isRequired,
   replyToMessage: PropTypes.shape({
-    message_id: PropTypes.string.isRequired,
-    content: PropTypes.string,
+    message_id: PropTypes.string,
     sender_id: PropTypes.string,
+    content: PropTypes.string,
+    selectedText: PropTypes.string,
   }),
   setReplyToMessage: PropTypes.func.isRequired,
   isGroupChat: PropTypes.bool.isRequired,
@@ -529,7 +572,7 @@ ChatInput.propTypes = {
       username: PropTypes.string,
     })
   ).isRequired,
-  chatBackground: PropTypes.string,
+  chatBackground: PropTypes.string.isRequired,
 };
 
 export default React.memo(ChatInput);

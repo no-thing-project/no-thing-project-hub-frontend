@@ -17,28 +17,22 @@ import {
 } from '@mui/material';
 import { Search, Clear } from '@mui/icons-material';
 
-const GroupChatModal = ({ open, onClose, friends, currentUserId, onCreate }) => {
+const ForwardMessageModal = ({ open, onClose, friends, currentUserId, onForward }) => {
   const theme = useTheme();
-  const [groupName, setGroupName] = useState('');
-  const [selectedMembers, setSelectedMembers] = useState([]);
+  const [selectedRecipients, setSelectedRecipients] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const handleCreate = () => {
-    if (!groupName.trim()) {
-      alert('Please enter a group name.');
+  const handleForward = () => {
+    if (selectedRecipients.length === 0) {
+      alert('Please select at least one recipient.');
       return;
     }
-    if (selectedMembers.length === 0) {
-      alert('Please select at least one member.');
-      return;
-    }
-    onCreate(groupName, selectedMembers);
-    setGroupName('');
-    setSelectedMembers([]);
+    onForward(selectedRecipients);
+    onClose();
   };
 
-  const handleMemberChange = (event) => {
-    setSelectedMembers(event.target.value);
+  const handleRecipientChange = (event) => {
+    setSelectedRecipients(event.target.value);
   };
 
   const filteredFriends = friends.filter(
@@ -54,18 +48,10 @@ const GroupChatModal = ({ open, onClose, friends, currentUserId, onCreate }) => 
       onClose={onClose}
       fullWidth
       maxWidth="sm"
-      aria-labelledby="create-group-title"
+      aria-labelledby="forward-message-title"
     >
-      <DialogTitle id="create-group-title">Create Group Chat</DialogTitle>
+      <DialogTitle id="forward-message-title">Forward Message</DialogTitle>
       <DialogContent>
-        <TextField
-          fullWidth
-          label="Group Name"
-          value={groupName}
-          onChange={(e) => setGroupName(e.target.value)}
-          sx={{ mb: 2, bgcolor: 'white', borderRadius: 1 }}
-          aria-label="Group name"
-        />
         <TextField
           fullWidth
           variant="outlined"
@@ -85,23 +71,22 @@ const GroupChatModal = ({ open, onClose, friends, currentUserId, onCreate }) => 
               </InputAdornment>
             ),
           }}
-          aria-label="Search friends for group"
+          aria-label="Search friends to forward message"
         />
         <FormControl fullWidth>
           <Typography variant="body1" sx={{ mb: 1 }}>
-            Select Members
+            Select Recipients
           </Typography>
           <Select
             multiple
-            value={selectedMembers}
-            onChange={handleMemberChange}
+            value={selectedRecipients}
+            onChange={handleRecipientChange}
             renderValue={(selected) =>
               selected
                 .map((id) => friends.find((f) => f.anonymous_id === id)?.username)
                 .join(', ')
             }
             sx={{ bgcolor: 'white', borderRadius: 1 }}
-            aria-label="Select group members"
           >
             {filteredFriends.map((friend) => (
               <MenuItem key={friend.anonymous_id} value={friend.anonymous_id}>
@@ -112,23 +97,23 @@ const GroupChatModal = ({ open, onClose, friends, currentUserId, onCreate }) => 
         </FormControl>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} aria-label="Cancel group creation">
+        <Button onClick={onClose} aria-label="Cancel forwarding">
           Cancel
         </Button>
         <Button
-          onClick={handleCreate}
+          onClick={handleForward}
           variant="contained"
-          aria-label="Create group"
+          aria-label="Forward message"
           sx={{ borderRadius: 1 }}
         >
-          Create
+          Forward
         </Button>
       </DialogActions>
     </Dialog>
   );
 };
 
-GroupChatModal.propTypes = {
+ForwardMessageModal.propTypes = {
   open: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   friends: PropTypes.arrayOf(
@@ -138,7 +123,7 @@ GroupChatModal.propTypes = {
     })
   ).isRequired,
   currentUserId: PropTypes.string.isRequired,
-  onCreate: PropTypes.func.isRequired,
+  onForward: PropTypes.func.isRequired,
 };
 
-export default React.memo(GroupChatModal);
+export default React.memo(ForwardMessageModal);

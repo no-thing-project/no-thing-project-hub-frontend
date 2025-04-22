@@ -1,14 +1,9 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Typography, CircularProgress } from '@mui/material';
+import { Box, Typography, CircularProgress, Menu, MenuItem, useTheme } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
-import MessageBubble from './MessageBubble';
+import MessageBubble from '../MessageBubble';
 
-/**
- * Applies background styling based on chatBackground setting
- * @param {string} chatBackground - Background setting
- * @returns {Object} CSS styles
- */
 const getBackgroundStyle = (chatBackground) => ({
   lightGray: { backgroundColor: '#f5f5f5' },
   dark: { backgroundColor: '#333', color: 'white' },
@@ -16,11 +11,6 @@ const getBackgroundStyle = (chatBackground) => ({
   default: { backgroundColor: 'white' },
 }[chatBackground] || { backgroundColor: 'white' });
 
-/**
- * ChatMessages component for rendering conversation messages
- * @param {Object} props - Component props
- * @returns {JSX.Element}
- */
 const ChatMessages = ({
   messages,
   currentUserId,
@@ -38,22 +28,46 @@ const ChatMessages = ({
   isGroupChat,
   friends,
   token,
+  onAddReaction,
+  onCreatePoll,
+  onVotePoll,
+  onPinMessage,
+  onUnpinMessage,
 }) => {
+  const theme = useTheme();
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const observerRef = useRef(null);
+  const [contextMenu, setContextMenu] = useState({ anchorEl: null, selectedText: '', message: null });
 
-  // Handle infinite scroll
+  const handleContextMenu = useCallback((event, message) => {
+    const selection = window.getSelection();
+    const selectedText = selection.toString().trim();
+    if (selectedText) {
+      event.preventDefault();
+      setContextMenu({ anchorEl: event.currentTarget, selectedText, message });
+    }
+  }, []);
+
+  const handleContextMenuClose = useCallback(() => {
+    setContextMenu({ anchorEl: null, selectedText: '', message: null });
+  }, []);
+
+  const handleReplyText = useCallback(() => {
+    setReplyToMessage({ ...contextMenu.message, selectedText: contextMenu.selectedText });
+    handleContextMenuClose();
+  }, [contextMenu.message, contextMenu.selectedText, setReplyToMessage]);
+
   const handleIntersection = useCallback(
     (entries) => {
       if (entries[0].isIntersecting && hasMore && !isFetching) {
+        console.log('[ChatMessages] Loading more messages');
         loadMoreMessages();
       }
     },
     [hasMore, isFetching, loadMoreMessages]
   );
 
-  // Set up IntersectionObserver for loading more messages
   useEffect(() => {
     if (!chatContainerRef.current) return;
 
@@ -66,28 +80,26 @@ const ChatMessages = ({
     if (topElement) observerRef.current.observe(topElement);
 
     return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
+      if (observerRef.current) observerRef.current.disconnect();
     };
   }, [handleIntersection, messages]);
 
-  // Scroll to bottom when new messages arrive
   useEffect(() => {
     if (messages.length && !isFetching) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isFetching]);
 
-  // Mark unread messages as read
   useEffect(() => {
     if (messages.length) {
       const unreadMessages = messages.filter(
-        (m) => m.receiver_id === currentUserId && !m.is_read
+        (m) => m?.receiver_id === currentUserId && !m.is_read
       );
-      unreadMessages.forEach((m) => onMarkRead(m.message_id));
+      unreadMessages.forEach((m) => m?.message_id && onMarkRead(m.message_id));
     }
   }, [messages, currentUserId, onMarkRead]);
+
+  const pinnedMessages = messages.filter((m) => m?.pinned);
 
   return (
     <Box
@@ -95,19 +107,51 @@ const ChatMessages = ({
       sx={{
         flex: 1,
         overflowY: 'auto',
-        p: { xs: 1, md: 2 },
+        p: { xs: 1, sm: 2 },
         ...getBackgroundStyle(chatBackground),
         position: 'relative',
+        minHeight: '200px',
       }}
       aria-label="Chat messages"
     >
       <div style={{ height: '1px' }} aria-hidden="true" />
+      {pinnedMessages.length > 0 && (
+        <Box
+          sx={{
+            bgcolor: theme.palette.grey[100],
+            p: 1,
+            mb: 2,
+            borderRadius: 1,
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+            boxShadow: theme.shadows[1],
+          }}
+        >
+          <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+            Pinned Messages
+          </Typography>
+          {pinnedMessages.map((msg) => (
+            <Typography
+              key={msg.message_id}
+              variant="body2"
+              sx={{ display: 'block', mt: 0.5, cursor: 'pointer' }}
+              onClick={() => {
+                const element = document.getElementById(`message-${msg.message_id}`);
+                element?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
+              {msg.content?.length > 50 ? `${msg.content.slice(0, 50)}...` : msg.content || 'Media message'}
+            </Typography>
+          ))}
+        </Box>
+      )}
       {isFetching && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
           <CircularProgress size={24} aria-label="Loading more messages" />
         </Box>
       )}
-      {messages.length ? (
+      {messages.length > 0 ? (
         <AnimatePresence>
           {messages.map((msg) => (
             <motion.div
@@ -128,9 +172,20 @@ const ChatMessages = ({
                 messages={messages}
                 setReplyToMessage={setReplyToMessage}
                 onForward={onForwardMessage}
+                onContextMenu={handleContextMenu}
                 isGroupChat={isGroupChat}
                 friends={friends}
                 token={token}
+                onAddReaction={onAddReaction}
+                onCreatePoll={onCreatePoll}
+                onVotePoll={onVotePoll}
+                onPinMessage={onPinMessage}
+                onUnpinMessage={onUnpinMessage}
+                chatSettings={{
+                  videoShape: 'rectangle',
+                  fontSize: 'medium',
+                  fontStyle: 'normal',
+                }}
               />
             </motion.div>
           ))}
@@ -146,6 +201,19 @@ const ChatMessages = ({
         </Typography>
       )}
       <div ref={messagesEndRef} aria-hidden="true" />
+      <Menu
+        anchorEl={contextMenu.anchorEl}
+        open={Boolean(contextMenu.anchorEl)}
+        onClose={handleContextMenuClose}
+        aria-label="Text selection menu"
+      >
+        <MenuItem onClick={handleReplyText} aria-label="Reply to selected text">
+          Reply to Text
+        </MenuItem>
+        <MenuItem onClick={() => onForwardMessage(contextMenu.message)} aria-label="Forward message">
+          Forward
+        </MenuItem>
+      </Menu>
     </Box>
   );
 };
@@ -163,6 +231,8 @@ ChatMessages.propTypes = {
       receiver_id: PropTypes.string,
       media: PropTypes.array,
       replyTo: PropTypes.string,
+      pinned: PropTypes.bool,
+      delivery_status: PropTypes.string,
     })
   ).isRequired,
   currentUserId: PropTypes.string.isRequired,
@@ -190,6 +260,11 @@ ChatMessages.propTypes = {
     })
   ).isRequired,
   token: PropTypes.string.isRequired,
+  onAddReaction: PropTypes.func.isRequired,
+  onCreatePoll: PropTypes.func.isRequired,
+  onVotePoll: PropTypes.func.isRequired,
+  onPinMessage: PropTypes.func.isRequired,
+  onUnpinMessage: PropTypes.func.isRequired,
 };
 
 export default React.memo(ChatMessages);

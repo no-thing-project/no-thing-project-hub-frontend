@@ -9,11 +9,6 @@ import {
 } from '@mui/material';
 import { Settings } from '@mui/icons-material';
 
-/**
- * ChatHeader component for displaying conversation details
- * @param {Object} props - Component props
- * @returns {JSX.Element}
- */
 const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen }) => {
   // Determine display name and avatar
   const displayName = isGroupChat
