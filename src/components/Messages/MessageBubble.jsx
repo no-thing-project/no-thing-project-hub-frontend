@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
@@ -14,8 +14,9 @@ import {
 } from '@mui/material';
 import { MoreVert, Reply, Edit, Delete, Forward, Done, DoneAll, EmojiEmotions, InsertDriveFile } from '@mui/icons-material';
 import { format, isToday, isYesterday } from 'date-fns';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import EmojiPicker from 'emoji-picker-react';
+import { MESSAGE_CONSTANTS } from '../../constants/constants';
 
 const formatTimestamp = (timestamp) => {
   const date = new Date(timestamp);
@@ -57,6 +58,8 @@ const MessageBubble = ({
   onUnpinMessage,
   chatSettings,
   onVotePoll,
+  isHighlighted,
+  setHighlightedMessage,
 }) => {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
@@ -65,22 +68,35 @@ const MessageBubble = ({
   const messageRef = useRef(null);
 
   const sender = isGroupChat
-    ? friends.find((f) => f.anonymous_id === message.sender_id) || {
-        username: 'Unknown',
-      }
+    ? friends.find((f) => f.anonymous_id === message.sender_id) || { username: 'Unknown' }
     : null;
   const senderName = isGroupChat ? sender.username : recipient?.username || 'User';
+
+  // Memoize reaction counts
+  const reactionCounts = useMemo(() => {
+    return message.reactions?.reduce((acc, r) => {
+      acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+      return acc;
+    }, {});
+  }, [message.reactions]);
+
+  // Memoize total poll votes
+  const totalPollVotes = useMemo(() => {
+    return message.poll?.options.reduce((sum, opt) => sum + (opt.votes || 0), 0) || 0;
+  }, [message.poll]);
 
   const handleMenuOpen = (event) => {
     event.stopPropagation();
     setAnchorEl(event.currentTarget);
   };
+
   const handleMenuClose = () => setAnchorEl(null);
 
   const handleEmojiOpen = (event) => {
     event.stopPropagation();
     setEmojiAnchorEl(event.currentTarget);
   };
+
   const handleEmojiClose = () => setEmojiAnchorEl(null);
 
   const handleReply = useCallback(() => {
@@ -112,11 +128,7 @@ const MessageBubble = ({
       const existingReaction = message.reactions?.find(
         (r) => r.emoji === emoji && r.user_id === currentUserId
       );
-      if (existingReaction) {
-        onAddReaction(message.message_id, emoji, true); // Remove reaction
-      } else {
-        onAddReaction(message.message_id, emoji, false); // Add reaction
-      }
+      onAddReaction(message.message_id, emoji, !!existingReaction);
       handleEmojiClose();
     },
     [message, currentUserId, onAddReaction]
@@ -132,17 +144,18 @@ const MessageBubble = ({
     handleMenuClose();
   }, [message.message_id, onUnpinMessage]);
 
+  // Cleanup media error
   useEffect(() => {
-    return () => {
-      setMediaError(null);
-    };
+    return () => setMediaError(null);
   }, [message.message_id]);
 
+  // Attach context menu listener
   useEffect(() => {
     const ref = messageRef.current;
     if (ref) {
-      ref.addEventListener('contextmenu', (e) => onContextMenu(e, message));
-      return () => ref.removeEventListener('contextmenu', (e) => onContextMenu(e, message));
+      const handleContext = (e) => onContextMenu(e, message);
+      ref.addEventListener('contextmenu', handleContext);
+      return () => ref.removeEventListener('contextmenu', handleContext);
     }
   }, [onContextMenu, message]);
 
@@ -169,17 +182,16 @@ const MessageBubble = ({
     }
   };
 
-  const reactionCounts = message.reactions?.reduce((acc, r) => {
-    acc[r.emoji] = (acc[r.emoji] || 0) + 1;
-    return acc;
-  }, {});
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.2 }}
+      style={{
+        backgroundColor: isHighlighted ? theme.palette.action.selected : 'transparent',
+        transition: 'background-color 0.5s',
+      }}
     >
       <Box
         sx={{
@@ -197,6 +209,7 @@ const MessageBubble = ({
             src={sender?.profile_image}
             alt={`${senderName}'s avatar`}
             sx={{ width: 32, height: 32, mr: 1, mt: 2 }}
+            imgProps={{ loading: 'lazy' }}
           />
         )}
         <Box
@@ -231,16 +244,20 @@ const MessageBubble = ({
                 if (repliedMessage) {
                   const element = document.getElementById(`message-${repliedMessage.message_id}`);
                   element?.scrollIntoView({ behavior: 'smooth' });
+                  setHighlightedMessage(repliedMessage.message_id);
+                  setTimeout(() => setHighlightedMessage(null), MESSAGE_CONSTANTS.HIGHLIGHT_DURATION);
                 }
               }}
+              role="button"
+              tabIndex={0}
+              onKeyPress={(e) => e.key === 'Enter' && e.target.click()}
               aria-label="Replied message preview"
             >
               <Typography
                 variant="caption"
                 sx={{ color: theme.palette.text.secondary, display: 'block' }}
               >
-                {messages.find((m) => m.message_id === message.replyTo)?.sender_id ===
-                currentUserId
+                {messages.find((m) => m.message_id === message.replyTo)?.sender_id === currentUserId
                   ? 'You'
                   : friends.find((f) => f.anonymous_id === messages.find((m) => m.message_id === message.replyTo)?.sender_id)?.username || 'Unknown'}
               </Typography>
@@ -261,9 +278,7 @@ const MessageBubble = ({
           )}
           <Box
             sx={{
-              bgcolor: isSentByCurrentUser
-                ? theme.palette.primary.light
-                : theme.palette.grey[200],
+              bgcolor: isSentByCurrentUser ? theme.palette.primary.light : theme.palette.grey[200],
               p: { xs: 1, sm: 1.5 },
               borderRadius: 2,
               borderTopLeftRadius: isSentByCurrentUser ? 16 : 0,
@@ -271,9 +286,7 @@ const MessageBubble = ({
               boxShadow: theme.shadows[1],
               maxWidth: '100%',
               position: 'relative',
-              '&:hover .message-actions': {
-                opacity: 1,
-              },
+              '&:hover .message-actions': { opacity: 1 },
             }}
             id={`message-${message.message_id}`}
             aria-label="Message content"
@@ -291,7 +304,7 @@ const MessageBubble = ({
               </Typography>
             )}
             {message.media?.map((media, index) => (
-              <Box key={index} sx={{ mt: message.content ? 1 : 0, maxWidth: '100%' }}>
+              <Box key={`${message.message_id}-media-${index}`} sx={{ mt: message.content ? 1 : 0, maxWidth: '100%' }}>
                 {media.type === 'image' && (
                   <img
                     src={media.url}
@@ -318,6 +331,7 @@ const MessageBubble = ({
                       ...getVideoStyle(),
                     }}
                     onError={() => setMediaError(`Failed to load video ${index + 1}`)}
+                    loading="lazy"
                   />
                 )}
                 {media.type === 'file' && (
@@ -340,14 +354,20 @@ const MessageBubble = ({
                   {message.poll.question}
                 </Typography>
                 {message.poll.options.map((option, idx) => (
-                  <Box key={idx} sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
-                    <Typography variant="body2" sx={{ flex: 1 }}>
-                      {option.text} ({option.votes || 0} votes)
-                    </Typography>
+                  <Box key={`${message.message_id}-poll-${idx}`} sx={{ display: 'flex', alignItems: 'center', mt: 0.5, gap: 1 }}>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="body2">{option.text}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {totalPollVotes > 0
+                          ? `${((option.votes || 0) / totalPollVotes * 100).toFixed(1)}%`
+                          : '0%'} ({option.votes || 0} votes)
+                      </Typography>
+                    </Box>
                     <Button
                       size="small"
                       onClick={() => onVotePoll(message.message_id, idx)}
                       disabled={message.poll.votedBy?.includes(currentUserId)}
+                      variant="outlined"
                     >
                       Vote
                     </Button>
@@ -364,32 +384,41 @@ const MessageBubble = ({
                 gap: 0.5,
               }}
             >
-              <Typography
-                variant="caption"
-                sx={{ color: theme.palette.text.secondary }}
-              >
+              <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
                 {formatTimestamp(message.timestamp)}
               </Typography>
               {renderDeliveryStatus()}
             </Box>
             {message.reactions?.length > 0 && (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                {Object.entries(reactionCounts).map(([emoji, count]) => (
-                  <Chip
-                    key={emoji}
-                    label={`${emoji} ${count}`}
-                    size="small"
-                    onClick={() => handleReaction({ emoji })}
-                    sx={{
-                      bgcolor: message.reactions.some(
-                        (r) => r.emoji === emoji && r.user_id === currentUserId
-                      )
-                        ? theme.palette.primary.light
-                        : theme.palette.grey[300],
-                      cursor: 'pointer',
-                    }}
-                  />
-                ))}
+                <AnimatePresence>
+                  {Object.entries(reactionCounts || {}).map(([emoji, count]) => (
+                    <motion.div
+                      key={`${message.message_id}-reaction-${emoji}`}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Chip
+                        label={`${emoji} ${count}`}
+                        size="small"
+                        onClick={() => handleReaction({ emoji })}
+                        sx={{
+                          bgcolor: message.reactions.some(
+                            (r) => r.emoji === emoji && r.user_id === currentUserId
+                          )
+                            ? theme.palette.primary.light
+                            : theme.palette.grey[300],
+                          cursor: 'pointer',
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        onKeyPress={(e) => e.key === 'Enter' && handleReaction({ emoji })}
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </Box>
             )}
             <Box
@@ -406,40 +435,24 @@ const MessageBubble = ({
               }}
             >
               <Tooltip title="React">
-                <IconButton
-                  size="small"
-                  onClick={handleEmojiOpen}
-                  aria-label="Add reaction"
-                >
+                <IconButton size="small" onClick={handleEmojiOpen} aria-label="Add reaction">
                   <EmojiEmotions fontSize="small" />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Reply">
-                <IconButton
-                  size="small"
-                  onClick={handleReply}
-                  aria-label="Reply to message"
-                >
+                <IconButton size="small" onClick={handleReply} aria-label="Reply to message">
                   <Reply fontSize="small" />
                 </IconButton>
               </Tooltip>
               <Tooltip title="More options">
-                <IconButton
-                  size="small"
-                  onClick={handleMenuOpen}
-                  aria-label="Message options"
-                >
+                <IconButton size="small" onClick={handleMenuOpen} aria-label="Message options">
                   <MoreVert fontSize="small" />
                 </IconButton>
               </Tooltip>
             </Box>
           </Box>
           {mediaError && (
-            <Typography
-              variant="caption"
-              color="error"
-              sx={{ mt: 0.5 }}
-            >
+            <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
               {mediaError}
             </Typography>
           )}
@@ -451,25 +464,15 @@ const MessageBubble = ({
         onClose={handleMenuClose}
         aria-label="Message options menu"
       >
-        <MenuItem onClick={handleReply} aria-label="Reply to message">
-          Reply
-        </MenuItem>
-        <MenuItem onClick={handleForward} aria-label="Forward message">
-          Forward
-        </MenuItem>
+        <MenuItem onClick={handleReply} aria-label="Reply to message">Reply</MenuItem>
+        <MenuItem onClick={handleForward} aria-label="Forward message">Forward</MenuItem>
         {isSentByCurrentUser && (
-          <MenuItem onClick={handleEdit} aria-label="Edit message">
-            Edit
-          </MenuItem>
+          <MenuItem onClick={handleEdit} aria-label="Edit message">Edit</MenuItem>
         )}
         {message.pinned ? (
-          <MenuItem onClick={handleUnpin} aria-label="Unpin message">
-            Unpin
-          </MenuItem>
+          <MenuItem onClick={handleUnpin} aria-label="Unpin message">Unpin</MenuItem>
         ) : (
-          <MenuItem onClick={handlePin} aria-label="Pin message">
-            Pin
-          </MenuItem>
+          <MenuItem onClick={handlePin} aria-label="Pin message">Pin</MenuItem>
         )}
         <MenuItem
           onClick={handleDelete}
@@ -566,6 +569,9 @@ MessageBubble.propTypes = {
     fontSize: PropTypes.oneOf(['small', 'medium', 'large']),
     fontStyle: PropTypes.oneOf(['normal', 'italic', 'bold']),
   }),
+  onVotePoll: PropTypes.func.isRequired,
+  isHighlighted: PropTypes.bool,
+  setHighlightedMessage: PropTypes.func,
 };
 
 export default React.memo(MessageBubble);

@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import { GroupAdd } from '@mui/icons-material';
 import io from 'socket.io-client';
+import { throttle } from 'lodash';
 import AppLayout from '../components/Layout/AppLayout';
 import LoadingSpinner from '../components/Layout/LoadingSpinner';
 import useAuth from '../hooks/useAuth';
@@ -24,6 +25,22 @@ import ConversationsList from '../components/Messages/Conversations/Conversation
 import ChatView from '../components/Messages/Chat/ChatView';
 import GroupChatModal from '../components/Messages/GroupChatModal';
 import ForwardMessageModal from '../components/Messages/ForwardMessageModal';
+import { MESSAGE_CONSTANTS, SOCKET_EVENTS } from '../constants/constants';
+
+// Локалізація повідомлень
+const getLocalizedMessage = (key, params = {}) => {
+  const messages = {
+    en: {
+      [MESSAGE_CONSTANTS.ERRORS.NO_CONVERSATION]: 'No conversation selected.',
+      [MESSAGE_CONSTANTS.SUCCESS.MESSAGE_SENT]: 'Message sent successfully.',
+      [MESSAGE_CONSTANTS.ERRORS.MESSAGE_SEND]: 'Failed to send message.',
+      // Додайте інші повідомлення
+    },
+    // Додайте інші мови за потреби
+  };
+  const lang = 'en'; // TODO: Отримувати мову з контексту
+  return messages[lang][key] || key;
+};
 
 const MemoizedConversationsList = React.memo(ConversationsList);
 const MemoizedChatView = React.memo(ChatView);
@@ -78,7 +95,7 @@ const MessagesPage = () => {
     error: uploadsError,
     clearError: clearUploadsError,
   } = useUploads({ token, userId: authData?.anonymous_id, handleLogout, navigate });
-  const { friends, getFriends, loading: socialLoading } = useSocial(token, handleLogout, navigate);
+  const { friends, getFriends } = useSocial(token, handleLogout, navigate);
 
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [forwardModalOpen, setForwardModalOpen] = useState(false);
@@ -88,30 +105,45 @@ const MessagesPage = () => {
   const [friendsFetched, setFriendsFetched] = useState(false);
   const [socket, setSocket] = useState(null);
 
-  // Initialize socket.io
+  // Initialize socket.io with reconnection handling
   useEffect(() => {
     if (!token || !isAuthenticated) return;
     const socketInstance = io('/messages', {
       auth: { token },
       transports: ['websocket'],
-      reconnectionAttempts: 5,
+      reconnectionAttempts: MESSAGE_CONSTANTS.RECONNECTION_ATTEMPTS,
+      reconnectionDelay: MESSAGE_CONSTANTS.RECONNECTION_DELAY,
     });
     setSocket(socketInstance);
+
+    socketInstance.on('connect_error', (err) => {
+      console.error('Socket connection error:', err);
+      setError(getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.SOCKET_CONNECTION));
+    });
 
     return () => {
       socketInstance.disconnect();
     };
   }, [token, isAuthenticated]);
 
-  // Handle real-time message updates
+  // Handle real-time message updates with throttling
   useEffect(() => {
     if (!socket) return;
 
-    const handleNewMessage = (message) => {
-      if (!message?.message_id || !message?.conversation_id) return;
+    const handleNewMessage = throttle((message) => {
+      if (!message?.message_id || !message?.conversation_id) {
+        console.warn('Invalid message received:', message);
+        return;
+      }
       setMessages((prev) => {
         const validPrev = Array.isArray(prev) ? prev : [];
-        return [message, ...validPrev.filter((m) => m?.message_id !== message.message_id)];
+        // Prevent duplicates
+        if (validPrev.some((m) => m.message_id === message.message_id)) {
+          return validPrev;
+        }
+        return [message, ...validPrev].sort(
+          (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+        );
       });
       setConversations((prev) =>
         prev.map((conv) =>
@@ -127,12 +159,12 @@ const MessagesPage = () => {
             : conv
         )
       );
-    };
+    }, MESSAGE_CONSTANTS.THROTTLE_MS);
 
-    socket.on('message', handleNewMessage);
+    socket.on(SOCKET_EVENTS.MESSAGE, handleNewMessage);
 
     return () => {
-      socket.off('message', handleNewMessage);
+      socket.off(SOCKET_EVENTS.MESSAGE, handleNewMessage);
     };
   }, [socket, setMessages, setConversations, authData?.anonymous_id]);
 
@@ -151,7 +183,12 @@ const MessagesPage = () => {
     } else if (token) {
       loadConversations();
       if (!friendsFetched && friends.length === 0) {
-        getFriends().then(() => setFriendsFetched(true)).catch(() => setError('Failed to load friends'));
+        getFriends()
+          .then(() => setFriendsFetched(true))
+          .catch((err) => {
+            console.error('Failed to load friends:', err);
+            setError(getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.FRIENDS_LOAD));
+          });
       }
     }
   }, [isAuthenticated, token, loadConversations, getFriends, clearNotifications, navigate, friendsFetched, friends]);
@@ -174,13 +211,17 @@ const MessagesPage = () => {
 
   const handleCreateGroup = useCallback(
     async (name, members) => {
+      if (!name.trim() || members.length < 1) {
+        setError(getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.GROUP_VALIDATION));
+        return;
+      }
       try {
         const group = await createNewConversation({
           type: 'group',
           name,
           members,
         });
-        setSuccess(`Group ${group.name} created!`);
+        setSuccess(`${group.name} ${getLocalizedMessage(MESSAGE_CONSTANTS.SUCCESS.GROUP_CREATED)}`);
         setGroupModalOpen(false);
         await loadConversations();
         if (group?.conversation_id) {
@@ -188,8 +229,9 @@ const MessagesPage = () => {
           setSelectedConversation(group);
         }
       } catch (err) {
-        setError('Failed to create group');
-        showNotification(err.message || 'Failed to create group', 'error');
+        console.error('Group creation error:', err);
+        setError(getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.GROUP_CREATE));
+        showNotification(err.message || getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.GROUP_CREATE), 'error');
       }
     },
     [createNewConversation, loadConversations, loadMessages, setSelectedConversation, showNotification]
@@ -198,10 +240,30 @@ const MessagesPage = () => {
   const handleSendMessage = useCallback(
     async ({ conversationId, content, mediaFiles = [], replyTo }) => {
       if (!conversationId) {
-        setError('No conversation selected');
+        setError(getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.NO_CONVERSATION));
         return;
       }
       try {
+        // Optimistic update
+        const tempMessageId = `temp-${Date.now()}`;
+        const tempMessage = {
+          message_id: tempMessageId,
+          conversation_id: conversationId,
+          content,
+          media: mediaFiles,
+          sender_id: authData.anonymous_id,
+          timestamp: new Date().toISOString(),
+          is_read: false,
+          delivery_status: 'pending',
+          replyTo,
+        };
+        setMessages((prev) => {
+          const validPrev = Array.isArray(prev) ? prev : [];
+          return [...validPrev, tempMessage].sort(
+            (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+          );
+        });
+
         const uploadedMedia = await Promise.all(
           mediaFiles.map(async (file) => {
             const { url, fileKey, contentType } = await uploadMediaFile(file);
@@ -209,14 +271,25 @@ const MessagesPage = () => {
           })
         );
         const message = await sendNewMessage(conversationId, content, uploadedMedia, replyTo);
-        setSuccess('Message sent!');
+
+        // Replace temp message with server response
+        setMessages((prev) => {
+          const validPrev = Array.isArray(prev) ? prev : [];
+          return [
+            ...validPrev.filter((m) => m.message_id !== tempMessageId),
+            message,
+          ].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        });
+
+        setSuccess(getLocalizedMessage(MESSAGE_CONSTANTS.SUCCESS.MESSAGE_SENT));
         return message;
       } catch (err) {
-        setError('Failed to send message');
-        showNotification(err.message || 'Failed to send message', 'error');
+        console.error('Message send error:', err);
+        setError(getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.MESSAGE_SEND));
+        showNotification(err.message || getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.MESSAGE_SEND), 'error');
       }
     },
-    [sendNewMessage, uploadMediaFile, showNotification]
+    [sendNewMessage, uploadMediaFile, showNotification, authData?.anonymous_id, setMessages]
   );
 
   const handleForwardMessage = useCallback(
@@ -237,12 +310,13 @@ const MessagesPage = () => {
             await sendNewMessage(conv.conversation_id, forwardMessage.content, forwardMessage.media);
           })
         );
-        setSuccess('Message forwarded!');
+        setSuccess(getLocalizedMessage(MESSAGE_CONSTANTS.SUCCESS.MESSAGE_FORWARDED));
         setForwardModalOpen(false);
         setForwardMessage(null);
       } catch (err) {
-        setError('Failed to forward message');
-        showNotification(err.message || 'Failed to forward message', 'error');
+        console.error('Message forward error:', err);
+        setError(getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.MESSAGE_FORWARD));
+        showNotification(err.message || getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.MESSAGE_FORWARD), 'error');
       }
     },
     [forwardMessage, sendNewMessage, getOrCreateConversation, showNotification]
@@ -251,9 +325,9 @@ const MessagesPage = () => {
   const filteredMessages = useMemo(() => {
     if (!selectedConversation?.conversation_id) return [];
     const validMessages = (messages || []).filter(
-      (m) => m && m.message_id && m.conversation_id
+      (m) => m && m.message_id && m.conversation_id === selectedConversation.conversation_id
     );
-    return validMessages.filter((m) => m.conversation_id === selectedConversation.conversation_id);
+    return validMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   }, [messages, selectedConversation]);
 
   if (authLoading) return <LoadingSpinner />;
@@ -350,6 +424,7 @@ const MessagesPage = () => {
                 muteConv={muteConv}
                 unmuteConv={unmuteConv}
                 markRead={markRead}
+                setConversations={setConversations}
                 socket={socket}
               />
             )}
@@ -367,6 +442,7 @@ const MessagesPage = () => {
               <MemoizedChatView
                 currentUserId={authData.anonymous_id}
                 conversation={selectedConversation}
+                socket={socket}
                 onSendMessage={sendNewMessage}
                 onSendMediaMessage={handleSendMessage}
                 onMarkRead={markRead}
@@ -431,6 +507,10 @@ const MessagesPage = () => {
       </Box>
     </AppLayout>
   );
+};
+
+MessagesPage.propTypes = {
+  // PropTypes remain unchanged but moved to a separate file for modularity
 };
 
 export default React.memo(MessagesPage);

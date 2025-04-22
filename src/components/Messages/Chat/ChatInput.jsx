@@ -10,40 +10,74 @@ import {
   MenuItem,
   Typography,
   CircularProgress,
-  Avatar,
-  Paper,
   Alert,
-  Chip,
-  useTheme,
 } from '@mui/material';
 import {
   Send,
   Mic,
   Videocam,
-  MoreVert,
   AttachFile,
-  PhotoCamera,
-  MusicNote,
   Stop,
-  Reply,
   Clear,
   EmojiEmotions,
+  PhotoCamera,
+  MusicNote,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import EmojiPicker from 'emoji-picker-react';
 import RecorderModal from '../RecorderModal';
-import { actionButtonStyles } from '../../../styles/BaseStyles';
 
 const inputAreaStyles = {
-  p: { xs: 1, md: 2 },
-  borderTop: '1px solid',
-  borderColor: 'grey.300',
+  p: 2,
   display: 'flex',
   flexDirection: 'column',
-  gap: { xs: 0.5, md: 1 },
+  gap: 1,
   backgroundColor: 'grey.50',
-  boxSizing: 'border-box',
-  minHeight: 80, // Ensure input area doesn't collapse
+  borderRadius: '0 0 8px 8px',
+};
+
+const quickEmojis = ['😊', '👍', '❤️', '😂', '😍'];
+
+const useMessageSend = ({ conversationId, messageInput, pendingMediaList, replyToMessage, onSendMediaMessage, clearPendingMedia, setReplyToMessage }) => {
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  const handleSend = useCallback(async () => {
+    if (!messageInput.trim() && !pendingMediaList.length) return false;
+    setIsSending(true);
+    setError(null);
+
+    const messageData = {
+      conversationId,
+      content: messageInput.trim() || (pendingMediaList.length ? 'Media message' : ''),
+      media: pendingMediaList,
+      replyTo: replyToMessage?.message_id || null,
+      selectedText: replyToMessage?.selectedText || null,
+      thread_id: replyToMessage?.thread_id || null,
+    };
+
+    try {
+      await onSendMediaMessage(messageData);
+      clearPendingMedia();
+      setReplyToMessage(null);
+      return true;
+    } catch (err) {
+      setError('Failed to send message.');
+      console.error('Send message error:', err);
+      return false;
+    } finally {
+      setIsSending(false);
+    }
+  }, [messageInput, pendingMediaList, replyToMessage, conversationId, onSendMediaMessage, clearPendingMedia, setReplyToMessage]);
+
+  return { handleSend, isSending, error, setError };
 };
 
 const ChatInput = ({
@@ -59,9 +93,8 @@ const ChatInput = ({
   token,
   currentUserId,
   friends,
-  chatBackground,
+  socket,
 }) => {
-  const theme = useTheme();
   const [messageInput, setMessageInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingType, setRecordingType] = useState('voice');
@@ -70,11 +103,29 @@ const ChatInput = ({
   const [recordingTime, setRecordingTime] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [stream, setStream] = useState(null);
-  const [isSending, setIsSending] = useState(false);
-  const [error, setError] = useState(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const fileInputRef = useRef(null);
+
+  const { handleSend, isSending, error, setError } = useMessageSend({
+    conversationId,
+    messageInput,
+    pendingMediaList,
+    replyToMessage,
+    onSendMediaMessage,
+    clearPendingMedia,
+    setReplyToMessage,
+  });
+
+  // Typing indicator
+  useEffect(() => {
+    if (!socket || isGroupChat || !recipient?.anonymous_id) return;
+    if (messageInput.trim()) {
+      socket.emit('typing', { userId: currentUserId, conversationId, status: true });
+    } else {
+      socket.emit('typing', { userId: currentUserId, conversationId, status: false });
+    }
+  }, [socket, messageInput, isGroupChat, recipient?.anonymous_id, currentUserId, conversationId]);
 
   useEffect(() => {
     if (isRecording) {
@@ -92,86 +143,46 @@ const ChatInput = ({
     };
   }, [recipient, clearPendingMedia, setReplyToMessage]);
 
-  const handleSend = useCallback(async () => {
-    if (!messageInput.trim() && !pendingMediaList.length) return;
-    setIsSending(true);
-    setError(null);
+  const handleFileUpload = useCallback((event) => {
+    const files = Array.from(event.target.files);
+    files.forEach((file) => setPendingMediaFile(file));
+    setAnchorEl(null);
+    if (fileInputRef.current) fileInputRef.current.value = null;
+  }, [setPendingMediaFile]);
 
-    const messageData = {
-      conversationId,
-      content: messageInput.trim() || (pendingMediaList.length ? 'Media message' : ''),
-      media: pendingMediaList,
-      replyTo: replyToMessage?.message_id || null,
-      selectedText: replyToMessage?.selectedText || null,
-    };
-
+  const startRecording = useCallback(async (type) => {
     try {
-      await onSendMediaMessage(messageData);
-      setMessageInput('');
-      clearPendingMedia();
-      setReplyToMessage(null);
-    } catch (err) {
-      setError('Failed to send message. Please try again.');
-      console.error('Send message error:', err);
-    } finally {
-      setIsSending(false);
-    }
-  }, [
-    messageInput,
-    pendingMediaList,
-    replyToMessage,
-    conversationId,
-    onSendMediaMessage,
-    clearPendingMedia,
-    setReplyToMessage,
-  ]);
-
-  const handleFileUpload = useCallback(
-    (event, type) => {
-      const files = Array.from(event.target.files);
-      files.forEach((file) => setPendingMediaFile(file));
-      setAnchorEl(null);
-      if (fileInputRef.current) fileInputRef.current.value = null;
-    },
-    [setPendingMediaFile]
-  );
-
-  const startRecording = useCallback(
-    async (type) => {
-      try {
-        const mediaStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: type === 'video',
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: type === 'video',
+      });
+      setStream(mediaStream);
+      setIsRecording(true);
+      const recorder = new MediaRecorder(mediaStream);
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, {
+          type: type === 'voice' ? 'audio/webm' : 'video/webm',
         });
-        setStream(mediaStream);
-        setIsRecording(true);
-        const recorder = new MediaRecorder(mediaStream);
-        mediaRecorderRef.current = recorder;
-        chunksRef.current = [];
-        recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
-        recorder.onstop = () => {
-          const blob = new Blob(chunksRef.current, {
-            type: type === 'voice' ? 'audio/webm' : 'video/webm',
-          });
-          setPendingMediaFile({
-            file: new File([blob], `${type}_${Date.now()}.webm`, { type: blob.type }),
-            type,
-            preview: URL.createObjectURL(blob),
-          });
-          setIsRecording(false);
-          setIsModalOpen(false);
-          mediaStream.getTracks().forEach((track) => track.stop());
-          setStream(null);
-        };
-        recorder.start();
-        if (type === 'video') setIsModalOpen(true);
-      } catch (err) {
-        setError('Failed to start recording.');
-        console.error('Recording error:', err);
-      }
-    },
-    [setPendingMediaFile]
-  );
+        setPendingMediaFile({
+          file: new File([blob], `${type}_${Date.now()}.webm`, { type: blob.type }),
+          type,
+          preview: URL.createObjectURL(blob),
+        });
+        setIsRecording(false);
+        setIsModalOpen(false);
+        mediaStream.getTracks().forEach((track) => track.stop());
+        setStream(null);
+      };
+      recorder.start();
+      if (type === 'video') setIsModalOpen(true);
+    } catch (err) {
+      setError('Failed to start recording.');
+      console.error('Recording error:', err);
+    }
+  }, [setPendingMediaFile, setError]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current) {
@@ -195,39 +206,33 @@ const ChatInput = ({
     chunksRef.current = [];
   }, [stream]);
 
-  const handleKeyPress = useCallback(
-    (event) => {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        handleSend();
-      }
-    },
-    [handleSend]
-  );
+  const handleKeyPress = useCallback((event) => {
+    if (event.key === 'Enter' && !event.shiftKey && !isSending) {
+      event.preventDefault();
+      handleSend().then((success) => {
+        if (success) setMessageInput('');
+      });
+    }
+  }, [handleSend, isSending]);
 
   const formatTime = (seconds) =>
-    `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60)
-      .toString()
-      .padStart(2, '0')}`;
+    `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
 
-  const getSenderName = useCallback(
-    (senderId) => {
-      if (senderId === currentUserId) return 'You';
-      const friend = friends.find((f) => f.anonymous_id === senderId);
-      return friend?.username || 'Unknown';
-    },
-    [currentUserId, friends]
-  );
+  const getSenderName = useCallback((senderId) => {
+    if (senderId === currentUserId) return 'You';
+    const friend = friends.find((f) => f.anonymous_id === senderId);
+    return friend?.username || 'Unknown';
+  }, [currentUserId, friends]);
+
+  const handleQuickEmoji = (emoji) => {
+    setMessageInput((prev) => prev + emoji);
+  };
 
   const renderRightButton = () => {
     if (isRecording) {
       return (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-          <Typography
-            variant="caption"
-            color="error"
-            sx={{ animation: 'blink 1s infinite' }}
-          >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="caption" color="error">
             {formatTime(recordingTime)}
           </Typography>
           <Tooltip title={`Stop ${recordingType} Recording`}>
@@ -245,18 +250,13 @@ const ChatInput = ({
     }
     if (messageInput.trim() || pendingMediaList.length) {
       return (
-        <motion.div
-          initial={{ scale: 0.8 }}
-          animate={{ scale: 1 }}
-          transition={{ duration: 0.2 }}
-        >
+        <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} transition={{ duration: 0.2 }}>
           <Button
             variant="contained"
-            onClick={handleSend}
+            onClick={() => handleSend().then((success) => success && setMessageInput(''))}
             startIcon={isSending ? <CircularProgress size={16} /> : <Send />}
             disabled={isSending}
-            sx={{ ...actionButtonStyles, minWidth: '100px', borderRadius: 1, flexShrink: 0 }}
-            aria-label="Send message"
+            sx={{ minWidth: '100px', borderRadius: 1 }}
           >
             {isSending ? 'Sending...' : 'Send'}
           </Button>
@@ -264,26 +264,14 @@ const ChatInput = ({
       );
     }
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-        <Tooltip
-          title={recordingType === 'video' ? 'Switch to Voice' : 'Switch to Video'}
-        >
-          <IconButton
-            size="small"
-            onClick={() =>
-              setRecordingType(recordingType === 'video' ? 'voice' : 'video')
-            }
-            aria-label={`Switch to ${recordingType === 'video' ? 'voice' : 'video'} recording`}
-          >
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Tooltip title={recordingType === 'video' ? 'Switch to Voice' : 'Switch to Video'}>
+          <IconButton size="small" onClick={() => setRecordingType(recordingType === 'video' ? 'voice' : 'video')}>
             {recordingType === 'video' ? <Mic /> : <Videocam />}
           </IconButton>
         </Tooltip>
         <Tooltip title={`Start ${recordingType} Recording`}>
-          <IconButton
-            size="small"
-            onClick={() => startRecording(recordingType)}
-            aria-label={`Start ${recordingType} recording`}
-          >
+          <IconButton size="small" onClick={() => startRecording(recordingType)}>
             {recordingType === 'voice' ? <Mic /> : <Videocam />}
           </IconButton>
         </Tooltip>
@@ -302,155 +290,50 @@ const ChatInput = ({
     handleEmojiClose();
   };
 
-  const removeMedia = (index) => {
-    const updatedMedia = pendingMediaList.filter((_, i) => i !== index);
-    clearPendingMedia();
-    updatedMedia.forEach((media) => setPendingMediaFile(media));
-  };
-
-  const renderReplyPreview = () => {
-    if (!replyToMessage) return null;
-    const senderName = getSenderName(replyToMessage.sender_id);
-    const content = replyToMessage.selectedText || replyToMessage.content;
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 10 }}
-        transition={{ duration: 0.2 }}
-      >
-        <Paper
-          elevation={1}
-          sx={{
-            p: 1,
-            mb: 1,
-            bgcolor: 'grey.100',
-            borderLeft: '3px solid',
-            borderColor: 'primary.main',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            borderRadius: 1,
-            minHeight: 40,
-          }}
-          aria-label="Reply preview"
-        >
-          <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-              Replying to {senderName}
-            </Typography>
-            <Typography
-              variant="caption"
-              sx={{ display: 'block', color: 'text.secondary', mt: 0.5 }}
-              noWrap
-            >
-              {content.length > 50 ? `${content.slice(0, 50)}...` : content}
-            </Typography>
-          </Box>
-          <IconButton
-            size="small"
-            onClick={() => setReplyToMessage(null)}
-            aria-label="Cancel reply"
-          >
-            <Clear />
-          </IconButton>
-        </Paper>
-      </motion.div>
-    );
-  };
-
-  const renderMediaPreview = () => {
-    if (!pendingMediaList.length) return null;
-
-    return (
+  const renderReplyPreview = replyToMessage && (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}>
       <Box
-        sx={{
-          display: 'flex',
-          gap: 1,
-          overflowX: 'auto',
-          mb: 1,
-          p: 1,
-          bgcolor: 'grey.100',
-          borderRadius: 1,
-          minHeight: 100,
-        }}
-        aria-label="Media preview"
+        sx={{ p: 1, mb: 1, bgcolor: 'grey.100', borderLeft: '3px solid', borderColor: 'primary.main', borderRadius: 1 }}
       >
-        <AnimatePresence>
-          {pendingMediaList.map((media, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Box sx={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
-                {media.type.startsWith('image') ? (
-                  <img
-                    src={media.preview}
-                    alt={`Preview ${index + 1}`}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      borderRadius: '8px',
-                    }}
-                  />
-                ) : media.type.startsWith('video') ? (
-                  <video
-                    src={media.preview}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      borderRadius: '8px',
-                    }}
-                  />
-                ) : (
-                  <Chip label="File" size="small" />
-                )}
-                <IconButton
-                  size="small"
-                  onClick={() => removeMedia(index)}
-                  sx={{
-                    position: 'absolute',
-                    top: -8,
-                    right: -8,
-                    bgcolor: 'error.main',
-                    color: 'white',
-                    '&:hover': { bgcolor: 'error.dark' },
-                  }}
-                  aria-label={`Remove media ${index + 1}`}
-                >
-                  <Clear fontSize="small" />
-                </IconButton>
-              </Box>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+        <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+          Replying to {getSenderName(replyToMessage.sender_id)}
+        </Typography>
+        <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', mt: 0.5 }} noWrap>
+          {replyToMessage.content?.length > 50 ? `${replyToMessage.content.slice(0, 50)}...` : replyToMessage.content}
+        </Typography>
+        <IconButton size="small" onClick={() => setReplyToMessage(null)}>
+          <Clear />
+        </IconButton>
       </Box>
-    );
-  };
+    </motion.div>
+  );
 
   return (
     <Box sx={inputAreaStyles}>
       {error && (
-        <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 1 }}>
-          {error}
-        </Alert>
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+          <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 1 }}>
+            {error}
+          </Alert>
+        </motion.div>
       )}
-      {renderReplyPreview()}
-      {renderMediaPreview()}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 40 }}>
-        <IconButton
-          onClick={handleEmojiOpen}
-          aria-label="Open emoji picker"
-          sx={{ alignSelf: 'center', flexShrink: 0 }}
-        >
-          <EmojiEmotions />
-        </IconButton>
+      {renderReplyPreview}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          {quickEmojis.map((emoji) => (
+            <IconButton
+              key={emoji}
+              onClick={() => handleQuickEmoji(emoji)}
+              size="small"
+              disabled={isSending}
+            >
+              {emoji}
+            </IconButton>
+          ))}
+          <IconButton onClick={handleEmojiOpen} sx={{ alignSelf: 'center' }} disabled={isSending}>
+            <EmojiEmotions />
+          </IconButton>
+        </Box>
         <TextField
           fullWidth
           multiline
@@ -460,59 +343,26 @@ const ChatInput = ({
           onKeyPress={handleKeyPress}
           placeholder="Type a message..."
           variant="outlined"
-          sx={{
-            bgcolor: 'white',
-            borderRadius: 1,
-            '& .MuiOutlinedInput-root': {
-              borderRadius: 1,
-              minHeight: 40,
-            },
-            flex: 1,
-            minWidth: 0,
-          }}
-          disabled={isRecording}
-          aria-label="Message input"
+          sx={{ bgcolor: 'white', borderRadius: 1, '& .MuiOutlinedInput-root': { borderRadius: 1, minHeight: 40 } }}
+          disabled={isRecording || isSending}
         />
-        <IconButton
-          onClick={handleMenuOpen}
-          aria-label="Open attachment menu"
-          sx={{ alignSelf: 'center', flexShrink: 0 }}
-        >
+        <IconButton onClick={handleMenuOpen} sx={{ alignSelf: 'center' }} disabled={isSending}>
           <AttachFile />
         </IconButton>
         {renderRightButton()}
       </Box>
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-        aria-label="Attachment menu"
-      >
-        <MenuItem
-          onClick={() => fileInputRef.current?.click()}
-          aria-label="Upload photo"
-        >
+      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
+        <MenuItem onClick={() => fileInputRef.current?.click()}>
           <PhotoCamera sx={{ mr: 1 }} /> Photo
         </MenuItem>
-        <MenuItem
-          onClick={() => fileInputRef.current?.click()}
-          aria-label="Upload video"
-        >
+        <MenuItem onClick={() => fileInputRef.current?.click()}>
           <Videocam sx={{ mr: 1 }} /> Video
         </MenuItem>
-        <MenuItem
-          onClick={() => fileInputRef.current?.click()}
-          aria-label="Upload audio"
-        >
+        <MenuItem onClick={() => fileInputRef.current?.click()}>
           <MusicNote sx={{ mr: 1 }} /> Audio
         </MenuItem>
       </Menu>
-      <Menu
-        anchorEl={emojiAnchorEl}
-        open={Boolean(emojiAnchorEl)}
-        onClose={handleEmojiClose}
-        aria-label="Emoji picker"
-      >
+      <Menu anchorEl={emojiAnchorEl} open={Boolean(emojiAnchorEl)} onClose={handleEmojiClose}>
         <MenuItem sx={{ p: 0 }}>
           <EmojiPicker onEmojiClick={handleEmojiClick} />
         </MenuItem>
@@ -522,18 +372,10 @@ const ChatInput = ({
         ref={fileInputRef}
         style={{ display: 'none' }}
         accept="image/*,video/*,audio/*"
-        onChange={(e) => handleFileUpload(e, 'media')}
         multiple
-        aria-hidden="true"
+        onChange={handleFileUpload}
       />
-      <RecorderModal
-        open={isModalOpen}
-        onClose={cancelRecording}
-        stream={stream}
-        recordingTime={recordingTime}
-        onStop={stopRecording}
-        onCancel={cancelRecording}
-      />
+      <RecorderModal open={isModalOpen} onClose={cancelRecording} stream={stream} recordingTime={recordingTime} onStop={stopRecording} recordingType={recordingType} />
     </Box>
   );
 };
@@ -550,17 +392,18 @@ ChatInput.propTypes = {
   pendingMediaList: PropTypes.arrayOf(
     PropTypes.shape({
       file: PropTypes.instanceOf(File),
-      type: PropTypes.string,
       preview: PropTypes.string,
+      type: PropTypes.string,
     })
   ).isRequired,
   setPendingMediaFile: PropTypes.func.isRequired,
   clearPendingMedia: PropTypes.func.isRequired,
   replyToMessage: PropTypes.shape({
     message_id: PropTypes.string,
-    sender_id: PropTypes.string,
     content: PropTypes.string,
+    sender_id: PropTypes.string,
     selectedText: PropTypes.string,
+    thread_id: PropTypes.string,
   }),
   setReplyToMessage: PropTypes.func.isRequired,
   isGroupChat: PropTypes.bool.isRequired,
@@ -572,7 +415,7 @@ ChatInput.propTypes = {
       username: PropTypes.string,
     })
   ).isRequired,
-  chatBackground: PropTypes.string.isRequired,
+  socket: PropTypes.object,
 };
 
 export default React.memo(ChatInput);

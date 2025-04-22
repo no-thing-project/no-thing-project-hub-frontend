@@ -25,7 +25,7 @@ import {
   Alert,
 } from '@mui/material';
 import { PhotoCamera, Delete } from '@mui/icons-material';
-import { useTheme } from '@mui/material/styles';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const ChatSettingsModal = ({
   open,
@@ -43,7 +43,6 @@ const ChatSettingsModal = ({
   currentUserId,
   friends,
 }) => {
-  const theme = useTheme();
   const [tab, setTab] = useState('general');
   const [settings, setSettings] = useState({
     videoShape: initialSettings.videoShape || 'square',
@@ -60,6 +59,13 @@ const ChatSettingsModal = ({
   const fileInputRef = useRef(null);
 
   useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  useEffect(() => {
     setSettings({
       videoShape: initialSettings.videoShape || 'square',
       chatBackground: initialSettings.chatBackground || 'default',
@@ -74,12 +80,10 @@ const ChatSettingsModal = ({
 
   const handleChange = useCallback((key) => (event) => {
     setSettings((prev) => ({ ...prev, [key]: event.target.value }));
-    setError(null);
   }, []);
 
   const handleGroupChange = useCallback((key) => (event) => {
     setGroupSettings((prev) => ({ ...prev, [key]: event.target.value }));
-    setError(null);
   }, []);
 
   const handleAvatarUpload = useCallback((event) => {
@@ -94,6 +98,10 @@ const ChatSettingsModal = ({
   }, []);
 
   const handleSave = useCallback(async () => {
+    if (isGroupChat && !groupSettings.name.trim()) {
+      setError('Group name is required.');
+      return;
+    }
     setIsSaving(true);
     setError(null);
 
@@ -104,7 +112,7 @@ const ChatSettingsModal = ({
       await onSave(settings);
       onClose();
     } catch (err) {
-      setError('Failed to save settings. Please try again.');
+      setError('Failed to save settings.');
       console.error('Save settings error:', err);
     } finally {
       setIsSaving(false);
@@ -113,10 +121,13 @@ const ChatSettingsModal = ({
 
   const handleAddParticipant = useCallback(
     async (friendId) => {
+      setIsSaving(true);
       try {
         await onAddParticipant(friendId);
       } catch (err) {
         setError('Failed to add participant.');
+      } finally {
+        setIsSaving(false);
       }
     },
     [onAddParticipant]
@@ -124,10 +135,13 @@ const ChatSettingsModal = ({
 
   const handleRemoveParticipant = useCallback(
     async (participantId) => {
+      setIsSaving(true);
       try {
         await onRemoveParticipant(participantId);
       } catch (err) {
         setError('Failed to remove participant.');
+      } finally {
+        setIsSaving(false);
       }
     },
     [onRemoveParticipant]
@@ -135,10 +149,13 @@ const ChatSettingsModal = ({
 
   const handleRoleChange = useCallback(
     async (participantId, role) => {
+      setIsSaving(true);
       try {
         await onChangeRole(participantId, role);
       } catch (err) {
         setError('Failed to change role.');
+      } finally {
+        setIsSaving(false);
       }
     },
     [onChangeRole]
@@ -150,20 +167,21 @@ const ChatSettingsModal = ({
       onClose={onClose}
       fullWidth
       maxWidth="sm"
-      aria-labelledby="chat-settings-title"
-      sx={{ '& .MuiDialog-paper': { boxSizing: 'border-box', minHeight: 400 } }}
+      sx={{ '& .MuiDialog-paper': { minHeight: 400 } }}
     >
-      <DialogTitle id="chat-settings-title">Chat Settings</DialogTitle>
+      <DialogTitle>Chat Settings</DialogTitle>
       <Tabs value={tab} onChange={(e, newValue) => setTab(newValue)} centered>
         <Tab label="General" value="general" />
         {isGroupChat && <Tab label="Participants" value="participants" />}
         <Tab label="Appearance" value="appearance" />
       </Tabs>
-      <DialogContent sx={{ p: 2, minHeight: 200 }}>
+      <DialogContent sx={{ p: 2 }}>
         {error && (
-          <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
-            {error}
-          </Alert>
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          </motion.div>
         )}
         {tab === 'general' && isGroupChat && (
           <>
@@ -173,8 +191,8 @@ const ChatSettingsModal = ({
                 variant="outlined"
                 startIcon={<PhotoCamera />}
                 onClick={() => fileInputRef.current?.click()}
-                aria-label="Upload group avatar"
                 sx={{ flexShrink: 0 }}
+                disabled={isSaving}
               >
                 Change Avatar
               </Button>
@@ -184,7 +202,6 @@ const ChatSettingsModal = ({
                 style={{ display: 'none' }}
                 accept="image/*"
                 onChange={handleAvatarUpload}
-                aria-hidden="true"
               />
             </Box>
             <TextField
@@ -194,8 +211,9 @@ const ChatSettingsModal = ({
               onChange={handleGroupChange('name')}
               sx={{ mb: 2 }}
               disabled={isSaving}
-              aria-label="Group name"
               inputProps={{ maxLength: 50 }}
+              error={!groupSettings.name.trim()}
+              helperText={!groupSettings.name.trim() ? 'Group name is required' : ''}
             />
           </>
         )}
@@ -210,7 +228,6 @@ const ChatSettingsModal = ({
                 value=""
                 onChange={(e) => handleAddParticipant(e.target.value)}
                 disabled={isSaving}
-                aria-label="Add participant"
               >
                 {friends
                   .filter((f) => !participants.some((p) => p.anonymous_id === f.anonymous_id))
@@ -227,7 +244,6 @@ const ChatSettingsModal = ({
                   <ListItemText
                     primary={participant.username || `User (${participant.anonymous_id})`}
                     secondary={participant.role}
-                    primaryTypographyProps={{ noWrap: true }}
                   />
                   <ListItemSecondaryAction sx={{ display: 'flex', gap: 1 }}>
                     <FormControl size="small">
@@ -235,7 +251,6 @@ const ChatSettingsModal = ({
                         value={participant.role || 'member'}
                         onChange={(e) => handleRoleChange(participant.anonymous_id, e.target.value)}
                         disabled={isSaving || participant.anonymous_id === currentUserId}
-                        aria-label={`Change role for ${participant.username}`}
                       >
                         <MenuItem value="admin">Admin</MenuItem>
                         <MenuItem value="member">Member</MenuItem>
@@ -245,7 +260,6 @@ const ChatSettingsModal = ({
                       <IconButton
                         onClick={() => handleRemoveParticipant(participant.anonymous_id)}
                         disabled={isSaving}
-                        aria-label={`Remove ${participant.username}`}
                       >
                         <Delete />
                       </IconButton>
@@ -258,10 +272,9 @@ const ChatSettingsModal = ({
         )}
         {tab === 'appearance' && (
           <>
-            <FormControl fullWidth sx={{ mb: 2 }} aria-label="Video shape selector">
-              <InputLabel id="video-shape-label">Video Shape</InputLabel>
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>Video Shape</InputLabel>
               <Select
-                labelId="video-shape-label"
                 value={settings.videoShape}
                 label="Video Shape"
                 onChange={handleChange('videoShape')}
@@ -272,10 +285,9 @@ const ChatSettingsModal = ({
                 <MenuItem value="rectangle">Rectangle</MenuItem>
               </Select>
             </FormControl>
-            <FormControl fullWidth sx={{ mb: 2 }} aria-label="Chat background selector">
-              <InputLabel id="chat-background-label">Chat Background</InputLabel>
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>Chat Background</InputLabel>
               <Select
-                labelId="chat-background-label"
                 value={settings.chatBackground}
                 label="Chat Background"
                 onChange={handleChange('chatBackground')}
@@ -287,10 +299,9 @@ const ChatSettingsModal = ({
                 <MenuItem value="nature">Nature</MenuItem>
               </Select>
             </FormControl>
-            <FormControl fullWidth sx={{ mb: 2 }} aria-label="Font size selector">
-              <InputLabel id="font-size-label">Font Size</InputLabel>
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>Font Size</InputLabel>
               <Select
-                labelId="font-size-label"
                 value={settings.fontSize}
                 label="Font Size"
                 onChange={handleChange('fontSize')}
@@ -301,10 +312,9 @@ const ChatSettingsModal = ({
                 <MenuItem value="large">Large</MenuItem>
               </Select>
             </FormControl>
-            <FormControl fullWidth aria-label="Font style selector">
-              <InputLabel id="font-style-label">Font Style</InputLabel>
+            <FormControl fullWidth>
+              <InputLabel>Font Style</InputLabel>
               <Select
-                labelId="font-style-label"
                 value={settings.fontStyle}
                 label="Font Style"
                 onChange={handleChange('fontStyle')}
@@ -319,19 +329,14 @@ const ChatSettingsModal = ({
         )}
       </DialogContent>
       <DialogActions sx={{ p: 2 }}>
-        <Button
-          onClick={onClose}
-          disabled={isSaving}
-          aria-label="Cancel settings changes"
-        >
+        <Button onClick={onClose} disabled={isSaving}>
           Cancel
         </Button>
         <Button
           onClick={handleSave}
           variant="contained"
-          disabled={isSaving}
-          startIcon={isSaving ? <CircularProgress size={16} /> : null}
-          aria-label="Save settings"
+          disabled={isSaving || (isGroupChat && !groupSettings.name.trim())}
+          startIcon={isSaving ? <CircularProgress size="16" /> : null}
         >
           {isSaving ? 'Saving...' : 'Save'}
         </Button>

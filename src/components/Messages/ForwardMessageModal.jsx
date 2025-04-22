@@ -13,12 +13,10 @@ import {
   MenuItem,
   InputAdornment,
   IconButton,
-  useTheme,
 } from '@mui/material';
 import { Search, Clear } from '@mui/icons-material';
 
 const ForwardMessageModal = ({ open, onClose, friends, currentUserId, onForward }) => {
-  const theme = useTheme();
   const [selectedRecipients, setSelectedRecipients] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -29,10 +27,6 @@ const ForwardMessageModal = ({ open, onClose, friends, currentUserId, onForward 
     }
     onForward(selectedRecipients);
     onClose();
-  };
-
-  const handleRecipientChange = (event) => {
-    setSelectedRecipients(event.target.value);
   };
 
   const filteredFriends = friends.filter(
@@ -48,9 +42,8 @@ const ForwardMessageModal = ({ open, onClose, friends, currentUserId, onForward 
       onClose={onClose}
       fullWidth
       maxWidth="sm"
-      aria-labelledby="forward-message-title"
     >
-      <DialogTitle id="forward-message-title">Forward Message</DialogTitle>
+      <DialogTitle>Forward Message</DialogTitle>
       <DialogContent>
         <TextField
           fullWidth
@@ -63,15 +56,14 @@ const ForwardMessageModal = ({ open, onClose, friends, currentUserId, onForward 
             endAdornment: (
               <InputAdornment position="end">
                 {searchQuery && (
-                  <IconButton onClick={() => setSearchQuery('')} aria-label="Clear search">
+                  <IconButton onClick={() => setSearchQuery('')}>
                     <Clear />
                   </IconButton>
                 )}
-                <Search aria-hidden="true" />
+                <Search />
               </InputAdornment>
             ),
           }}
-          aria-label="Search friends to forward message"
         />
         <FormControl fullWidth>
           <Typography variant="body1" sx={{ mb: 1 }}>
@@ -80,7 +72,7 @@ const ForwardMessageModal = ({ open, onClose, friends, currentUserId, onForward 
           <Select
             multiple
             value={selectedRecipients}
-            onChange={handleRecipientChange}
+            onChange={(e) => setSelectedRecipients(e.target.value)}
             renderValue={(selected) =>
               selected
                 .map((id) => friends.find((f) => f.anonymous_id === id)?.username)
@@ -97,13 +89,10 @@ const ForwardMessageModal = ({ open, onClose, friends, currentUserId, onForward 
         </FormControl>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} aria-label="Cancel forwarding">
-          Cancel
-        </Button>
+        <Button onClick={onClose}>Cancel</Button>
         <Button
           onClick={handleForward}
           variant="contained"
-          aria-label="Forward message"
           sx={{ borderRadius: 1 }}
         >
           Forward

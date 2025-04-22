@@ -1,15 +1,18 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Alert, Typography, CircularProgress, useTheme } from '@mui/material';
+import { Box, Alert, Typography, useTheme, CircularProgress } from '@mui/material';
+import { VariableSizeList } from 'react-window';
+import { motion, AnimatePresence } from 'framer-motion';
+import AutoSizer from 'react-virtualized-auto-sizer';
 import ChatHeader from './ChatHeader';
 import ChatMessages from './ChatMessages';
 import ChatFooter from './ChatFooter';
 import ChatSettingsModal from '../ChatSettingsModal';
+import { isSameDay } from 'date-fns';
 
 const ChatView = ({
   currentUserId,
   conversation,
-  onSendMessage,
   onSendMediaMessage,
   onMarkRead,
   onDeleteMessage,
@@ -23,13 +26,12 @@ const ChatView = ({
   friends,
   messages,
   setMessages,
-  searchMessages,
   onAddReaction,
   onCreatePoll,
   onVotePoll,
   onPinMessage,
   onUnpinMessage,
-  onSendTyping,
+  socket,
 }) => {
   const theme = useTheme();
   const [page, setPage] = useState(1);
@@ -40,21 +42,34 @@ const ChatView = ({
   const [chatSettings, setChatSettings] = useState({
     videoShape: 'square',
     chatBackground: 'default',
+    fontSize: 'medium',
+    fontStyle: 'normal',
   });
   const [replyToMessage, setReplyToMessage] = useState(null);
-  const chatContainerRef = useRef(null);
+  const listRef = useRef(null);
+  const isNearBottomRef = useRef(true);
 
   const conversationId = conversation?.conversation_id || null;
   const isGroupChat = conversation?.type === 'group' || false;
 
+  // Auto-clear error
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  // Filter messages
   const filteredMessages = useMemo(() => {
     if (!conversationId) return [];
     const validMessages = (messages || []).filter(
-      (m) => m && m.message_id && (isGroupChat ? m.group_id === conversationId : m.conversation_id === conversationId)
+      (m) => m?.message_id && (isGroupChat ? m.group_id === conversationId : m.conversation_id === conversationId)
     );
     return validMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   }, [messages, conversationId, isGroupChat]);
 
+  // Fetch messages
   const fetchMessagesForPage = useCallback(
     async (targetPage, reset = false) => {
       if (!conversationId || isFetching || !hasMore) return;
@@ -65,7 +80,7 @@ const ChatView = ({
       try {
         const data = await fetchMessagesList(conversationId, {
           page: targetPage,
-          limit: 50,
+          limit: 20,
           reset,
         });
 
@@ -83,32 +98,53 @@ const ChatView = ({
           ).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
         });
 
-        setHasMore(newMessages.length === 50);
+        setHasMore(newMessages.length === 20);
         setPage(targetPage + 1);
+
+        if (reset && listRef.current && newMessages.length > 0) {
+          setTimeout(() => {
+            listRef.current.scrollToItem(filteredMessages.length - 1, 'end');
+          }, 100);
+        }
       } catch (err) {
-        setError('Failed to load messages. Please try again.');
+        setError('Failed to load messages.');
         console.error('Fetch messages error:', err);
       } finally {
         setIsFetching(false);
       }
     },
-    [conversationId, fetchMessagesList, isGroupChat, setMessages, hasMore, isFetching]
+    [conversationId, fetchMessagesList, isGroupChat, setMessages, hasMore, isFetching, filteredMessages]
   );
 
+  // Initial fetch
   useEffect(() => {
     if (conversationId) {
       fetchMessagesForPage(1, true);
     }
   }, [conversationId, fetchMessagesForPage]);
 
+  // Socket for new messages
   useEffect(() => {
-    if (!conversationId) return;
-    const interval = setInterval(() => {
-      fetchMessagesForPage(1, false);
-    }, 5000); // Increased interval to reduce server load
-    return () => clearInterval(interval);
-  }, [conversationId, fetchMessagesForPage]);
+    if (!socket) return;
 
+    socket.on('new_message', (newMessage) => {
+      if (
+        (isGroupChat && newMessage.group_id === conversationId) ||
+        (!isGroupChat && newMessage.conversation_id === conversationId)
+      ) {
+        setMessages((prev) => [...prev, newMessage].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
+        if (isNearBottomRef.current && listRef.current) {
+          setTimeout(() => {
+            listRef.current.scrollToItem(filteredMessages.length, 'end');
+          }, 100);
+        }
+      }
+    });
+
+    return () => socket.off('new_message');
+  }, [socket, isGroupChat, conversationId, setMessages, filteredMessages]);
+
+  // Send message
   const handleSendMessage = useCallback(
     async (messageData) => {
       if (!conversationId) {
@@ -116,76 +152,65 @@ const ChatView = ({
         return;
       }
 
+      const tempMessageId = `temp-${Date.now()}`;
       const finalMessageData = {
         ...messageData,
         conversationId,
         replyTo: replyToMessage?.message_id || undefined,
+        selectedText: replyToMessage?.selectedText || undefined,
       };
 
       try {
         const tempMessage = {
           ...finalMessageData,
-          message_id: `temp-${Date.now()}`,
+          message_id: tempMessageId,
           sender_id: currentUserId,
           timestamp: new Date().toISOString(),
           is_read: false,
-          delivery_status: 'sent',
+          delivery_status: 'pending',
         };
-        setMessages((prev) => {
-          const validPrev = Array.isArray(prev) ? prev : [];
-          return [...validPrev, tempMessage].sort(
-            (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
-          );
-        });
+        setMessages((prev) => [...prev, tempMessage].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
 
         const sentMessage = await onSendMediaMessage(finalMessageData);
 
-        setMessages((prev) => {
-          const validPrev = Array.isArray(prev) ? prev : [];
-          return [
-            ...validPrev.filter((m) => m.message_id !== tempMessage.message_id),
-            sentMessage,
-          ].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        });
+        setMessages((prev) =>
+          prev
+            .filter((m) => m.message_id !== tempMessageId)
+            .concat(sentMessage)
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+        );
+
         setReplyToMessage(null);
+        if (isNearBottomRef.current && listRef.current) {
+          setTimeout(() => {
+            listRef.current.scrollToItem(filteredMessages.length, 'end');
+          }, 100);
+        }
       } catch (err) {
         setError('Failed to send message.');
+        setMessages((prev) => prev.filter((m) => m.message_id !== tempMessageId));
         console.error('Send message error:', err);
       }
     },
-    [conversationId, currentUserId, onSendMediaMessage, setMessages, replyToMessage]
+    [conversationId, currentUserId, onSendMediaMessage, setMessages, replyToMessage, filteredMessages]
   );
 
+  // Load more messages
   const handleLoadMore = useCallback(() => {
     if (!isFetching && hasMore) {
       fetchMessagesForPage(page);
     }
   }, [fetchMessagesForPage, isFetching, hasMore, page]);
 
+  // Save settings
   const handleSettingsSave = useCallback((newSettings) => {
     setChatSettings(newSettings);
     setSettingsOpen(false);
   }, []);
 
-  useEffect(() => {
-    return () => {
-      setMessages((prev) => {
-        const validPrev = Array.isArray(prev) ? prev : [];
-        return validPrev.filter(
-          (m) => (isGroupChat ? m.group_id !== conversationId : m.conversation_id !== conversationId)
-        );
-      });
-    };
-  }, [conversationId, isGroupChat, setMessages]);
-
   if (!conversation || !conversationId) {
     return (
-      <Typography
-        variant="h6"
-        color="text.secondary"
-        sx={{ mt: 4, textAlign: 'center' }}
-        aria-label="No conversation selected"
-      >
+      <Typography variant="h6" color="text.secondary" sx={{ mt: 4, textAlign: 'center' }}>
         Select a conversation to start chatting
       </Typography>
     );
@@ -200,57 +225,84 @@ const ChatView = ({
         border: '1px solid',
         borderColor: 'grey.300',
         borderRadius: 2,
-        overflow: 'hidden',
         bgcolor: theme.palette.background.paper,
-        boxSizing: 'border-box',
-        minWidth: 0,
       }}
-      aria-label="Chat view"
-      ref={chatContainerRef}
     >
       {error && (
-        <Alert severity="error" onClose={() => setError(null)} sx={{ m: 1 }}>
-          {error}
-        </Alert>
-      )}
-      {isFetching && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-          <CircularProgress size={24} aria-label="Loading messages" />
-        </Box>
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+          <Alert severity="error" onClose={() => setError(null)} sx={{ m: 1 }}>
+            {error}
+          </Alert>
+        </motion.div>
       )}
       <ChatHeader
         recipient={conversation}
         isGroupChat={isGroupChat}
         onSettingsOpen={() => setSettingsOpen(true)}
+        socket={socket}
       />
-      <ChatMessages
-        messages={filteredMessages}
-        currentUserId={currentUserId}
-        recipient={conversation}
-        onDeleteMessage={onDeleteMessage}
-        onEditMessage={onEditMessage}
-        onSendMediaMessage={handleSendMessage}
-        onMarkRead={onMarkRead}
-        onForwardMessage={onForwardMessage}
-        isFetching={isFetching}
-        hasMore={hasMore}
-        loadMoreMessages={handleLoadMore}
-        chatBackground={chatSettings.chatBackground}
-        setReplyToMessage={setReplyToMessage}
-        isGroupChat={isGroupChat}
-        friends={friends}
-        token={token}
-        onAddReaction={onAddReaction}
-        onCreatePoll={onCreatePoll}
-        onVotePoll={onVotePoll}
-        onPinMessage={onPinMessage}
-        onUnpinMessage={onUnpinMessage}
-        chatSettings={chatSettings}
-      />
+      <Box sx={{ flex: 1, overflowY: 'auto' }}>
+        <AutoSizer>
+          {({ height, width }) => (
+            <VariableSizeList
+              ref={listRef}
+              height={height}
+              width={width}
+              itemCount={filteredMessages.length}
+              itemSize={(index) => {
+                const message = filteredMessages[index];
+                if (!message) return 120;
+                if (message.media?.length) return 300;
+                if (message.poll) return 200;
+                return Math.max(120, 120 + Math.floor((message.content?.length || 0) / 50) * 20);
+              }}
+              overscanCount={5}
+            >
+              {({ index, style }) => (
+                <div style={style}>
+                  <ChatMessages
+                    messages={[filteredMessages[index]]}
+                    currentUserId={currentUserId}
+                    recipient={conversation}
+                    onDeleteMessage={onDeleteMessage}
+                    onEditMessage={onEditMessage}
+                    onSendMediaMessage={handleSendMessage}
+                    onMarkRead={onMarkRead}
+                    onForwardMessage={onForwardMessage}
+                    isFetching={isFetching}
+                    hasMore={hasMore}
+                    loadMoreMessages={handleLoadMore}
+                    chatBackground={chatSettings.chatBackground}
+                    setReplyToMessage={setReplyToMessage}
+                    isGroupChat={isGroupChat}
+                    friends={friends}
+                    token={token}
+                    onAddReaction={onAddReaction}
+                    onCreatePoll={onCreatePoll}
+                    onVotePoll={onVotePoll}
+                    onPinMessage={onPinMessage}
+                    onUnpinMessage={onUnpinMessage}
+                    chatSettings={chatSettings}
+                    showDate={index === 0 || !isSameDay(
+                      new Date(filteredMessages[index].timestamp),
+                      new Date(filteredMessages[index - 1]?.timestamp)
+                    )}
+                    socket={socket}
+                  />
+                </div>
+              )}
+            </VariableSizeList>
+          )}
+        </AutoSizer>
+        {isFetching && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+            <CircularProgress size={24} />
+          </Box>
+        )}
+      </Box>
       <ChatFooter
         conversationId={conversationId}
         recipient={conversation}
-        onSendMessage={onSendMessage}
         onSendMediaMessage={handleSendMessage}
         pendingMediaList={pendingMediaList}
         setPendingMediaFile={setPendingMediaFile}
@@ -261,8 +313,6 @@ const ChatView = ({
         token={token}
         currentUserId={currentUserId}
         friends={friends}
-        chatBackground={chatSettings.chatBackground}
-        onSendTyping={onSendTyping}
       />
       <ChatSettingsModal
         open={settingsOpen}
@@ -283,7 +333,6 @@ ChatView.propTypes = {
     name: PropTypes.string,
     participants: PropTypes.arrayOf(PropTypes.string),
   }),
-  onSendMessage: PropTypes.func.isRequired,
   onSendMediaMessage: PropTypes.func.isRequired,
   onMarkRead: PropTypes.func.isRequired,
   onDeleteMessage: PropTypes.func.isRequired,
@@ -312,16 +361,19 @@ ChatView.propTypes = {
       receiver_id: PropTypes.string,
       type: PropTypes.string,
       media: PropTypes.array,
+      replyTo: PropTypes.string,
+      selectedText: PropTypes.string,
+      pinned: PropTypes.bool,
+      reactions: PropTypes.array,
     })
   ).isRequired,
   setMessages: PropTypes.func.isRequired,
-  searchMessages: PropTypes.func.isRequired,
   onAddReaction: PropTypes.func.isRequired,
   onCreatePoll: PropTypes.func.isRequired,
   onVotePoll: PropTypes.func.isRequired,
   onPinMessage: PropTypes.func.isRequired,
   onUnpinMessage: PropTypes.func.isRequired,
-  onSendTyping: PropTypes.func.isRequired,
+  socket: PropTypes.object,
 };
 
 export default React.memo(ChatView);

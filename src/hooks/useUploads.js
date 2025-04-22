@@ -1,63 +1,63 @@
 import { useState, useCallback, useMemo } from 'react';
-import { uploadFile, fetchFile, deleteFile } from '../api/messagesApi';
+import { uploadFile } from '../api/messagesApi';
 
-const useUploads = ({ token, userId, onLogout, navigate }) => {
+const useUploads = ({ token, userId, handleLogout, navigate }) => {
   const [uploads, setUploads] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
 
-  // Generic API call handler
-  const handleApiCall = useCallback(async (apiFn, ...args) => {
-    setLoading(true);
-    try {
-      const res = await apiFn(...args, token);
-      setLoading(false);
-      return res;
-    } catch (err) {
-      setLoading(false);
-      if (err.status === 401 || err.status === 403) {
-        onLogout('Session expired. Please log in again.');
-        navigate('/login');
-      }
-      const errorMessage = err.message || 'An unexpected error occurred';
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    }
-  }, [token, onLogout, navigate]);
-
-  // Upload a file
   const uploadMediaFile = useCallback(async (file) => {
-    if (!file) throw new Error('File is required');
-    const data = await handleApiCall(uploadFile, file);
-    setUploads((prev) => [...prev, data]);
-    return data;
-  }, [handleApiCall]);
+    if (!file || !['image', 'video', 'audio'].some(type => file.type.startsWith(type))) {
+      setError('Invalid file type. Only images, videos, and audio are allowed.');
+      return null;
+    }
 
-  // Fetch a file
-  const fetchMediaFile = useCallback((fileKey) => {
-    if (!fileKey) throw new Error('File key is required');
-    return handleApiCall(fetchFile, fileKey);
-  }, [handleApiCall]);
+    setLoading(true);
+    setError('');
 
-  // Delete a file
-  const deleteMediaFile = useCallback(async (fileKey) => {
-    if (!fileKey) throw new Error('File key is required');
-    await handleApiCall(deleteFile, fileKey);
-    setUploads((prev) => prev.filter((upload) => upload.fileKey !== fileKey));
-  }, [handleApiCall]);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('userId', userId);
 
-  // Clear error
-  const clearError = useCallback(() => setError(null), []);
+      const response = await uploadFile(formData, token);
+      setUploads((prev) => [...prev, { file, preview: URL.createObjectURL(file), type: file.type }]);
+      return response.data;
+    } catch (err) {
+      if (err.status === 401) {
+        handleLogout();
+        navigate('/login');
+      } else {
+        setError(err.message || 'Failed to upload file');
+      }
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [token, userId, handleLogout, navigate]);
 
-  return useMemo(() => ({
+  const clearUploads = useCallback(() => {
+    setUploads([]);
+    setError('');
+  }, []);
+
+  const clearError = useCallback(() => {
+    setError('');
+  }, []);
+
+  const apiMethods = useMemo(() => ({
+    uploadMediaFile,
+    clearUploads,
+    clearError,
+  }), [uploadMediaFile, clearUploads, clearError]);
+
+  return {
     uploads,
+    setUploads,
     loading,
     error,
-    uploadMediaFile,
-    fetchMediaFile,
-    deleteMediaFile,
-    clearError,
-  }), [uploads, loading, error, uploadMediaFile, fetchMediaFile, deleteMediaFile, clearError]);
+    ...apiMethods,
+  };
 };
 
 export default useUploads;

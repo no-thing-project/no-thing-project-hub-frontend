@@ -35,7 +35,6 @@ const ConversationsList = ({
   muteConv,
   unmuteConv,
   markRead,
-  setConversations,
   socket,
 }) => {
   const theme = useTheme();
@@ -71,12 +70,12 @@ const ConversationsList = ({
     if (!socket) return;
 
     const handleConversationCreated = (newConv) => {
-      setConversations((prev) => [...prev, newConv]);
+      conversations.push(newConv);
       setSuccess(`Conversation with ${newConv.name || 'new chat'} created!`);
     };
 
     const handleConversationDeleted = ({ conversationId }) => {
-      setConversations((prev) => prev.filter((conv) => conv.conversation_id !== conversationId));
+      conversations.filter((conv) => conv.conversation_id !== conversationId);
       if (selectedConversation?.conversation_id === conversationId) {
         onSelectConversation(null);
       }
@@ -89,86 +88,65 @@ const ConversationsList = ({
       socket.off('conversationCreated', handleConversationCreated);
       socket.off('conversationDeleted', handleConversationDeleted);
     };
-  }, [socket, selectedConversation, onSelectConversation, setConversations]);
+  }, [socket, conversations, selectedConversation, onSelectConversation]);
 
-  // Create a message lookup map for efficient lastMessage resolution
-  const messageMap = useMemo(() => {
-    const map = new Map();
-    (messages || []).forEach((m) => {
-      if (m?.message_id) map.set(m.message_id, m);
-    });
-    return map;
-  }, [messages]);
-
-  // Filter valid messages
-  const validMessages = useMemo(
-    () =>
-      (messages || []).filter(
-        (m) => m && m.message_id && m.conversation_id && typeof m.is_read === 'boolean'
-      ),
-    [messages]
-  );
-
-  // Combine conversations and group chats
+  // Combine conversations and group chats with preview
   const combinedConversations = useMemo(() => {
     const uniqueConversations = new Map();
 
     // Process direct conversations
-    (conversations || []).forEach((conv) => {
+    conversations.forEach((conv) => {
       if (!conv?.type || conv.type !== 'group') {
         const friend = friends.find(
           (f) => conv.participants?.includes(f.anonymous_id) && f.anonymous_id !== currentUserId
         );
-        const unreadCount = validMessages.filter(
-          (m) =>
-            m.conversation_id === conv.conversation_id &&
-            !m.is_read &&
-            m.sender_id !== currentUserId
+        const unreadCount = messages.filter(
+          (m) => m?.conversation_id === conv.conversation_id && !m.is_read && m.sender_id !== currentUserId
         ).length;
-        // Resolve lastMessage
         let lastMessage = conv.lastMessage;
         if (typeof lastMessage === 'string') {
-          lastMessage = messageMap.get(lastMessage) || null;
+          lastMessage = messages.find((m) => m.message_id === lastMessage) || null;
         }
         uniqueConversations.set(conv.conversation_id, {
           conversation_id: conv.conversation_id,
           name: conv.name || friend?.username || 'Unknown',
           isGroup: false,
           lastMessage,
-          created_at: conv.created_at || new Date().toISOString(),
+          lastMessagePreview: lastMessage?.content?.slice(0, 50) || (lastMessage?.media?.length ? 'Media message' : ''),
+          created_at: conv.created_at,
           pinnedBy: conv.pinnedBy || [],
           mutedBy: conv.mutedBy || [],
           isArchived: conv.isArchived || false,
-          participants: conv.participants || [],
+          participants: conv.participants,
           unreadCount,
         });
       }
     });
 
     // Process group chats
-    (groupChats || []).forEach((group) => {
-      const unreadCount = validMessages.filter(
+    groupChats.forEach((group) => {
+      const unreadCount = messages.filter(
         (m) =>
-          (m.group_id === group.group_id || m.conversation_id === group.conversation_id) &&
+          (m?.group_id === group.group_id || m?.conversation_id === group.conversation_id) &&
           !m.is_read &&
           m.sender_id !== currentUserId
       ).length;
-      // Resolve lastMessage
       let lastMessage = group.lastMessage;
       if (typeof lastMessage === 'string') {
-        lastMessage = messageMap.get(lastMessage) || null;
+        lastMessage = messages.find((m) => m.message_id === lastMessage) || null;
       }
       uniqueConversations.set(group.conversation_id, {
         conversation_id: group.conversation_id,
         group_id: group.group_id,
-        name: group.name || 'Group Chat',
+        name: group.name,
         isGroup: true,
         lastMessage,
-        created_at: group.created_at || new Date().toISOString(),
+        lastMessagePreview: lastMessage?.content?.slice(0, 50) || (lastMessage?.media?.length ? 'Media message' : ''),
+        created_at: group.created_at,
         pinnedBy: group.pinnedBy || [],
         mutedBy: group.mutedBy || [],
         isArchived: group.isArchived || false,
-        participants: group.participants || group.members || [],
+        participants: group.participants || group.members,
         unreadCount,
       });
     });
@@ -191,13 +169,12 @@ const ConversationsList = ({
         : new Date(b.created_at || 0);
       return bTime - aTime;
     });
-  }, [conversations, groupChats, friends, messageMap, currentUserId, validMessages]);
+  }, [conversations, groupChats, friends, messages, currentUserId]);
 
   // Filter conversations
   const filteredItems = useMemo(() => {
     let filtered = combinedConversations;
 
-    // Apply filter
     if (filter === 'active') {
       filtered = filtered.filter((item) => !item.isArchived);
     } else if (filter === 'archived') {
@@ -206,28 +183,27 @@ const ConversationsList = ({
 
     if (!searchQuery.trim()) return filtered;
 
-    // Apply search query
     const lowerQuery = searchQuery.toLowerCase();
     const filteredConvs = filtered.filter(
       (item) =>
-        (item.name || '').toLowerCase().includes(lowerQuery) ||
+        item.name.toLowerCase().includes(lowerQuery) ||
+        item.lastMessagePreview?.toLowerCase().includes(lowerQuery) ||
         item.participants?.some((id) => {
           const friend = friends.find((f) => f.anonymous_id === id);
-          return (friend?.username || '').toLowerCase().includes(lowerQuery);
+          return friend?.username.toLowerCase().includes(lowerQuery);
         })
     );
 
-    // Include friends for new chats
     const filteredFriends = friends
       .filter(
         (f) =>
           f.anonymous_id !== currentUserId &&
-          (f.username || '').toLowerCase().includes(lowerQuery) &&
+          f.username.toLowerCase().includes(lowerQuery) &&
           !filteredConvs.some((c) => !c.isGroup && c.participants?.includes(f.anonymous_id))
       )
       .map((f) => ({
         conversation_id: `friend:${f.anonymous_id}`,
-        name: f.username || 'Unknown',
+        name: f.username,
         isFriend: true,
         created_at: new Date().toISOString(),
         pinnedBy: [],
@@ -239,7 +215,6 @@ const ConversationsList = ({
     return [...filteredConvs, ...filteredFriends];
   }, [searchQuery, combinedConversations, friends, currentUserId, filter]);
 
-  // Handle selecting a conversation or starting a new one
   const handleSelectConversation = useCallback(
     async (item) => {
       if (item.isFriend) {
@@ -349,7 +324,7 @@ const ConversationsList = ({
                   onUnmute={unmuteConv}
                   onMarkRead={markRead}
                   currentUserId={currentUserId}
-                  messages={validMessages}
+                  messages={messages}
                 />
               </motion.div>
             ))}
@@ -369,7 +344,7 @@ ConversationsList.propTypes = {
       created_at: PropTypes.string,
       pinnedBy: PropTypes.arrayOf(PropTypes.string),
       mutedBy: PropTypes.arrayOf(PropTypes.string),
-      isArchived: PropTypes.bool,
+      isFiltered: PropTypes.bool,
       type: PropTypes.string,
       lastMessage: PropTypes.oneOfType([
         PropTypes.string,
@@ -389,8 +364,8 @@ ConversationsList.propTypes = {
     PropTypes.shape({
       group_id: PropTypes.string,
       conversation_id: PropTypes.string,
-      name: PropTypes.string,
-      members: PropTypes.arrayOf(PropTypes.string),
+      name: PropTypes.string.isRequired,
+      members: PropTypes.arrayOf(PropTypes.string).isRequired,
       created_at: PropTypes.string,
       pinnedBy: PropTypes.arrayOf(PropTypes.string),
       mutedBy: PropTypes.arrayOf(PropTypes.string),
@@ -441,7 +416,6 @@ ConversationsList.propTypes = {
   muteConv: PropTypes.func.isRequired,
   unmuteConv: PropTypes.func.isRequired,
   markRead: PropTypes.func.isRequired,
-  setConversations: PropTypes.func.isRequired,
   socket: PropTypes.object,
 };
 
