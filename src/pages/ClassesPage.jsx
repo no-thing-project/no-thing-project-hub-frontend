@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Button } from "@mui/material";
+import { Box, Button, Skeleton } from "@mui/material";
 import { Add } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
@@ -14,6 +14,7 @@ import ClassFormDialog from "../components/Dialogs/ClassFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
 import ClassesFilters from "../components/Classes/ClassesFilters";
 import ClassesGrid from "../components/Classes/ClassesGrid";
+import { debounce } from "lodash";
 
 const ClassesPage = () => {
   const navigate = useNavigate();
@@ -35,7 +36,7 @@ const ClassesPage = () => {
   const [popupClass, setPopupClass] = useState({
     name: "",
     description: "",
-    visibility: "public",
+    is_public: true,
     type: "personal",
     gate_id: null,
   });
@@ -43,6 +44,7 @@ const ClassesPage = () => {
   const [classToDelete, setClassToDelete] = useState(null);
   const [quickFilter, setQuickFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
 
   const loadClassesData = useCallback(async () => {
     if (!isAuthenticated || !token) {
@@ -50,15 +52,17 @@ const ClassesPage = () => {
       setIsLoading(false);
       return;
     }
-    setIsLoading(true);
     const controller = new AbortController();
+    setIsLoading(true);
     try {
       await Promise.all([
         fetchClassesList({}, controller.signal),
         fetchGatesList({}, controller.signal),
       ]);
     } catch (err) {
-      if (err.name !== "AbortError") showNotification(err.message || "Failed to load classes", "error");
+      if (err.name !== "AbortError") {
+        showNotification(err.message || "Failed to load classes", "error");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -69,6 +73,11 @@ const ClassesPage = () => {
     loadClassesData();
   }, [loadClassesData]);
 
+  const debouncedSetSearchQuery = useMemo(
+    () => debounce((value) => setSearchQuery(value), 300),
+    []
+  );
+
   const filteredClasses = useMemo(() => {
     return classes.filter((classItem) => {
       const matchesSearch =
@@ -76,44 +85,66 @@ const ClassesPage = () => {
         (classItem.description?.toLowerCase().includes(searchQuery.toLowerCase()));
       if (!matchesSearch) return false;
       switch (quickFilter) {
-        case "all": return true;
-        case "public": return classItem.is_public;
-        case "private": return !classItem.is_public;
-        case "personal": return classItem.type === "personal";
-        case "group": return classItem.type === "group";
-        case "gate": return !!classItem.gate_id;
-        default: return true;
+        case "all":
+          return true;
+        case "public":
+          return classItem.is_public;
+        case "private":
+          return !classItem.is_public;
+        case "personal":
+          return classItem.type === "personal";
+        case "group":
+          return classItem.type === "group";
+        case "gate":
+          return !!classItem.gate_id;
+        default:
+          return true;
       }
     });
   }, [classes, quickFilter, searchQuery]);
 
   const handleOpenCreateClass = () => setCreateDialogOpen(true);
+  const handleCancelCreateClass = () => {
+    setCreateDialogOpen(false);
+    setPopupClass({ name: "", description: "", is_public: true, type: "personal", gate_id: null });
+  };
 
   const handleCreateClass = useCallback(async () => {
-    if (!popupClass.name.trim()) return showNotification("Class name is required!", "error");
+    if (!popupClass.name.trim()) {
+      showNotification("Class name is required!", "error");
+      return;
+    }
+    setActionLoading(true);
     try {
       const createdClass = await createNewClass({
         name: popupClass.name,
         description: popupClass.description,
-        is_public: popupClass.visibility === "public",
+        is_public: popupClass.is_public,
         type: popupClass.type,
         gate_id: popupClass.gate_id,
       });
       setCreateDialogOpen(false);
+      setPopupClass({ name: "", description: "", is_public: true, type: "personal", gate_id: null });
       showNotification("Class created successfully!", "success");
       navigate(`/class/${createdClass.class_id}`);
     } catch (err) {
       showNotification(err.message || "Failed to create class", "error");
+    } finally {
+      setActionLoading(false);
     }
   }, [popupClass, createNewClass, navigate, showNotification]);
 
   const handleUpdateClass = useCallback(async () => {
-    if (!editingClass?.name.trim()) return showNotification("Class name is required!", "error");
+    if (!editingClass?.name.trim()) {
+      showNotification("Class name is required!", "error");
+      return;
+    }
+    setActionLoading(true);
     try {
       await updateExistingClass(editingClass.class_id, {
         name: editingClass.name,
         description: editingClass.description,
-        is_public: editingClass.visibility === "public",
+        is_public: editingClass.is_public,
         type: editingClass.type,
         gate_id: editingClass.gate_id,
       });
@@ -122,11 +153,14 @@ const ClassesPage = () => {
       await loadClassesData();
     } catch (err) {
       showNotification(err.message || "Failed to update class", "error");
+    } finally {
+      setActionLoading(false);
     }
   }, [editingClass, updateExistingClass, loadClassesData, showNotification]);
 
   const handleDeleteClass = useCallback(async () => {
     if (!classToDelete) return;
+    setActionLoading(true);
     try {
       await deleteExistingClass(classToDelete);
       setDeleteDialogOpen(false);
@@ -135,17 +169,47 @@ const ClassesPage = () => {
       await loadClassesData();
     } catch (err) {
       showNotification(err.message || "Failed to delete class", "error");
+    } finally {
+      setActionLoading(false);
     }
   }, [classToDelete, deleteExistingClass, loadClassesData, showNotification]);
 
-  if (isLoading || authLoading || classesLoading) return <LoadingSpinner />;
-  if (!isAuthenticated) return navigate("/login") || null;
+  const handleResetFilters = () => {
+    setQuickFilter("all");
+    setSearchQuery("");
+  };
+
+  if (authLoading || classesLoading || isLoading) {
+    return (
+      <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
+        <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
+          <Skeleton variant="rectangular" height={100} sx={{ mb: 2 }} />
+          <Skeleton variant="rectangular" height={50} sx={{ mb: 2 }} />
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
+            {[...Array(6)].map((_, i) => (
+              <Skeleton key={i} variant="rectangular" height={200} />
+            ))}
+          </Box>
+        </Box>
+      </AppLayout>
+    );
+  }
+
+  if (!isAuthenticated) {
+    navigate("/login");
+    return null;
+  }
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
         <ProfileHeader user={authData} isOwnProfile={true}>
-          <Button onClick={handleOpenCreateClass} startIcon={<Add />} sx={actionButtonStyles}>
+          <Button
+            onClick={handleOpenCreateClass}
+            startIcon={<Add />}
+            sx={actionButtonStyles}
+            disabled={actionLoading}
+          >
             Create Class
           </Button>
         </ProfileHeader>
@@ -153,8 +217,9 @@ const ClassesPage = () => {
           quickFilter={quickFilter}
           setQuickFilter={setQuickFilter}
           searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
+          setSearchQuery={debouncedSetSearchQuery}
           additionalFilters={["personal", "group", "gate"]}
+          onReset={handleResetFilters}
         />
         <ClassesGrid
           filteredClasses={filteredClasses}
@@ -170,9 +235,10 @@ const ClassesPage = () => {
         classData={popupClass}
         setClass={setPopupClass}
         onSave={handleCreateClass}
-        onCancel={() => setCreateDialogOpen(false)}
+        onCancel={handleCancelCreateClass}
         token={token}
         gates={gates}
+        disabled={actionLoading}
       />
       {editingClass && (
         <ClassFormDialog
@@ -184,6 +250,7 @@ const ClassesPage = () => {
           onCancel={() => setEditingClass(null)}
           token={token}
           gates={gates}
+          disabled={actionLoading}
         />
       )}
       <DeleteConfirmationDialog
@@ -191,6 +258,7 @@ const ClassesPage = () => {
         onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDeleteClass}
         message="Are you sure you want to delete this class?"
+        disabled={actionLoading}
       />
     </AppLayout>
   );

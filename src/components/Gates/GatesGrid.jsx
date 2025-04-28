@@ -5,24 +5,26 @@ import GateCard from "./GateCard";
 
 const containerVariants = {
   hidden: { opacity: 0 },
-  visible: { opacity: 1 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
 };
 
 const leftColumnVariants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1 },
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
 const GatesGrid = ({
   filteredGates,
-  localLikes,
-  handleLike,
+  handleFavorite,
   setEditingGate,
   setGateToDelete,
   setDeleteDialogOpen,
+  handleAddMember,
+  handleRemoveMember,
   navigate,
+  currentUser,
 }) => (
-  <AnimatePresence exitBeforeEnter>
+  <AnimatePresence>
     {filteredGates.length === 0 ? (
       <motion.div
         key="no-gates"
@@ -58,7 +60,11 @@ const GatesGrid = ({
         <Box
           sx={{
             display: "grid",
-            gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)", lg: "repeat(4, 1fr)" },
+            gridTemplateColumns: {
+              xs: "1fr",
+              md: "repeat(3, 1fr)",
+              lg: "repeat(4, 1fr)",
+            },
             gap: 4,
             gridAutoFlow: "dense",
             maxWidth: 1500,
@@ -70,9 +76,8 @@ const GatesGrid = ({
         >
           <motion.div
             variants={leftColumnVariants}
-            initial="visible"
+            initial="hidden"
             animate="visible"
-            transition={{ duration: 0.3 }}
             style={{ gridColumn: "1 / 2" }}
           >
             <Typography variant="h3" sx={{ fontWeight: 700, mb: 2 }}>
@@ -82,21 +87,23 @@ const GatesGrid = ({
               Your Space for Big Ideas
             </Typography>
             <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
-              Gates are like forum topics, starting points for broad discussions. 
-              Create a Gate to spark a conversation or join one to explore shared interests. 
-              It’s where communities form and ideas take root.
+              Gates are like forum topics, starting points for broad discussions. Create a
+              Gate to spark a conversation or join one to explore shared interests. It’s
+              where communities form and ideas take root.
             </Typography>
           </motion.div>
           {filteredGates.map((gate) => (
             <GateCard
               key={gate.gate_id}
               gate={gate}
-              localLikes={localLikes}
-              handleLike={handleLike}
+              handleFavorite={handleFavorite}
               setEditingGate={setEditingGate}
               setGateToDelete={setGateToDelete}
               setDeleteDialogOpen={setDeleteDialogOpen}
+              handleAddMember={handleAddMember}
+              handleRemoveMember={handleRemoveMember}
               navigate={navigate}
+              currentUser={currentUser}
             />
           ))}
         </Box>
@@ -105,4 +112,4 @@ const GatesGrid = ({
   </AnimatePresence>
 );
 
-export default GatesGrid;
+export default React.memo(GatesGrid);

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Box, Button } from "@mui/material";
+import { Box, Button, Skeleton } from "@mui/material";
 import { Add, Edit } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
@@ -16,14 +16,32 @@ import BoardFormDialog from "../components/Dialogs/BoardFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
 import BoardsFilters from "../components/Boards/BoardsFilters";
 import BoardsGrid from "../components/Boards/BoardsGrid";
+import { debounce } from "lodash";
 
 const ClassPage = () => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
   const { class_id } = useParams();
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
-  const { classData, fetchClass, fetchClassMembersList, updateExistingClass, deleteExistingClass, loading: classesLoading } = useClasses(token, handleLogout, navigate);
-  const { boards, setBoards, fetchBoardsByClass, createNewBoardInClass, updateExistingBoard, deleteExistingBoard, likeExistingBoard, unlikeExistingBoard, loading: boardsLoading } = useBoards(token, handleLogout, navigate);
+  const {
+    classData,
+    fetchClass,
+    fetchClassMembersList,
+    updateExistingClass,
+    deleteExistingClass,
+    loading: classesLoading,
+  } = useClasses(token, handleLogout, navigate);
+  const {
+    boards,
+    setBoards,
+    fetchBoardsByClass,
+    createNewBoardInClass,
+    updateExistingBoard,
+    deleteExistingBoard,
+    likeExistingBoard,
+    unlikeExistingBoard,
+    loading: boardsLoading,
+  } = useBoards(token, handleLogout, navigate);
   const { gates, fetchGatesList } = useGates(token, handleLogout, navigate);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -32,12 +50,12 @@ const ClassPage = () => {
   const [popupBoard, setPopupBoard] = useState({
     name: "",
     description: "",
-    visibility: "public",
+    is_public: true,
     type: "group",
     tags: [],
     settings: { tweet_cost: 1, like_cost: 1, points_to_creator: 1, max_members: 11, tweets_limit_trigger: 111 },
     class_id,
-    gate_id: classData?.gate_id || null,
+    gate_id: null,
   });
   const [editingBoard, setEditingBoard] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -45,8 +63,8 @@ const ClassPage = () => {
   const [quickFilter, setQuickFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [localLikes, setLocalLikes] = useState({});
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // Синхронізація gate_id для popupBoard
   useEffect(() => {
     setPopupBoard((prev) => ({
       ...prev,
@@ -61,8 +79,8 @@ const ClassPage = () => {
       setIsLoading(false);
       return;
     }
-    setIsLoading(true);
     const controller = new AbortController();
+    setIsLoading(true);
     try {
       await Promise.all([
         fetchClass(class_id, controller.signal),
@@ -71,7 +89,9 @@ const ClassPage = () => {
         fetchGatesList({}, controller.signal),
       ]);
     } catch (err) {
-      if (err.name !== "AbortError") showNotification(err.message || "Failed to load class data.", "error");
+      if (err.name !== "AbortError") {
+        showNotification(err.message || "Failed to load class data.", "error");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -82,6 +102,11 @@ const ClassPage = () => {
     if (isAuthenticated) loadClassData();
   }, [isAuthenticated, loadClassData]);
 
+  const debouncedSetSearchQuery = useMemo(
+    () => debounce((value) => setSearchQuery(value), 300),
+    []
+  );
+
   const filteredBoards = useMemo(() => {
     return boards.filter((board) => {
       const matchesSearch =
@@ -89,21 +114,45 @@ const ClassPage = () => {
         board.tags?.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
       if (!matchesSearch) return false;
       switch (quickFilter) {
-        case "all": return true;
-        case "public": return board.is_public;
-        case "private": return !board.is_public;
-        case "liked": return localLikes[board.board_id] ?? board.liked_by?.some((l) => l.anonymous_id === authData.anonymous_id);
-        case "personal": return board.type === "personal";
-        case "group": return board.type === "group";
-        default: return true;
+        case "all":
+          return true;
+        case "public":
+          return board.is_public;
+        case "private":
+          return !board.is_public;
+        case "liked":
+          return localLikes[board.board_id] ?? board.liked_by?.some((l) => l.anonymous_id === authData.anonymous_id);
+        case "personal":
+          return board.type === "personal";
+        case "group":
+          return board.type === "group";
+        default:
+          return true;
       }
     });
   }, [boards, quickFilter, searchQuery, localLikes, authData]);
 
   const handleOpenCreateBoard = () => setCreateBoardDialogOpen(true);
+  const handleCancelCreateBoard = () => {
+    setCreateBoardDialogOpen(false);
+    setPopupBoard({
+      name: "",
+      description: "",
+      is_public: true,
+      type: "group",
+      tags: [],
+      settings: { tweet_cost: 1, like_cost: 1, points_to_creator: 1, max_members: 11, tweets_limit_trigger: 111 },
+      class_id,
+      gate_id: classData?.gate_id || null,
+    });
+  };
 
   const handleCreateBoard = useCallback(async () => {
-    if (!popupBoard.name.trim()) return showNotification("Board name is required!", "error");
+    if (!popupBoard.name.trim()) {
+      showNotification("Board name is required!", "error");
+      return;
+    }
+    setActionLoading(true);
     try {
       const newBoard = await createNewBoardInClass(class_id, popupBoard);
       setCreateBoardDialogOpen(false);
@@ -111,16 +160,22 @@ const ClassPage = () => {
       navigate(`/board/${newBoard.board_id}`);
     } catch (err) {
       showNotification(err.message || "Failed to create board", "error");
+    } finally {
+      setActionLoading(false);
     }
   }, [class_id, popupBoard, createNewBoardInClass, navigate, showNotification]);
 
   const handleUpdateClass = useCallback(async () => {
-    if (!editingClass?.name.trim()) return showNotification("Class name is required!", "error");
+    if (!editingClass?.name.trim()) {
+      showNotification("Class name is required!", "error");
+      return;
+    }
+    setActionLoading(true);
     try {
       await updateExistingClass(editingClass.class_id, {
         name: editingClass.name,
         description: editingClass.description,
-        is_public: editingClass.visibility === "public",
+        is_public: editingClass.is_public,
         type: editingClass.type,
         gate_id: editingClass.gate_id,
       });
@@ -129,21 +184,30 @@ const ClassPage = () => {
       await loadClassData();
     } catch (err) {
       showNotification(err.message || "Failed to update class", "error");
+    } finally {
+      setActionLoading(false);
     }
   }, [editingClass, updateExistingClass, loadClassData, showNotification]);
 
   const handleDeleteClass = useCallback(async () => {
+    setActionLoading(true);
     try {
       await deleteExistingClass(class_id);
       showNotification("Class deleted successfully!", "success");
       navigate("/classes");
     } catch (err) {
       showNotification(err.message || "Failed to delete class", "error");
+    } finally {
+      setActionLoading(false);
     }
   }, [class_id, deleteExistingClass, navigate, showNotification]);
 
   const handleUpdateBoard = useCallback(async () => {
-    if (!editingBoard?.name.trim()) return showNotification("Board name is required!", "error");
+    if (!editingBoard?.name.trim()) {
+      showNotification("Board name is required!", "error");
+      return;
+    }
+    setActionLoading(true);
     try {
       const updatedBoard = await updateExistingBoard(editingBoard.board_id, null, class_id, editingBoard);
       setBoards((prev) => prev.map((b) => (b.board_id === updatedBoard.board_id ? updatedBoard : b)));
@@ -151,11 +215,14 @@ const ClassPage = () => {
       showNotification("Board updated successfully!", "success");
     } catch (err) {
       showNotification(err.message || "Failed to update board", "error");
+    } finally {
+      setActionLoading(false);
     }
   }, [editingBoard, updateExistingBoard, class_id, setBoards, showNotification]);
 
   const handleDeleteBoard = useCallback(async () => {
     if (!boardToDelete) return;
+    setActionLoading(true);
     try {
       await deleteExistingBoard(boardToDelete, null, class_id);
       setBoards((prev) => prev.filter((b) => b.board_id !== boardToDelete));
@@ -164,11 +231,14 @@ const ClassPage = () => {
       showNotification("Board deleted successfully!", "success");
     } catch (err) {
       showNotification(err.message || "Failed to delete board", "error");
+    } finally {
+      setActionLoading(false);
     }
   }, [boardToDelete, deleteExistingBoard, class_id, setBoards, showNotification]);
 
   const handleLikeBoard = useCallback(async (board_id, isLiked) => {
     setLocalLikes((prev) => ({ ...prev, [board_id]: !isLiked }));
+    setActionLoading(true);
     try {
       const updatedBoard = isLiked ? await unlikeExistingBoard(board_id) : await likeExistingBoard(board_id);
       setBoards((prev) => prev.map((b) => (b.board_id === board_id ? updatedBoard : b)));
@@ -176,29 +246,72 @@ const ClassPage = () => {
     } catch (err) {
       setLocalLikes((prev) => ({ ...prev, [board_id]: isLiked }));
       showNotification(`Failed to ${isLiked ? "unlike" : "like"} board`, "error");
+    } finally {
+      setActionLoading(false);
     }
   }, [likeExistingBoard, unlikeExistingBoard, setBoards, showNotification]);
 
-  if (isLoading || authLoading || classesLoading || boardsLoading) return <LoadingSpinner />;
-  if (!isAuthenticated) return navigate("/login") || null;
-  if (!classData) return showNotification("Class not found", "error") || null;
+  const handleResetFilters = () => {
+    setQuickFilter("all");
+    setSearchQuery("");
+  };
+
+  if (authLoading || classesLoading || boardsLoading || isLoading) {
+    return (
+      <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
+        <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
+          <Skeleton variant="rectangular" height={100} sx={{ mb: 2 }} />
+          <Skeleton variant="rectangular" height={50} sx={{ mb: 2 }} />
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
+            {[...Array(6)].map((_, i) => (
+              <Skeleton key={i} variant="rectangular" height={200} />
+            ))}
+          </Box>
+        </Box>
+      </AppLayout>
+    );
+  }
+
+  if (!isAuthenticated) {
+    navigate("/login");
+    return null;
+  }
+
+  if (!classData) {
+    showNotification("Class not found", "error");
+    navigate("/classes");
+    return null;
+  }
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
         <ProfileHeader user={authData} isOwnProfile={true}>
           <Box sx={{ display: "flex", gap: 2 }}>
-            <Button onClick={handleOpenCreateBoard} startIcon={<Add />} sx={actionButtonStyles}>
+            <Button
+              onClick={handleOpenCreateBoard}
+              startIcon={<Add />}
+              sx={actionButtonStyles}
+              disabled={actionLoading}
+            >
               Create Board
             </Button>
             <Button
-              onClick={() => setEditingClass({ ...classData, visibility: classData.is_public ? "public" : "private" })}
+              onClick={() =>
+                setEditingClass({ ...classData, is_public: classData.is_public, type: classData.type, gate_id: classData.gate_id })
+              }
               startIcon={<Edit />}
               sx={actionButtonStyles}
+              disabled={actionLoading}
             >
               Edit Class
             </Button>
-            <Button onClick={handleDeleteClass} color="error" sx={deleteButtonStyle}>
+            <Button
+              onClick={handleDeleteClass}
+              color="error"
+              sx={deleteButtonStyle}
+              disabled={actionLoading}
+            >
               Delete Class
             </Button>
           </Box>
@@ -207,8 +320,9 @@ const ClassPage = () => {
           quickFilter={quickFilter}
           setQuickFilter={setQuickFilter}
           searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
+          setSearchQuery={debouncedSetSearchQuery}
           additionalFilters={["personal", "group"]}
+          onReset={handleResetFilters}
         />
         <BoardsGrid
           filteredBoards={filteredBoards}
@@ -226,12 +340,13 @@ const ClassPage = () => {
         board={popupBoard}
         setBoard={setPopupBoard}
         onSave={handleCreateBoard}
-        onCancel={() => setCreateBoardDialogOpen(false)}
+        onCancel={handleCancelCreateBoard}
         token={token}
         onLogout={handleLogout}
         navigate={navigate}
         initialGateId={classData?.gate_id || null}
         initialClassId={class_id}
+        disabled={actionLoading}
       />
       {editingBoard && (
         <BoardFormDialog
@@ -246,6 +361,7 @@ const ClassPage = () => {
           navigate={navigate}
           initialGateId={classData?.gate_id || null}
           initialClassId={class_id}
+          disabled={actionLoading}
         />
       )}
       {editingClass && (
@@ -258,6 +374,7 @@ const ClassPage = () => {
           onCancel={() => setEditingClass(null)}
           token={token}
           gates={gates}
+          disabled={actionLoading}
         />
       )}
       <DeleteConfirmationDialog
@@ -265,6 +382,7 @@ const ClassPage = () => {
         onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDeleteBoard}
         message="Are you sure you want to delete this board?"
+        disabled={actionLoading}
       />
     </AppLayout>
   );

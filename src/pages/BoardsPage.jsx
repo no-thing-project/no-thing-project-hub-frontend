@@ -1,9 +1,9 @@
+// src/pages/BoardsPage.jsx
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Button, Snackbar, Alert } from "@mui/material";
+import { Box, Button, Snackbar, Alert, Skeleton } from "@mui/material";
 import { Add } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
-import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import { useBoards } from "../hooks/useBoards";
 import { useGates } from "../hooks/useGates";
 import { useClasses } from "../hooks/useClasses";
@@ -11,9 +11,11 @@ import useAuth from "../hooks/useAuth";
 import ProfileHeader from "../components/Headers/ProfileHeader";
 import { actionButtonStyles } from "../styles/BaseStyles";
 import BoardFormDialog from "../components/Dialogs/BoardFormDialog";
+import MemberFormDialog from "../components/Dialogs/MemberFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
 import BoardsFilters from "../components/Boards/BoardsFilters";
 import BoardsGrid from "../components/Boards/BoardsGrid";
+import { debounce } from "lodash";
 
 const BoardsPage = () => {
   const navigate = useNavigate();
@@ -37,10 +39,13 @@ const BoardsPage = () => {
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingBoard, setEditingBoard] = useState(null);
+  const [memberDialogOpen, setMemberDialogOpen] = useState(false);
+  const [username, setUsername] = useState("");
+  const [selectedBoardId, setSelectedBoardId] = useState(null);
   const [popupBoard, setPopupBoard] = useState({
     name: "",
     description: "",
-    visibility: "private",
+    is_public: false,
     type: "personal",
     tags: [],
     settings: { tweet_cost: 1, like_cost: 1, points_to_creator: 1, max_members: 11, tweets_limit_trigger: 111 },
@@ -55,6 +60,7 @@ const BoardsPage = () => {
   const [quickFilter, setQuickFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [localLikes, setLocalLikes] = useState({});
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -73,39 +79,55 @@ const BoardsPage = () => {
     if (error) setErrorMessage(error);
   }, [error]);
 
+  const debouncedSetSearchQuery = useMemo(
+    () => debounce((value) => setSearchQuery(value), 300),
+    []
+  );
+
   const filteredBoards = useMemo(() => {
     const lowerSearchQuery = searchQuery.toLowerCase();
-    return boards.filter((board) => {
-      const matchesSearch =
-        board.name.toLowerCase().includes(lowerSearchQuery) ||
-        board.tags?.some((tag) => tag.toLowerCase().includes(lowerSearchQuery));
-      if (!matchesSearch) return false;
-      const isLiked = localLikes[board.board_id] ?? board.liked_by?.some((l) => l.anonymous_id === authData.anonymous_id);
-      switch (quickFilter) {
-        case "all": return true;
-        case "public": return board.is_public;
-        case "private": return !board.is_public;
-        case "liked": return isLiked;
-        case "personal": return board.type === "personal";
-        case "group": return board.type === "group";
-        case "gate": return !!board.gate_id;
-        case "class": return !!board.class_id;
-        default: return true;
-      }
-    }).map((board) => ({
-      ...board,
-      current_user: {
-        anonymous_id: authData.anonymous_id,
-        role: board.creator_id === authData.anonymous_id
-          ? "owner"
-          : board.members?.find((m) => m.anonymous_id === authData.anonymous_id)?.role || "viewer",
-      },
-    }));
+    return boards
+      .filter((board) => {
+        const matchesSearch =
+          board.name.toLowerCase().includes(lowerSearchQuery) ||
+          board.tags?.some((tag) => tag.toLowerCase().includes(lowerSearchQuery));
+        if (!matchesSearch) return false;
+        const isLiked = localLikes[board.board_id] ?? board.liked_by?.some((l) => l.anonymous_id === authData.anonymous_id);
+        switch (quickFilter) {
+          case "all":
+            return true;
+          case "public":
+            return board.is_public;
+          case "private":
+            return !board.is_public;
+          case "liked":
+            return isLiked;
+          case "personal":
+            return board.type === "personal";
+          case "group":
+            return board.type === "group";
+          case "gate":
+            return !!board.gate_id;
+          case "class":
+            return !!board.class_id;
+          default:
+            return true;
+        }
+      })
+      .map((board) => ({
+        ...board,
+        current_user: {
+          anonymous_id: authData.anonymous_id,
+          role: board.creator_id === authData.anonymous_id
+            ? "owner"
+            : board.members?.find((m) => m.anonymous_id === authData.anonymous_id)?.role || "viewer",
+        },
+      }));
   }, [boards, quickFilter, searchQuery, localLikes, authData]);
 
   const validateBoardData = useCallback((data) => {
     if (!data.name?.trim()) return "Board name is required";
-    if (data.type === "group" && data.visibility === "public" && !data.gate_id && !data.class_id) {
+    if (data.type === "group" && data.is_public && !data.gate_id && !data.class_id) {
       return "Public group board must have a gate or class";
     }
     const s = data.settings || {};
@@ -118,6 +140,20 @@ const BoardsPage = () => {
   }, []);
 
   const handleOpenCreateBoard = () => setCreateDialogOpen(true);
+  const handleCancelCreateBoard = () => {
+    setCreateDialogOpen(false);
+    setPopupBoard({
+      name: "",
+      description: "",
+      is_public: true,
+      type: "personal",
+      tags: [],
+      settings: { tweet_cost: 1, like_cost: 1, points_to_creator: 1, max_members: 11, tweets_limit_trigger: 111 },
+      gate_id: null,
+      class_id: null,
+      members: [],
+    });
+  };
 
   const handleCreateBoard = useCallback(async () => {
     const validationError = validateBoardData(popupBoard);
@@ -125,6 +161,7 @@ const BoardsPage = () => {
       setErrorMessage(validationError);
       return;
     }
+    setActionLoading(true);
     try {
       const createdBoard = await createNewBoard(popupBoard);
       setSuccess("Board created successfully!");
@@ -132,7 +169,7 @@ const BoardsPage = () => {
       setPopupBoard({
         name: "",
         description: "",
-        visibility: "private",
+        is_public: true,
         type: "personal",
         tags: [],
         settings: { tweet_cost: 1, like_cost: 1, points_to_creator: 1, max_members: 11, tweets_limit_trigger: 111 },
@@ -143,6 +180,8 @@ const BoardsPage = () => {
       navigate(`/board/${createdBoard.board_id}`);
     } catch (err) {
       setErrorMessage(err.message || "Failed to create board");
+    } finally {
+      setActionLoading(false);
     }
   }, [popupBoard, createNewBoard, navigate]);
 
@@ -152,6 +191,7 @@ const BoardsPage = () => {
       setErrorMessage(validationError);
       return;
     }
+    setActionLoading(true);
     try {
       const originalBoard = boards.find((b) => b.board_id === editingBoard.board_id);
       const updatedMembers = editingBoard.members.filter(
@@ -172,10 +212,13 @@ const BoardsPage = () => {
       setSuccess("Board updated successfully!");
     } catch (err) {
       setErrorMessage(err.message || "Failed to update board");
+    } finally {
+      setActionLoading(false);
     }
   }, [editingBoard, updateExistingBoard, setBoards, addBoardMember, removeBoardMember, boards]);
 
   const handleDeleteBoard = useCallback(async () => {
+    setActionLoading(true);
     try {
       await deleteExistingBoard(boardToDelete, null, null);
       setBoards((prev) => prev.filter((b) => b.board_id !== boardToDelete));
@@ -184,28 +227,92 @@ const BoardsPage = () => {
       setSuccess("Board deleted successfully!");
     } catch (err) {
       setErrorMessage(err.message || "Failed to delete board");
+    } finally {
+      setActionLoading(false);
     }
   }, [boardToDelete, deleteExistingBoard, setBoards]);
 
   const handleLike = useCallback(async (board_id, isLiked) => {
     setLocalLikes((prev) => ({ ...prev, [board_id]: !isLiked }));
+    setActionLoading(true);
     try {
       await (isLiked ? unlikeExistingBoard(board_id) : likeExistingBoard(board_id));
       setSuccess(`Board ${isLiked ? "unliked" : "liked"} successfully!`);
     } catch (err) {
       setLocalLikes((prev) => ({ ...prev, [board_id]: isLiked }));
       setErrorMessage("Failed to like/unlike board");
+    } finally {
+      setActionLoading(false);
     }
   }, [likeExistingBoard, unlikeExistingBoard]);
 
-  if (authLoading || boardsLoading) return <LoadingSpinner />;
-  if (!isAuthenticated) return navigate("/login") || null;
+  const handleAddMember = useCallback(async () => {
+    if (!username.trim() || !selectedBoardId) {
+      setErrorMessage("Username and board selection required!");
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await addBoardMember(selectedBoardId, username, "viewer");
+      setMemberDialogOpen(false);
+      setUsername("");
+      setSelectedBoardId(null);
+      setSuccess("Member added successfully!");
+      await fetchBoardsList({}, new AbortController().signal);
+    } catch (err) {
+      setErrorMessage(err.message || "Failed to add member");
+    } finally {
+      setActionLoading(false);
+    }
+  }, [username, selectedBoardId, addBoardMember, fetchBoardsList]);
+
+  const handleOpenMemberDialog = (boardId) => {
+    setSelectedBoardId(boardId);
+    setMemberDialogOpen(true);
+  };
+
+  const handleCancelAddMember = () => {
+    setMemberDialogOpen(false);
+    setUsername("");
+    setSelectedBoardId(null);
+  };
+
+  const handleResetFilters = () => {
+    setQuickFilter("all");
+    setSearchQuery("");
+  };
+
+  if (authLoading || boardsLoading) {
+    return (
+      <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
+        <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
+          <Skeleton variant="rectangular" height={100} sx={{ mb: 2 }} />
+          <Skeleton variant="rectangular" height={50} sx={{ mb: 2 }} />
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
+            {[...Array(6)].map((_, i) => (
+              <Skeleton key={i} variant="rectangular" height={200} />
+            ))}
+          </Box>
+        </Box>
+      </AppLayout>
+    );
+  }
+
+  if (!isAuthenticated) {
+    navigate("/login");
+    return null;
+  }
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box sx={{ maxWidth: 1500, mx: "auto", px: 2, mt: 2 }}>
         <ProfileHeader user={authData} isOwnProfile>
-          <Button onClick={handleOpenCreateBoard} startIcon={<Add />} sx={actionButtonStyles}>
+          <Button
+            onClick={handleOpenCreateBoard}
+            startIcon={<Add />}
+            sx={actionButtonStyles}
+            disabled={actionLoading}
+          >
             Create Board
           </Button>
         </ProfileHeader>
@@ -213,8 +320,9 @@ const BoardsPage = () => {
           quickFilter={quickFilter}
           setQuickFilter={setQuickFilter}
           searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
+          setSearchQuery={debouncedSetSearchQuery}
           additionalFilters={["gate", "class"]}
+          onReset={handleResetFilters}
         />
         <BoardsGrid
           filteredBoards={filteredBoards}
@@ -223,6 +331,7 @@ const BoardsPage = () => {
           setEditingBoard={setEditingBoard}
           setBoardToDelete={setBoardToDelete}
           setDeleteDialogOpen={setDeleteDialogOpen}
+          handleAddMember={handleOpenMemberDialog}
           navigate={navigate}
         />
       </Box>
@@ -232,12 +341,13 @@ const BoardsPage = () => {
         board={popupBoard}
         setBoard={setPopupBoard}
         onSave={handleCreateBoard}
-        onCancel={() => setCreateDialogOpen(false)}
+        onCancel={handleCancelCreateBoard}
         errorMessage={errorMessage}
         token={token}
         onLogout={handleLogout}
         navigate={navigate}
         userRole="owner"
+        disabled={actionLoading}
       />
       {editingBoard && (
         <BoardFormDialog
@@ -252,12 +362,23 @@ const BoardsPage = () => {
           onLogout={handleLogout}
           navigate={navigate}
           userRole={editingBoard.current_user?.role || "viewer"}
+          disabled={actionLoading}
         />
       )}
+      <MemberFormDialog
+        open={memberDialogOpen}
+        title="Add Member to Board"
+        username={username}
+        setUsername={setUsername}
+        onSave={handleAddMember}
+        onCancel={handleCancelAddMember}
+        disabled={actionLoading}
+      />
       <DeleteConfirmationDialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDeleteBoard}
+        disabled={actionLoading}
       />
       <Snackbar open={!!success} autoHideDuration={3000} onClose={() => setSuccess("")}>
         <Alert severity="success">{success}</Alert>
@@ -269,4 +390,4 @@ const BoardsPage = () => {
   );
 };
 
-export default BoardsPage;
+export default React.memo(BoardsPage);

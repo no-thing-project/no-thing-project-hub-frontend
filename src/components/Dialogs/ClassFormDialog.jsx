@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+// src/components/Dialogs/ClassFormDialog.jsx
+import React from "react";
 import {
   Box,
   Dialog,
@@ -6,136 +7,116 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Select,
-  MenuItem,
+  Switch,
+  FormControlLabel,
   Button,
-  FormControl,
+  MenuItem,
+  Select,
   InputLabel,
-  FormHelperText,
-  Tooltip,
+  FormControl,
 } from "@mui/material";
-import { inputStyles, selectStyles, actionButtonStyles, cancelButtonStyle } from "../../styles/BaseStyles";
+import { inputStyles, actionButtonStyles, cancelButtonStyle } from "../../styles/BaseStyles";
 
-const ClassFormDialog = ({ open, title, classData, setClass, onSave, onCancel, token, gates = [] }) => {
-  const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    if (open) {
-      setErrors({});
-    }
-  }, [open]);
-
-  const handleChange = (field) => (e) => {
-    const value = e.target.value;
-    setClass({ ...classData, [field]: value });
-    setErrors((prev) => ({
-      ...prev,
-      [field]: field === "name" && !value.trim() ? "Class name is required" : "",
-    }));
-  };
-
-  const isFormValid = () => {
-    return classData.name.trim() && Object.values(errors).every((err) => !err);
-  };
-
+const ClassFormDialog = ({
+  open,
+  title,
+  classData,
+  setClass,
+  onSave,
+  onCancel,
+  token,
+  gates,
+  disabled,
+}) => {
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="sm" fullWidth>
-      <Box sx={{ p: 2 }}>
+      <Box sx={{ p: 2, display: "flex", flexDirection: "column", alignItems: "center" }}>
         <DialogTitle>{title}</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             margin="normal"
-            label="Class Name"
+            label="Name"
+            type="text"
             fullWidth
             variant="outlined"
             value={classData.name}
-            onChange={handleChange("name")}
+            onChange={(e) => setClass({ ...classData, name: e.target.value })}
             sx={inputStyles}
             required
-            error={!!errors.name}
-            helperText={errors.name}
+            disabled={disabled}
           />
           <TextField
             margin="normal"
             label="Description"
+            type="text"
             fullWidth
             variant="outlined"
             multiline
-            rows={3}
+            rows={4}
             value={classData.description}
-            onChange={handleChange("description")}
+            onChange={(e) => setClass({ ...classData, description: e.target.value })}
             sx={inputStyles}
-            helperText={`${classData.description.length}/500`}
-            inputProps={{ maxLength: 500 }}
+            disabled={disabled}
           />
-          <FormControl fullWidth margin="normal" sx={selectStyles}>
-            <InputLabel>Visibility</InputLabel>
-            <Select
-              value={classData.visibility}
-              onChange={handleChange("visibility")}
-              label="Visibility"
-            >
-              <MenuItem value="public">Public</MenuItem>
-              <MenuItem value="restricted">Restricted</MenuItem>
-              <MenuItem value="private">Private</MenuItem>
-            </Select>
-            <FormHelperText>
-              {classData.visibility === "public"
-                ? "Visible to everyone"
-                : classData.visibility === "restricted"
-                ? "Visible to gate members"
-                : "Visible only to creator"}
-            </FormHelperText>
-          </FormControl>
-          <FormControl fullWidth margin="normal" sx={selectStyles}>
+          <FormControl fullWidth margin="normal" sx={inputStyles}>
             <InputLabel>Type</InputLabel>
             <Select
               value={classData.type}
-              onChange={handleChange("type")}
+              onChange={(e) => setClass({ ...classData, type: e.target.value })}
               label="Type"
+              disabled={disabled}
             >
               <MenuItem value="personal">Personal</MenuItem>
               <MenuItem value="group">Group</MenuItem>
             </Select>
-            <FormHelperText>
-              {classData.type === "personal"
-                ? "Managed by creator only"
-                : "Collaborative class with members"}
-            </FormHelperText>
           </FormControl>
-          <FormControl fullWidth margin="normal" sx={selectStyles}>
-            <InputLabel>Gate (optional)</InputLabel>
+          <FormControl fullWidth margin="normal" sx={inputStyles}>
+            <InputLabel>Gate</InputLabel>
             <Select
               value={classData.gate_id || ""}
-              onChange={handleChange("gate_id")}
-              label="Gate (optional)"
+              onChange={(e) =>
+                setClass({ ...classData, gate_id: e.target.value || null })
+              }
+              label="Gate"
+              disabled={disabled}
             >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
+              <MenuItem value="">None</MenuItem>
               {gates.map((gate) => (
                 <MenuItem key={gate.gate_id} value={gate.gate_id}>
                   {gate.name}
                 </MenuItem>
               ))}
             </Select>
-            <FormHelperText>
-              {classData.gate_id ? "Linked to a specific gate" : "Not linked to any gate"}
-            </FormHelperText>
           </FormControl>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={classData.is_public}
+                onChange={(e) => setClass({ ...classData, is_public: e.target.checked })}
+                disabled={disabled}
+              />
+            }
+            label="Public"
+            sx={{ mt: 2 }}
+          />
         </DialogContent>
         <DialogActions>
-          <Button onClick={onCancel} sx={cancelButtonStyle}>
-            Cancel
-          </Button>
           <Button
-            onClick={onSave}
             variant="contained"
-            disabled={!isFormValid()}
+            onClick={onSave}
             sx={actionButtonStyles}
+            disabled={disabled || !classData.name.trim()}
           >
             Save
+          </Button>
+          <Button
+            variant="contained"
+            onClick={onCancel}
+            sx={cancelButtonStyle}
+            disabled={disabled}
+          >
+            Cancel
           </Button>
         </DialogActions>
       </Box>
