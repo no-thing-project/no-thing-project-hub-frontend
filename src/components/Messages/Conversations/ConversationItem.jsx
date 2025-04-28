@@ -247,12 +247,12 @@ ConversationItem.propTypes = {
       timestamp: PropTypes.string,
       sender_id: PropTypes.string,
       is_read: PropTypes.bool,
-      type: PropTypes.string, // Added for message type
+      type: PropTypes.string,
       media: PropTypes.arrayOf(
         PropTypes.shape({
           url: PropTypes.string,
           fileKey: PropTypes.string,
-          type: PropTypes.string, // e.g., 'image', 'video', 'audio'
+          type: PropTypes.string,
         })
       ),
     }),

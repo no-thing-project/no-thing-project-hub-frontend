@@ -1,13 +1,30 @@
 import { io } from 'socket.io-client';
 
-const socket = io(`${process.env.REACT_APP_API_URL || 'http://localhost:8081'}/messages`, {
-  autoConnect: false,
-});
+let socket;
 
 export const connectSocket = (token) => {
-  socket.auth = { token };
-  socket.connect();
+  if (!token) return;
+
+  socket = io(`${process.env.REACT_APP_API_URL || 'http://localhost:8081'}/messages`, {
+    autoConnect: true,
+    query: { token }, // 👈 САМЕ ТАК передається токен на сервер
+    transports: ['websocket'],
+  });
+
+  socket.on('connect', () => {
+    console.log('[SOCKET] Connected to /messages');
+  });
+
+  socket.on('connect_error', (err) => {
+    console.error('[SOCKET] Connection error:', err.message);
+  });
+
+  socket.on('disconnect', () => {
+    console.warn('[SOCKET] Disconnected from /messages');
+  });
 };
+
+export const getSocket = () => socket;
 
 export const disconnectSocket = () => {
   socket.disconnect();

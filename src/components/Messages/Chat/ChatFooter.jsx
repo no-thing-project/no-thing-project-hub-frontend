@@ -55,6 +55,7 @@ const ChatFooter = ({
         px: 2,
         py: 1,
       }}
+      aria-label="Chat Footer"
     >
       <ChatInput
         conversationId={conversationId}

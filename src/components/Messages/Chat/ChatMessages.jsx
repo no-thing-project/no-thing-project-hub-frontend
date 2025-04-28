@@ -14,40 +14,45 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import MessageBubble from '../MessageBubble';
 import { format, isSameDay } from 'date-fns';
+import debounce from 'lodash/debounce';
 
-const PinnedMessages = ({ pinnedMessages, theme, setHighlightedMessage }) => (
-  <Box
-    sx={{
-      bgcolor: theme.palette.grey[100],
-      p: 1,
-      mb: 2,
-      borderRadius: 1,
-      position: 'sticky',
-      top: 0,
-      zIndex: 1,
-      boxShadow: theme.shadows[1],
-    }}
-  >
-    <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
-      Pinned Messages
-    </Typography>
-    {pinnedMessages.map((msg) => (
-      <Typography
-        key={msg.message_id}
-        variant="body2"
-        sx={{ display: 'block', mt: 0.5, cursor: 'pointer' }}
-        onClick={() => {
-          const element = document.getElementById(`message-${msg.message_id}`);
-          element?.scrollIntoView({ behavior: 'smooth' });
-          setHighlightedMessage(msg.message_id);
-          setTimeout(() => setHighlightedMessage(null), 3000);
-        }}
-      >
-        {msg.content?.length > 50 ? `${msg.content.slice(0, 50)}...` : msg.content || 'Media message'}
+const PinnedMessages = ({ pinnedMessages, theme, setHighlightedMessage }) => {
+  return (
+    <Box
+      sx={{
+        bgcolor: theme.palette.grey[100],
+        p: 1,
+        mb: 2,
+        borderRadius: 1,
+        position: 'sticky',
+        top: 0,
+        zIndex: 1,
+        boxShadow: theme.shadows[1],
+      }}
+    >
+      <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+        Pinned Messages
       </Typography>
-    ))}
-  </Box>
-);
+      {pinnedMessages.map((msg) => (
+        <Typography
+          key={msg.message_id}
+          variant="body2"
+          sx={{ display: 'block', mt: 0.5, cursor: 'pointer' }}
+          onClick={() => {
+            const element = document.getElementById(`message-${msg.message_id}`);
+            element?.scrollIntoView({ behavior: 'smooth' });
+            setHighlightedMessage(msg.message_id);
+            setTimeout(() => {
+              setHighlightedMessage(null);
+            }, 3000);
+          }}
+        >
+          {msg.content?.length > 50 ? `${msg.content.slice(0, 50)}...` : msg.content || 'Media message'}
+        </Typography>
+      ))}
+    </Box>
+  );
+};
 
 PinnedMessages.propTypes = {
   pinnedMessages: PropTypes.arrayOf(
@@ -95,36 +100,39 @@ const ChatMessages = ({
   socket,
 }) => {
   const theme = useTheme();
-  const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const [contextMenu, setContextMenu] = useState({ anchorEl: null, selectedText: '', message: null });
   const [highlightedMessage, setHighlightedMessage] = useState(null);
   const [error, setError] = useState(null);
 
-  const normalizedMessages = useMemo(() => (Array.isArray(messages) ? messages : [messages]).filter((m) => m?.message_id), [messages]);
-  const pinnedMessages = useMemo(() => normalizedMessages.filter((m) => m?.pinned), [normalizedMessages]);
-  const backgroundStyle = useMemo(() => getBackgroundStyle(chatBackground), [chatBackground]);
+  const normalizedMessages = useMemo(() => {
+    const msgs = Array.isArray(messages) ? messages : [messages];
+    return msgs
+      .filter((m) => m?.message_id)
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  }, [messages]);
 
-  // Socket for new messages
-  useEffect(() => {
-    if (!socket) return;
+  const pinnedMessages = useMemo(() => {
+    return normalizedMessages.filter((m) => m?.pinned);
+  }, [normalizedMessages]);
 
-    socket.on('new_message', (newMessage) => {
-      if (
-        (isGroupChat && newMessage.group_id === recipient?.group_id) ||
-        (!isGroupChat && newMessage.conversation_id === recipient?.conversation_id)
-      ) {
-        onSendMediaMessage(newMessage);
-      }
-    });
+  const backgroundStyle = useMemo(() => {
+    return getBackgroundStyle(chatBackground);
+  }, [chatBackground]);
 
-    return () => socket.off('new_message');
-  }, [socket, isGroupChat, recipient, onSendMediaMessage]);
+  const getSenderName = useCallback(
+    (senderId) => {
+      if (senderId === currentUserId) return 'You';
+      const friend = friends.find((f) => f.anonymous_id === senderId);
+      return friend?.username || 'Unknown';
+    },
+    [currentUserId, friends]
+  );
 
   const handleContextMenu = useCallback((event, message) => {
     const selection = window.getSelection();
     const selectedText = selection.toString().trim();
-    if (selectedText) {
+    if (selectedText || message) {
       event.preventDefault();
       setContextMenu({ anchorEl: event.currentTarget, selectedText, message });
     }
@@ -135,18 +143,30 @@ const ChatMessages = ({
   }, []);
 
   const handleReplyText = useCallback(() => {
-    setReplyToMessage({ ...contextMenu.message, selectedText: contextMenu.selectedText });
+    setReplyToMessage({
+      ...contextMenu.message,
+      selectedText: contextMenu.selectedText || null,
+      isTextReply: !!contextMenu.selectedText,
+    });
     handleContextMenuClose();
   }, [contextMenu.message, contextMenu.selectedText, setReplyToMessage]);
 
-  // Setup IntersectionObserver for loading more messages
+  const debouncedLoadMore = useCallback(
+    debounce(() => {
+      if (hasMore && !isFetching) {
+        loadMoreMessages();
+      }
+    }, 300),
+    [hasMore, isFetching, loadMoreMessages]
+  );
+
   useEffect(() => {
     if (!chatContainerRef.current || !hasMore || isFetching) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          loadMoreMessages();
+          debouncedLoadMore();
         }
       },
       { root: chatContainerRef.current, threshold: 0.1 }
@@ -157,37 +177,54 @@ const ChatMessages = ({
 
     return () => {
       if (topElement) observer.unobserve(topElement);
+      debouncedLoadMore.cancel();
     };
-  }, [hasMore, isFetching, loadMoreMessages]);
+  }, [hasMore, isFetching, debouncedLoadMore]);
 
-  // Mark unread messages as read
   useEffect(() => {
     const unreadMessages = normalizedMessages.filter((m) => m?.receiver_id === currentUserId && !m.is_read);
     for (const msg of unreadMessages) {
-      if (msg?.message_id) onMarkRead(msg.message_id);
+      if (msg?.message_id) {
+        onMarkRead(msg.message_id);
+      }
     }
   }, [normalizedMessages, currentUserId, onMarkRead]);
 
-  // Auto-clear error
   useEffect(() => {
     if (error) {
-      const timer = setTimeout(() => setError(null), 5000);
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 5000);
       return () => clearTimeout(timer);
     }
   }, [error]);
 
-  // Mark all messages as read (for group chats)
   const handleMarkAllRead = useCallback(async () => {
     const unreadMessages = normalizedMessages.filter((m) => m?.receiver_id === currentUserId && !m.is_read);
     try {
       for (const msg of unreadMessages) {
-        if (msg?.message_id) await onMarkRead(msg.message_id);
+        if (msg?.message_id) {
+          await onMarkRead(msg.message_id);
+        }
       }
     } catch (err) {
+      console.error(`[ChatMessages] Mark all read error: ${err.message}`);
       setError('Failed to mark all messages as read.');
-      console.error('Mark all read error:', err);
     }
   }, [normalizedMessages, currentUserId, onMarkRead]);
+
+  const handleRetrySend = useCallback(
+    async (message) => {
+      try {
+        await onSendMediaMessage(message);
+        setError(null);
+      } catch (err) {
+        console.error(`[ChatMessages] Retry send error: ${err.message}`);
+        setError('Failed to retry sending message.');
+      }
+    },
+    [onSendMediaMessage]
+  );
 
   return (
     <Box
@@ -202,6 +239,11 @@ const ChatMessages = ({
       {error && (
         <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
           {error}
+          {error.includes('Failed to send') && (
+            <Button size="small" onClick={() => handleRetrySend(contextMenu.message)}>
+              Retry
+            </Button>
+          )}
         </Alert>
       )}
       <div style={{ height: '1px' }} />
@@ -276,6 +318,7 @@ const ChatMessages = ({
                 chatSettings={chatSettings}
                 isHighlighted={highlightedMessage === msg.message_id}
                 setHighlightedMessage={setHighlightedMessage}
+                getSenderName={getSenderName}
               />
             </motion.div>
           ))}
@@ -287,10 +330,13 @@ const ChatMessages = ({
           </Typography>
         )
       )}
-      <div ref={messagesEndRef} />
       <Menu anchorEl={contextMenu.anchorEl} open={Boolean(contextMenu.anchorEl)} onClose={handleContextMenuClose}>
-        <MenuItem onClick={handleReplyText}>Reply to Text</MenuItem>
-        <MenuItem onClick={() => onForwardMessage(contextMenu.message)}>Forward</MenuItem>
+        <MenuItem onClick={handleReplyText}>
+          {contextMenu.selectedText ? 'Reply to Selected Text' : 'Reply to Message'}
+        </MenuItem>
+        <MenuItem onClick={() => onForwardMessage(contextMenu.message)}>
+          Forward
+        </MenuItem>
       </Menu>
     </Box>
   );

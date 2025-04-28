@@ -11,18 +11,31 @@ import {
 } from '@mui/material';
 import { Settings } from '@mui/icons-material';
 import { motion } from 'framer-motion';
+import { v4 as uuidv4 } from 'uuid';
 
-const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket }) => {
+const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket, friends, currentUserId }) => {
   const [isOnline, setIsOnline] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const avatarRef = useRef(null);
+  const socketListenerId = useRef(`chatheader-${uuidv4()}`);
 
-  const displayName = useMemo(
-    () => (isGroupChat ? recipient?.name || 'Unnamed Group' : recipient?.username || 'Unknown User'),
-    [isGroupChat, recipient]
-  );
+  const displayName = useMemo(() => {
+    if (isGroupChat) {
+      if (recipient?.name) return recipient.name;
+      const participantNames = recipient?.participants
+        ?.filter((id) => id !== currentUserId)
+        .map((id) => friends.find((f) => f.anonymous_id === id)?.username || 'Unknown')
+        .filter(Boolean);
+      return participantNames?.length > 0 ? participantNames.join(', ') : 'Unnamed Group';
+    }
+    const friend = friends.find(
+      (f) => recipient?.participants?.includes(f.anonymous_id) && f.anonymous_id !== currentUserId
+    );
+    return friend?.username || recipient?.username || 'Unknown User';
+  }, [isGroupChat, recipient, friends, currentUserId]);
+
   const avatarSrc = useMemo(() => recipient?.profile_image || null, [recipient]);
   const avatarAlt = `Avatar for ${displayName}`;
 
@@ -45,7 +58,6 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket }) => {
     [isGroupChat, recipient?.anonymous_id]
   );
 
-  // Lazy load avatar
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -62,7 +74,6 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket }) => {
     return () => observer.disconnect();
   }, [avatarSrc]);
 
-  // Socket handling
   useEffect(() => {
     if (!socket || isGroupChat || !recipient?.anonymous_id) {
       setIsLoading(false);
@@ -70,21 +81,20 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket }) => {
     }
 
     socket.emit('check_online', recipient.anonymous_id);
-    socket.on('online_status', handleOnlineStatus);
-    socket.on('typing_status', handleTypingStatus);
+    socket.on(`online_status_${socketListenerId.current}`, handleOnlineStatus);
+    socket.on(`typing_status_${socketListenerId.current}`, handleTypingStatus);
     socket.on('connect_error', (err) => {
       setError('Connection error. Retrying...');
       console.error('Socket connect error:', err);
     });
 
     return () => {
-      socket.off('online_status', handleOnlineStatus);
-      socket.off('typing_status', handleTypingStatus);
+      socket.off(`online_status_${socketListenerId.current}`, handleOnlineStatus);
+      socket.off(`typing_status_${socketListenerId.current}`, handleTypingStatus);
       socket.off('connect_error');
     };
   }, [socket, isGroupChat, recipient?.anonymous_id, handleOnlineStatus, handleTypingStatus]);
 
-  // Auto-clear error
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(null), 5000);
@@ -113,6 +123,7 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket }) => {
         borderBottom: '1px solid',
         borderColor: 'grey.300',
       }}
+      aria-label="Chat Header"
     >
       {error && (
         <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 1, width: '100%' }}>
@@ -187,6 +198,13 @@ ChatHeader.propTypes = {
   isGroupChat: PropTypes.bool.isRequired,
   onSettingsOpen: PropTypes.func.isRequired,
   socket: PropTypes.object,
+  friends: PropTypes.arrayOf(
+    PropTypes.shape({
+      anonymous_id: PropTypes.string.isRequired,
+      username: PropTypes.string,
+    })
+  ).isRequired,
+  currentUserId: PropTypes.string.isRequired,
 };
 
 export default React.memo(ChatHeader);

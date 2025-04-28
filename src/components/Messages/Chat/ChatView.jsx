@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Alert, Typography, useTheme, CircularProgress } from '@mui/material';
+import { Box, Alert, Typography, useTheme, CircularProgress, Button } from '@mui/material';
 import { VariableSizeList } from 'react-window';
 import { motion, AnimatePresence } from 'framer-motion';
 import AutoSizer from 'react-virtualized-auto-sizer';
@@ -9,6 +9,7 @@ import ChatMessages from './ChatMessages';
 import ChatFooter from './ChatFooter';
 import ChatSettingsModal from '../ChatSettingsModal';
 import { isSameDay } from 'date-fns';
+import { v4 as uuidv4 } from 'uuid';
 
 const ChatView = ({
   currentUserId,
@@ -48,28 +49,29 @@ const ChatView = ({
   const [replyToMessage, setReplyToMessage] = useState(null);
   const listRef = useRef(null);
   const isNearBottomRef = useRef(true);
-
+  const socketListenerId = useRef(`chatview-${uuidv4()}`);
   const conversationId = conversation?.conversation_id || null;
   const isGroupChat = conversation?.type === 'group' || false;
 
-  // Auto-clear error
   useEffect(() => {
     if (error) {
-      const timer = setTimeout(() => setError(null), 5000);
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 5000);
       return () => clearTimeout(timer);
     }
   }, [error]);
 
-  // Filter messages
   const filteredMessages = useMemo(() => {
     if (!conversationId) return [];
     const validMessages = (messages || []).filter(
       (m) => m?.message_id && (isGroupChat ? m.group_id === conversationId : m.conversation_id === conversationId)
     );
-    return validMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    return Array.from(
+      new Map(validMessages.map((m) => [m.message_id, m])).values()
+    ).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   }, [messages, conversationId, isGroupChat]);
 
-  // Fetch messages
   const fetchMessagesForPage = useCallback(
     async (targetPage, reset = false) => {
       if (!conversationId || isFetching || !hasMore) return;
@@ -85,6 +87,7 @@ const ChatView = ({
         });
 
         const newMessages = (data?.messages || []).filter((m) => m?.message_id);
+
         setMessages((prev) => {
           const validPrev = Array.isArray(prev) ? prev : [];
           const filteredPrev = reset
@@ -93,119 +96,247 @@ const ChatView = ({
               )
             : validPrev;
           const combined = [...filteredPrev, ...newMessages];
-          return [...new Set(combined.map((m) => m.message_id))].map((id) =>
-            combined.find((m) => m.message_id === id)
+          return Array.from(
+            new Map(combined.map((m) => [m.message_id, m])).values()
           ).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
         });
 
         setHasMore(newMessages.length === 20);
         setPage(targetPage + 1);
-
-        if (reset && listRef.current && newMessages.length > 0) {
-          setTimeout(() => {
-            listRef.current.scrollToItem(filteredMessages.length - 1, 'end');
-          }, 100);
-        }
       } catch (err) {
+        console.error(`[ChatView] Fetch messages error: ${err.message}`);
         setError('Failed to load messages.');
-        console.error('Fetch messages error:', err);
       } finally {
         setIsFetching(false);
       }
     },
-    [conversationId, fetchMessagesList, isGroupChat, setMessages, hasMore, isFetching, filteredMessages]
+    [conversationId, fetchMessagesList, isGroupChat, setMessages, hasMore, isFetching]
   );
 
-  // Initial fetch
   useEffect(() => {
     if (conversationId) {
       fetchMessagesForPage(1, true);
     }
   }, [conversationId, fetchMessagesForPage]);
 
-  // Socket for new messages
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('new_message', (newMessage) => {
+    const handleNewMessage = (newMessage) => {
+      console.log('[ChatView] Received new message:', newMessage);
       if (
-        (isGroupChat && newMessage.group_id === conversationId) ||
-        (!isGroupChat && newMessage.conversation_id === conversationId)
+        !newMessage?.message_id ||
+        ((isGroupChat && newMessage.group_id !== conversationId) ||
+         (!isGroupChat && newMessage.conversation_id !== conversationId))
       ) {
-        setMessages((prev) => [...prev, newMessage].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
-        if (isNearBottomRef.current && listRef.current) {
-          setTimeout(() => {
-            listRef.current.scrollToItem(filteredMessages.length, 'end');
-          }, 100);
-        }
-      }
-    });
-
-    return () => socket.off('new_message');
-  }, [socket, isGroupChat, conversationId, setMessages, filteredMessages]);
-
-  // Send message
-  const handleSendMessage = useCallback(
-    async (messageData) => {
-      if (!conversationId) {
-        setError('No conversation selected.');
         return;
       }
 
-      const tempMessageId = `temp-${Date.now()}`;
+      setMessages((prev) => {
+        if (
+          prev.some(
+            (m) =>
+              m.message_id === newMessage.message_id ||
+              m.client_message_id === newMessage.client_message_id
+          )
+        ) {
+          return prev;
+        }
+        return [...prev, newMessage].sort(
+          (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+        );
+      });
+    };
+
+    socket.on(`new_message_${socketListenerId.current}`, handleNewMessage);
+    return () => {
+      socket.off(`new_message_${socketListenerId.current}`, handleNewMessage);
+    };
+  }, [socket, isGroupChat, conversationId, setMessages]);
+
+  const handleSendMessage = useCallback(
+    async (messageData) => {
+      if (!conversationId || (!messageData.content?.trim() && !messageData.media?.length)) {
+        return false;
+      }
+
+      const clientMessageId = `client-${uuidv4()}`;
       const finalMessageData = {
-        ...messageData,
-        conversationId,
-        replyTo: replyToMessage?.message_id || undefined,
-        selectedText: replyToMessage?.selectedText || undefined,
+        conversationId: String(conversationId),
+        content: messageData.content?.trim(),
+        media: messageData.media || [],
+        replyTo: messageData.replyTo || undefined,
+        selectedText: messageData.selectedText || undefined,
+        isTextReply: messageData.isTextReply || false,
+        thread_id: messageData.thread_id || null,
+        client_message_id: clientMessageId,
       };
 
-      try {
-        const tempMessage = {
-          ...finalMessageData,
-          message_id: tempMessageId,
-          sender_id: currentUserId,
-          timestamp: new Date().toISOString(),
-          is_read: false,
-          delivery_status: 'pending',
-        };
-        setMessages((prev) => [...prev, tempMessage].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)));
+      const tempMessage = {
+        ...finalMessageData,
+        message_id: clientMessageId,
+        sender_id: currentUserId,
+        timestamp: new Date().toISOString(),
+        is_read: false,
+        delivery_status: 'pending',
+      };
 
-        const sentMessage = await onSendMediaMessage(finalMessageData);
+      setMessages((prev) => {
+        const updated = prev.filter((m) => m.client_message_id !== clientMessageId);
+        return [...updated, tempMessage].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      });
+
+      try {
+        const sentMessage = await onSendMediaMessage(
+          finalMessageData.conversationId,
+          finalMessageData.content,
+          finalMessageData.media,
+          finalMessageData.replyTo
+        );
+
+        if (!sentMessage) throw new Error('Empty message response from server');
 
         setMessages((prev) =>
           prev
-            .filter((m) => m.message_id !== tempMessageId)
-            .concat(sentMessage)
+            .map((m) =>
+              m.client_message_id === clientMessageId
+                ? { ...sentMessage, message_id: sentMessage.message_id || clientMessageId }
+                : m
+            )
             .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
         );
 
         setReplyToMessage(null);
-        if (isNearBottomRef.current && listRef.current) {
-          setTimeout(() => {
-            listRef.current.scrollToItem(filteredMessages.length, 'end');
-          }, 100);
-        }
+        return true;
       } catch (err) {
+        console.error(`[ChatView] Send message error: ${err.message}`);
         setError('Failed to send message.');
-        setMessages((prev) => prev.filter((m) => m.message_id !== tempMessageId));
-        console.error('Send message error:', err);
+        setMessages((prev) => prev.filter((m) => m.client_message_id !== clientMessageId));
+        return false;
       }
     },
-    [conversationId, currentUserId, onSendMediaMessage, setMessages, replyToMessage, filteredMessages]
+    [conversationId, currentUserId, onSendMediaMessage, setMessages, setReplyToMessage]
   );
 
-  // Load more messages
+  const handleRetrySend = useCallback(
+    async (messageData) => {
+      try {
+        await handleSendMessage(messageData);
+        setError(null);
+      } catch (err) {
+        console.error(`[ChatView] Retry send error: ${err.message}`);
+        setError('Failed to retry sending message.');
+      }
+    },
+    [handleSendMessage]
+  );
+
   const handleLoadMore = useCallback(() => {
     if (!isFetching && hasMore) {
       fetchMessagesForPage(page);
     }
   }, [fetchMessagesForPage, isFetching, hasMore, page]);
 
-  // Save settings
   const handleSettingsSave = useCallback((newSettings) => {
     setChatSettings(newSettings);
     setSettingsOpen(false);
+  }, []);
+
+  const itemSize = useCallback(
+    (index) => {
+      const message = filteredMessages[index];
+      if (!message) return 120;
+      let baseSize = 120;
+      if (message.media?.length) baseSize += 180;
+      if (message.poll) baseSize += 100;
+      if (message.replyTo) baseSize += 60;
+      if (message.content) baseSize += Math.floor((message.content.length || 0) / 50) * 20;
+      return Math.max(120, baseSize);
+    },
+    [filteredMessages]
+  );
+
+  const renderItem = useCallback(
+    ({ index, style }) => {
+      return (
+        <div style={style} key={filteredMessages[index].message_id}>
+          <ChatMessages
+            messages={[filteredMessages[index]]}
+            currentUserId={currentUserId}
+            recipient={conversation}
+            onDeleteMessage={onDeleteMessage}
+            onEditMessage={onEditMessage}
+            onSendMediaMessage={handleSendMessage}
+            onMarkRead={onMarkRead}
+            onForwardMessage={onForwardMessage}
+            isFetching={isFetching}
+            hasMore={hasMore}
+            loadMoreMessages={handleLoadMore}
+            chatBackground={chatSettings.chatBackground}
+            setReplyToMessage={setReplyToMessage}
+            isGroupChat={isGroupChat}
+            friends={friends}
+            token={token}
+            onAddReaction={onAddReaction}
+            onCreatePoll={onCreatePoll}
+            onVotePoll={onVotePoll}
+            onPinMessage={onPinMessage}
+            onUnpinMessage={onUnpinMessage}
+            chatSettings={chatSettings}
+            showDate={index === 0 || !isSameDay(
+              new Date(filteredMessages[index].timestamp),
+              new Date(filteredMessages[index - 1]?.timestamp)
+            )}
+            socket={socket}
+          />
+        </div>
+      );
+    },
+    [
+      filteredMessages,
+      currentUserId,
+      conversation,
+      onDeleteMessage,
+      onEditMessage,
+      handleSendMessage,
+      onMarkRead,
+      onForwardMessage,
+      isFetching,
+      hasMore,
+      handleLoadMore,
+      chatSettings,
+      setReplyToMessage,
+      isGroupChat,
+      friends,
+      token,
+      onAddReaction,
+      onCreatePoll,
+      onVotePoll,
+      onPinMessage,
+      onUnpinMessage,
+      socket,
+    ]
+  );
+
+  useEffect(() => {
+    if (filteredMessages.length > 0 && listRef.current && isNearBottomRef.current) {
+      setTimeout(() => {
+        listRef.current.scrollToItem(filteredMessages.length - 1, 'end');
+      }, 100);
+    }
+  }, [filteredMessages]);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = list._outerRef;
+      isNearBottomRef.current = scrollTop + clientHeight >= scrollHeight - 100;
+    };
+
+    list._outerRef.addEventListener('scroll', handleScroll);
+    return () => list._outerRef.removeEventListener('scroll', handleScroll);
   }, []);
 
   if (!conversation || !conversationId) {
@@ -227,11 +358,17 @@ const ChatView = ({
         borderRadius: 2,
         bgcolor: theme.palette.background.paper,
       }}
+      aria-label="Chat View 2"
     >
       {error && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
           <Alert severity="error" onClose={() => setError(null)} sx={{ m: 1 }}>
             {error}
+            {error.includes('Failed to send') && (
+              <Button size="small" onClick={() => handleRetrySend(replyToMessage)}>
+                Retry
+              </Button>
+            )}
           </Alert>
         </motion.div>
       )}
@@ -240,57 +377,24 @@ const ChatView = ({
         isGroupChat={isGroupChat}
         onSettingsOpen={() => setSettingsOpen(true)}
         socket={socket}
+        friends={friends}
+        currentUserId={currentUserId}
       />
-      <Box sx={{ flex: 1, overflowY: 'auto' }}>
+      <Box sx={{ flex: 1, overflow: 'hidden' }}
+      aria-label="Chat Messages"
+      >
         <AutoSizer>
           {({ height, width }) => (
             <VariableSizeList
+              key={conversationId}
               ref={listRef}
               height={height}
               width={width}
               itemCount={filteredMessages.length}
-              itemSize={(index) => {
-                const message = filteredMessages[index];
-                if (!message) return 120;
-                if (message.media?.length) return 300;
-                if (message.poll) return 200;
-                return Math.max(120, 120 + Math.floor((message.content?.length || 0) / 50) * 20);
-              }}
-              overscanCount={5}
+              itemSize={itemSize}
+              overscanCount={10}
             >
-              {({ index, style }) => (
-                <div style={style}>
-                  <ChatMessages
-                    messages={[filteredMessages[index]]}
-                    currentUserId={currentUserId}
-                    recipient={conversation}
-                    onDeleteMessage={onDeleteMessage}
-                    onEditMessage={onEditMessage}
-                    onSendMediaMessage={handleSendMessage}
-                    onMarkRead={onMarkRead}
-                    onForwardMessage={onForwardMessage}
-                    isFetching={isFetching}
-                    hasMore={hasMore}
-                    loadMoreMessages={handleLoadMore}
-                    chatBackground={chatSettings.chatBackground}
-                    setReplyToMessage={setReplyToMessage}
-                    isGroupChat={isGroupChat}
-                    friends={friends}
-                    token={token}
-                    onAddReaction={onAddReaction}
-                    onCreatePoll={onCreatePoll}
-                    onVotePoll={onVotePoll}
-                    onPinMessage={onPinMessage}
-                    onUnpinMessage={onUnpinMessage}
-                    chatSettings={chatSettings}
-                    showDate={index === 0 || !isSameDay(
-                      new Date(filteredMessages[index].timestamp),
-                      new Date(filteredMessages[index - 1]?.timestamp)
-                    )}
-                    socket={socket}
-                  />
-                </div>
-              )}
+              {renderItem}
             </VariableSizeList>
           )}
         </AutoSizer>
@@ -313,6 +417,7 @@ const ChatView = ({
         token={token}
         currentUserId={currentUserId}
         friends={friends}
+        socket={socket}
       />
       <ChatSettingsModal
         open={settingsOpen}
@@ -365,6 +470,8 @@ ChatView.propTypes = {
       selectedText: PropTypes.string,
       pinned: PropTypes.bool,
       reactions: PropTypes.array,
+      client_message_id: PropTypes.string,
+      isTextReply: PropTypes.bool,
     })
   ).isRequired,
   setMessages: PropTypes.func.isRequired,

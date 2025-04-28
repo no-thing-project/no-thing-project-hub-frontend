@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { uploadFile } from '../api/messagesApi';
+import { v4 as uuidv4 } from 'uuid';
 
 const useUploads = ({ token, userId, handleLogout, navigate }) => {
   const [uploads, setUploads] = useState([]);
@@ -12,6 +13,7 @@ const useUploads = ({ token, userId, handleLogout, navigate }) => {
       return null;
     }
 
+    const fileId = uuidv4(); // Унікальний ідентифікатор для файлу
     setLoading(true);
     setError('');
 
@@ -21,7 +23,11 @@ const useUploads = ({ token, userId, handleLogout, navigate }) => {
       formData.append('userId', userId);
 
       const response = await uploadFile(formData, token);
-      setUploads((prev) => [...prev, { file, preview: URL.createObjectURL(file), type: file.type }]);
+      const previewUrl = URL.createObjectURL(file);
+      setUploads((prev) => [
+        ...prev.filter((item) => item.fileId !== fileId), // Уникаємо дублювання
+        { fileId, file, preview: previewUrl, type: file.type },
+      ]);
       return response.data;
     } catch (err) {
       if (err.status === 401) {
@@ -37,7 +43,12 @@ const useUploads = ({ token, userId, handleLogout, navigate }) => {
   }, [token, userId, handleLogout, navigate]);
 
   const clearUploads = useCallback(() => {
-    setUploads([]);
+    setUploads((prev) => {
+      prev.forEach((item) => {
+        if (item.preview) URL.revokeObjectURL(item.preview); // Очищаємо URL
+      });
+      return [];
+    });
     setError('');
   }, []);
 

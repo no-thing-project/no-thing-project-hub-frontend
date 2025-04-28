@@ -16,6 +16,7 @@ import {
   listScheduledMessages,
   cancelScheduledMessage,
 } from '../api/messagesApi';
+import { v4 as uuidv4 } from 'uuid';
 
 const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) => {
   const [messages, setMessages] = useState([]);
@@ -47,12 +48,14 @@ const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) =
       return { messages: [] };
     }
     try {
+      console.log(`[useMessages] Loading messages for conversation: ${conversationId}, page: ${params.page}`);
       const data = await handleApiCall(fetchMessages, conversationId, params);
       const newMessages = Array.isArray(data?.messages) ? data.messages : [];
       setMessages((prev) => (params.page === 1 ? newMessages : [...prev, ...newMessages]));
+      console.log(`[useMessages] Loaded ${newMessages.length} messages`);
       return { messages: newMessages };
     } catch (error) {
-      console.error('loadMessages error:', error);
+      console.error('[useMessages] loadMessages error:', error);
       setMessages([]);
       return { messages: [] };
     }
@@ -67,19 +70,35 @@ const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) =
     forwardedFrom
   ) => {
     if (!conversationId) throw new Error('Conversation ID is required');
-    const data = await handleApiCall(sendMessage, {
+
+    const messagePayload = {
       conversationId,
       content,
       media,
       replyTo,
-      scheduledAt,
       forwardedFrom,
-    });
-    setMessages((prev) => [data, ...prev]);
-    if (updateLastMessage) {
-      updateLastMessage(conversationId, data);
+    };
+    if (scheduledAt && !isNaN(Date.parse(scheduledAt))) {
+      messagePayload.scheduledAt = scheduledAt;
     }
-    return data;
+
+    console.log('[useMessages] Sending message:', messagePayload);
+    try {
+      const data = await handleApiCall(sendMessage, messagePayload);
+      if (!data) {
+        throw new Error('Empty response from server');
+      }
+      setMessages((prev) => [data, ...prev]);
+      if (updateLastMessage) {
+        updateLastMessage(conversationId, data);
+      }
+      console.log('[useMessages] Message sent successfully:', data);
+      return data;
+    } catch (err) {
+      console.error('[useMessages] Send message error:', err);
+      setError('Failed to send message. Please try again.');
+      throw err;
+    }
   }, [handleApiCall, updateLastMessage]);
 
   const sendTypingIndicator = useCallback((conversationId) => {
