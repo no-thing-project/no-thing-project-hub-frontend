@@ -1,52 +1,65 @@
 import theme from "../Theme";
 
 export const actionButtonStyles = {
-  height: "50px",
-  minWidth: "150px",
-  borderRadius: 20,
-  padding: "0 25px",
-  backgroundColor: "background.button",
+  height: { xs: "40px", sm: "50px" },
+  minWidth: { xs: "120px", sm: "150px" },
+  borderRadius: theme.shape.borderRadiusLarge,
+  padding: { xs: "0 15px", sm: "0 25px" },
+  backgroundColor: "primary.main",
+  color: "primary.contrastText",
   boxShadow: "none",
+  fontSize: { xs: "0.875rem", sm: "1rem" },
+  fontWeight: 600,
   transition: "all 0.3s ease-in-out",
-  ":hover": {
-    transition: "all 0.3s ease-in-out",
-    color: "text.primary",
-    backgroundColor: "background.hover",
+  "&:hover": {
+    backgroundColor: "primary.dark",
     boxShadow: "none",
+  },
+  "&:disabled": {
+    backgroundColor: "action.disabled",
+    color: "action.disabledOpacity",
   },
 };
 
 export const cancelButtonStyle = {
-  height: "50px",
-  minWidth: "150px",
-  borderRadius: 20,
-  padding: "0 25px",
+  height: { xs: "40px", sm: "50px" },
+  minWidth: { xs: "120px", sm: "150px" },
+  borderRadius: theme.shape.borderRadiusLarge,
+  padding: { xs: "0 15px", sm: "0 25px" },
   backgroundColor: "background.default",
   color: "text.primary",
   boxShadow: "none",
+  fontSize: { xs: "0.875rem", sm: "1rem" },
+  fontWeight: 600,
   transition: "all 0.3s ease-in-out",
-  ":hover": {
-    transition: "all 0.3s ease-in-out",
-    color: "text.primary",
+  "&:hover": {
     backgroundColor: "background.hover",
     boxShadow: "none",
+  },
+  "&:disabled": {
+    backgroundColor: "action.disabled",
+    color: "action.disabledOpacity",
   },
 };
 
 export const deleteButtonStyle = {
-  height: "50px",
-  minWidth: "150px",
-  borderRadius: 20,
-  padding: "0 25px",
-  backgroundColor: "background.default",
-  color: "error.main",
+  height: { xs: "40px", sm: "50px" },
+  minWidth: { xs: "120px", sm: "150px" },
+  borderRadius: theme.shape.borderRadiusLarge,
+  padding: { xs: "0 15px", sm: "0 25px" },
+  backgroundColor: "error.main",
+  color: "error.contrastText",
   boxShadow: "none",
+  fontSize: { xs: "0.875rem", sm: "1rem" },
+  fontWeight: 600,
   transition: "all 0.3s ease-in-out",
-  ":hover": {
-    transition: "all 0.3s ease-in-out",
-    color: "background.paper",
+  "&:hover": {
     backgroundColor: "error.dark",
     boxShadow: "none",
+  },
+  "&:disabled": {
+    backgroundColor: "action.disabled",
+    color: "action.disabledOpacity",
   },
 };
 
@@ -56,18 +69,29 @@ export const inputStyles = {
   borderRadius: theme.shape.borderRadiusSmall,
   "& .MuiInputLabel-root": {
     color: "text.secondary",
+    fontSize: { xs: "0.875rem", sm: "1rem" },
   },
   "& .MuiInputLabel-root.Mui-focused": {
-    color: "text.primary",
+    color: "primary.main",
   },
   "& .MuiOutlinedInput-root": {
     borderRadius: theme.shape.borderRadiusSmall,
     "& .MuiOutlinedInput-notchedOutline": {
       border: "none",
     },
+    "&:hover .MuiOutlinedInput-notchedOutline": {
+      border: "none",
+    },
+    "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+      border: "none",
+    },
+  },
+  "& .MuiInputBase-input": {
+    fontSize: { xs: "0.875rem", sm: "1rem" },
   },
   "& .MuiInputBase-input::placeholder": {
-    color: theme.palette.text.secondary,
+    color: "text.secondary",
+    opacity: 1,
   },
 };
 
@@ -77,39 +101,55 @@ export const inputStylesWhite = {
   borderRadius: theme.shape.borderRadiusSmall,
   "& .MuiInputLabel-root": {
     color: "text.secondary",
+    fontSize: { xs: "0.875rem", sm: "1rem" },
   },
   "& .MuiInputLabel-root.Mui-focused": {
-    color: "text.primary",
+    color: "primary.main",
   },
   "& .MuiOutlinedInput-root": {
     borderRadius: theme.shape.borderRadiusSmall,
     "& .MuiOutlinedInput-notchedOutline": {
       border: "none",
     },
+    "&:hover .MuiOutlinedInput-notchedOutline": {
+      border: "none",
+    },
+    "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+      border: "none",
+    },
+  },
+  "& .MuiInputBase-input": {
+    fontSize: { xs: "0.875rem", sm: "1rem" },
   },
   "& .MuiInputBase-input::placeholder": {
-    color: theme.palette.text.secondary,
+    color: "text.secondary",
+    opacity: 1,
   },
 };
 
 export const selectStyles = {
   mt: theme.spacing(1),
-  backgroundColor: theme.palette.background.default,
+  backgroundColor: "background.default",
   borderRadius: theme.shape.borderRadiusSmall,
   "& .MuiOutlinedInput-root": {
     borderRadius: theme.shape.borderRadiusSmall,
-    // Замість notchedOutline – стилізуємо fieldset
     "& fieldset": {
-      border: "none !important",
+      border: "none",
     },
     "&:hover fieldset": {
-      border: "none !important",
+      border: "none",
     },
     "&.Mui-focused fieldset": {
-      border: "none !important",
+      border: "none",
     },
   },
+  "& .MuiSelect-select": {
+    fontSize: { xs: "0.875rem", sm: "1rem" },
+  },
   "& .MuiSelect-icon": {
-    color: theme.palette.text.primary,
+    color: "text.primary",
+  },
+  "& .MuiInputLabel-root": {
+    fontSize: { xs: "0.875rem", sm: "1rem" },
   },
 };

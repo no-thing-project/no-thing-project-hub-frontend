@@ -6,6 +6,7 @@ import {
   Tooltip,
   Chip,
   Divider,
+  useTheme,
 } from "@mui/material";
 import {
   Edit,
@@ -18,6 +19,7 @@ import {
   Forum,
   GroupAdd,
 } from "@mui/icons-material";
+import PropTypes from "prop-types";
 
 const GateCard = ({
   gate,
@@ -30,17 +32,20 @@ const GateCard = ({
   navigate,
   currentUser,
 }) => {
+  const theme = useTheme();
   const totalLength = (gate.name?.length || 0) + (gate.description?.length || 0);
   let span = 1;
   if (totalLength > 100) span = 3;
   else if (totalLength > 40) span = 2;
 
   const isFavorited = gate.is_favorited || false;
-  const userRole = gate.members?.find((m) => m.member_id === currentUser?.anonymous_id)?.role || "none";
+  const userRole = gate.members?.find((m) => m.anonymous_id === currentUser?.anonymous_id)?.role || "none";
   const isOwner = gate.creator_id === currentUser?.anonymous_id;
   const canEdit = isOwner || userRole === "admin";
   const canDelete = isOwner;
-  const isPublic = gate.is_public || gate.visibility === "public";
+  const isPublic = gate.access?.is_public || gate.visibility === "public";
+  const owner = gate.members?.find((m) => m.role === "owner");
+  const ownerUsername = owner?.username || "Unknown";
 
   const handleKeyPress = useCallback(
     (e) => {
@@ -68,12 +73,12 @@ const GateCard = ({
       sx={{
         gridColumn: { xs: "span 1", md: `span ${span}` },
         backgroundColor: "background.paper",
-        borderRadius: 2,
-        p: 2,
+        borderRadius: theme.shape.borderRadiusMedium,
+        p: { xs: 1.5, md: 2 },
         cursor: "pointer",
         display: "flex",
         flexDirection: "column",
-        minHeight: 250,
+        minHeight: { xs: 200, md: 250 },
         transition: "all 0.3s ease-in-out",
         "&:hover": {
           backgroundColor: "background.hover",
@@ -87,10 +92,13 @@ const GateCard = ({
       aria-label={`View gate ${gate.name || "Untitled Gate"}`}
     >
       <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+        <Typography
+          variant="subtitle2"
+          sx={{ fontWeight: 600, fontSize: { xs: "0.875rem", md: "1rem" } }}
+        >
           {gate.slug || gate.name || "Untitled Gate"}
         </Typography>
-        <Box sx={{ display: "flex", gap: 1 }}>
+        <Box sx={{ display: "flex", gap: { xs: 0.5, md: 1 } }}>
           {canEdit && (
             <Tooltip title="Edit Gate">
               <IconButton
@@ -162,11 +170,21 @@ const GateCard = ({
       </Box>
 
       <Box sx={{ flexGrow: 1 }}>
-        <Typography variant="h6" sx={{ mb: 1 }}>
+        <Typography
+          variant="h6"
+          sx={{ mb: 1, fontSize: { xs: "1.25rem", md: "1.5rem" } }}
+        >
           {gate.name || "Untitled Gate"}
         </Typography>
         {gate.description && (
-          <Typography variant="body2" sx={{ mb: 1, color: "text.secondary" }}>
+          <Typography
+            variant="body2"
+            sx={{
+              mb: 1,
+              color: "text.secondary",
+              fontSize: { xs: "0.75rem", md: "0.875rem" },
+            }}
+          >
             {gate.description}
           </Typography>
         )}
@@ -177,24 +195,28 @@ const GateCard = ({
             icon={<People />}
             size="small"
             variant="outlined"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
           />
           <Chip
             label={`Members: ${gate.stats?.member_count || gate.members?.length || 0}`}
             icon={<People />}
             size="small"
             variant="outlined"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
           />
           <Chip
             label={`Classes: ${gate.classes?.length || 0}`}
             icon={<Forum />}
             size="small"
             variant="outlined"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
           />
           <Chip
             label={`Boards: ${gate.boards?.length || 0}`}
             icon={<Forum />}
             size="small"
             variant="outlined"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
           />
         </Box>
 
@@ -202,9 +224,10 @@ const GateCard = ({
 
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
           <Chip
-            label={`Creator: ${gate.creator?.username || gate.creator_id || "Unknown"}`}
+            label={`Owner: ${ownerUsername}`}
             size="small"
             variant="outlined"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
           />
           {(gate.stats?.favorite_count || 0) > 0 && (
             <Chip
@@ -212,28 +235,95 @@ const GateCard = ({
               icon={<Star />}
               size="small"
               variant="outlined"
+              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
             />
           )}
           {gate.tags?.length > 0 && (
-            <Chip label={`Tags: ${gate.tags.join(", ")}`} size="small" variant="outlined" />
+            <Chip
+              label={`Tags: ${gate.tags.join(", ")}`}
+              size="small"
+              variant="outlined"
+              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+            />
           )}
         </Box>
       </Box>
 
-      <Box sx={{ mt: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <Box
+        sx={{
+          mt: 2,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           {getVisibilityIcon()}
-          <Typography variant="caption">
+          <Typography
+            variant="caption"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+          >
             {isPublic ? "Public" : "Private"}
           </Typography>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Forum fontSize="small" />
-          <Typography variant="caption">{gate.stats?.tweet_count || 0}</Typography>
+          <Typography
+            variant="caption"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+          >
+            {gate.stats?.tweet_count || 0}
+          </Typography>
         </Box>
       </Box>
     </Box>
   );
+};
+
+GateCard.propTypes = {
+  gate: PropTypes.shape({
+    gate_id: PropTypes.string.isRequired,
+    name: PropTypes.string,
+    slug: PropTypes.string,
+    description: PropTypes.string,
+    is_favorited: PropTypes.bool,
+    creator_id: PropTypes.string,
+    creator: PropTypes.shape({
+      username: PropTypes.string,
+      anonymous_id: PropTypes.string,
+    }),
+    members: PropTypes.arrayOf(
+      PropTypes.shape({
+        anonymous_id: PropTypes.string,
+        username: PropTypes.string,
+        role: PropTypes.string,
+      })
+    ),
+    stats: PropTypes.shape({
+      member_count: PropTypes.number,
+      favorite_count: PropTypes.number,
+      tweet_count: PropTypes.number,
+    }),
+    type: PropTypes.string,
+    classes: PropTypes.array,
+    boards: PropTypes.array,
+    tags: PropTypes.arrayOf(PropTypes.string),
+    access: PropTypes.shape({
+      is_public: PropTypes.bool,
+    }),
+    visibility: PropTypes.string,
+    settings: PropTypes.object,
+  }).isRequired,
+  handleFavorite: PropTypes.func.isRequired,
+  setEditingGate: PropTypes.func.isRequired,
+  setGateToDelete: PropTypes.func.isRequired,
+  setDeleteDialogOpen: PropTypes.func.isRequired,
+  handleAddMember: PropTypes.func.isRequired,
+  handleRemoveMember: PropTypes.func.isRequired,
+  navigate: PropTypes.func.isRequired,
+  currentUser: PropTypes.shape({
+    anonymous_id: PropTypes.string,
+  }),
 };
 
 export default memo(GateCard);

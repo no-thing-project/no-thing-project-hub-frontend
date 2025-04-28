@@ -15,6 +15,7 @@ import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDi
 import ClassesFilters from "../components/Classes/ClassesFilters";
 import ClassesGrid from "../components/Classes/ClassesGrid";
 import { debounce } from "lodash";
+import PropTypes from "prop-types";
 
 const GatePage = () => {
   const navigate = useNavigate();
@@ -221,13 +222,12 @@ const GatePage = () => {
       await updateExistingGate(editingGate.gate_id, editingGate);
       setEditingGate(null);
       showNotification("Gate updated successfully!", "success");
-      await loadGateData();
     } catch (err) {
       showNotification(err.message || "Failed to update gate", "error");
     } finally {
       setActionLoading(false);
     }
-  }, [editingGate, updateExistingGate, loadGateData, showNotification]);
+  }, [editingGate, updateExistingGate, showNotification]);
 
   const handleDeleteGate = useCallback(async () => {
     setActionLoading(true);
@@ -269,46 +269,43 @@ const GatePage = () => {
       try {
         await addMemberToGate(gateId, memberData);
         showNotification("Member added successfully!", "success");
-        await loadGateData();
       } catch (err) {
         showNotification(err.message || "Failed to add member", "error");
       } finally {
         setActionLoading(false);
       }
     },
-    [gate_id, members, gateData, addMemberToGate, showNotification, loadGateData]
+    [gate_id, members, gateData, addMemberToGate, showNotification]
   );
 
   const handleRemoveMember = useCallback(
-    async (gateId, memberId) => {
+    async (gateId, username) => {
       setActionLoading(true);
       try {
-        await removeMemberFromGate(gateId, memberId);
+        await removeMemberFromGate(gateId, username);
         showNotification("Member removed successfully!", "success");
-        await loadGateData();
       } catch (err) {
         showNotification(err.message || "Failed to remove member", "error");
       } finally {
         setActionLoading(false);
       }
     },
-    [gate_id, removeMemberFromGate, showNotification, loadGateData]
+    [gate_id, removeMemberFromGate, showNotification]
   );
 
   const handleUpdateMemberRole = useCallback(
-    async (gateId, memberId, newRole) => {
+    async (gateId, username, newRole) => {
       setActionLoading(true);
       try {
-        await updateMemberRole(gateId, memberId, newRole);
+        await updateMemberRole(gateId, username, newRole);
         showNotification("Member role updated successfully!", "success");
-        await loadGateData();
       } catch (err) {
         showNotification(err.message || "Failed to update member role", "error");
       } finally {
         setActionLoading(false);
       }
     },
-    [gate_id, updateMemberRole, showNotification, loadGateData]
+    [gate_id, updateMemberRole, showNotification]
   );
 
   const handleResetFilters = () => {
@@ -374,8 +371,8 @@ const GatePage = () => {
                       gate_id: gateData.gate_id,
                       name: gateData.name,
                       description: gateData.description,
-                      is_public: gateData.is_public,
-                      visibility: gateData.is_public ? "public" : "private",
+                      is_public: gateData.access?.is_public,
+                      visibility: gateData.access?.is_public ? "public" : "private",
                       settings: gateData.settings,
                     })
                   }
@@ -421,8 +418,8 @@ const GatePage = () => {
           )}
           <Box sx={{ display: "flex", gap: 1, mt: 2, flexWrap: "wrap" }}>
             <Chip
-              label={gateData.is_public ? "Public" : "Private"}
-              icon={gateData.is_public ? <Public /> : <Lock />}
+              label={gateData.access?.is_public ? "Public" : "Private"}
+              icon={gateData.access?.is_public ? <Public /> : <Lock />}
               size="small"
               variant="outlined"
             />
@@ -445,7 +442,7 @@ const GatePage = () => {
               variant="outlined"
             />
             <Chip
-              label={`Owner: ${gateData.creator?.username || 'Unknown'}`}
+              label={`Owner: ${gateData.creator?.username || "Unknown"}`}
               size="small"
               variant="outlined"
             />
@@ -534,6 +531,16 @@ const GatePage = () => {
       />
     </AppLayout>
   );
+};
+
+GatePage.propTypes = {
+  navigate: PropTypes.func,
+  gate_id: PropTypes.string,
+  token: PropTypes.string,
+  authData: PropTypes.object,
+  handleLogout: PropTypes.func,
+  isAuthenticated: PropTypes.bool,
+  authLoading: PropTypes.bool,
 };
 
 export default React.memo(GatePage);

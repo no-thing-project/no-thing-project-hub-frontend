@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Button, Skeleton } from "@mui/material";
+import { Box, Button, Skeleton, useTheme } from "@mui/material";
 import { Add } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
 import { useGates } from "../hooks/useGates";
@@ -14,9 +14,11 @@ import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDi
 import GatesFilters from "../components/Gates/GatesFilters";
 import GatesGrid from "../components/Gates/GatesGrid";
 import { debounce } from "lodash";
+import PropTypes from "prop-types";
 
 const GatesPage = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
   const { showNotification } = useNotification();
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth();
   const {
@@ -98,15 +100,15 @@ const GatesPage = () => {
       const matchesSearch = gate.name?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
       if (!matchesSearch) return false;
       if (quickFilter === "all") return true;
-      if (quickFilter === "public") return gate.is_public;
-      if (quickFilter === "private") return !gate.is_public;
+      if (quickFilter === "public") return gate.access?.is_public;
+      if (quickFilter === "private") return !gate.access?.is_public;
       if (quickFilter === "favorited") return gate.is_favorited;
       return true;
     });
   }, [gates, quickFilter, searchQuery]);
 
-  const handleOpenCreateGate = () => setCreateDialogOpen(true);
-  const handleCancelCreateGate = () => {
+  const handleOpenCreateGate = useCallback(() => setCreateDialogOpen(true), []);
+  const handleCancelCreateGate = useCallback(() => {
     setCreateDialogOpen(false);
     setPopupGate({
       name: "",
@@ -120,7 +122,7 @@ const GatesPage = () => {
         ai_moderation_enabled: true,
       },
     });
-  };
+  }, []);
 
   const handleCreateGate = useCallback(async () => {
     if (!popupGate.name.trim()) {
@@ -158,11 +160,10 @@ const GatesPage = () => {
       await updateExistingGate(editingGate.gate_id, editingGate);
       setEditingGate(null);
       showNotification("Gate updated successfully!", "success");
-      await loadGatesData(new AbortController().signal);
     } catch (err) {
       showNotification(err.message || "Failed to update gate", "error");
     }
-  }, [editingGate, updateExistingGate, loadGatesData, showNotification]);
+  }, [editingGate, updateExistingGate, showNotification]);
 
   const handleDeleteGate = useCallback(async () => {
     if (!gateToDelete) return;
@@ -171,13 +172,12 @@ const GatesPage = () => {
       setDeleteDialogOpen(false);
       setGateToDelete(null);
       showNotification("Gate deleted successfully!", "success");
-      await loadGatesData(new AbortController().signal);
     } catch (err) {
       showNotification(err.message || "Failed to delete gate", "error");
       setDeleteDialogOpen(false);
       setGateToDelete(null);
     }
-  }, [gateToDelete, deleteExistingGate, loadGatesData, showNotification]);
+  }, [gateToDelete, deleteExistingGate, showNotification]);
 
   const handleAddMember = useCallback(
     async (gateId, memberData) => {
@@ -189,66 +189,63 @@ const GatesPage = () => {
         }
         await addMemberToGate(gateId, memberData);
         showNotification("Member added successfully!", "success");
-        await loadGatesData(new AbortController().signal);
       } catch (err) {
         showNotification(err.message || "Failed to add member", "error");
       }
     },
-    [addMemberToGate, showNotification, loadGatesData, gates]
+    [addMemberToGate, showNotification, gates]
   );
 
   const handleRemoveMember = useCallback(
-    async (gateId, memberId) => {
+    async (gateId, username) => {
       try {
-        await removeMemberFromGate(gateId, memberId);
+        await removeMemberFromGate(gateId, username);
         showNotification("Member removed successfully!", "success");
-        await loadGatesData(new AbortController().signal);
       } catch (err) {
         showNotification(err.message || "Failed to remove member", "error");
       }
     },
-    [removeMemberFromGate, showNotification, loadGatesData]
+    [removeMemberFromGate, showNotification]
   );
 
   const handleUpdateMemberRole = useCallback(
-    async (gateId, memberId, newRole) => {
+    async (gateId, username, newRole) => {
       try {
-        await updateMemberRole(gateId, memberId, newRole);
+        await updateMemberRole(gateId, username, newRole);
         showNotification("Member role updated successfully!", "success");
-        await loadGatesData(new AbortController().signal);
       } catch (err) {
         showNotification(err.message || "Failed to update member role", "error");
       }
     },
-    [updateMemberRole, showNotification, loadGatesData]
+    [updateMemberRole, showNotification]
   );
 
-  const handleOpenMemberDialog = (gateId) => {
+  const handleOpenMemberDialog = useCallback((gateId) => {
     setSelectedGateId(gateId);
     setMemberDialogOpen(true);
-  };
+  }, []);
 
-  const handleCancelMemberDialog = () => {
+  const handleCancelMemberDialog = useCallback(() => {
     setMemberDialogOpen(false);
     setSelectedGateId(null);
-  };
+  }, []);
 
-  const handleResetFilters = () => {
+  const handleResetFilters = useCallback(() => {
     setQuickFilter("all");
     setSearchQuery("");
-  };
+  }, []);
 
   if (authLoading || gatesLoading || isLoading) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-        <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
+        <Box sx={{ maxWidth: 1500, mx: "auto", p: { xs: 2, md: 3 } }}>
           <Skeleton variant="rectangular" height={100} sx={{ mb: 2 }} />
           <Skeleton variant="rectangular" height={50} sx={{ mb: 2 }} />
           <Box
             sx={{
               display: "grid",
               gap: 2,
-              gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+              gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fill, minmax(300px, 1fr))" },
             }}
           >
             {[...Array(6)].map((_, i) => (
@@ -267,12 +264,15 @@ const GatesPage = () => {
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-      <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
+      <Box sx={{ maxWidth: 1500, mx: "auto", p: { xs: 2, md: 3 } }}>
         <ProfileHeader user={authData} isOwnProfile={true}>
           <Button
             onClick={handleOpenCreateGate}
             startIcon={<Add />}
-            sx={actionButtonStyles}
+            sx={{
+              ...actionButtonStyles,
+              [theme.breakpoints.down("sm")]: { minWidth: 120, fontSize: "0.875rem" },
+            }}
             aria-label="Create a new gate"
           >
             Create Gate
@@ -339,6 +339,15 @@ const GatesPage = () => {
       />
     </AppLayout>
   );
+};
+
+GatesPage.propTypes = {
+  navigate: PropTypes.func,
+  token: PropTypes.string,
+  authData: PropTypes.object,
+  handleLogout: PropTypes.func,
+  isAuthenticated: PropTypes.bool,
+  authLoading: PropTypes.bool,
 };
 
 export default React.memo(GatesPage);
