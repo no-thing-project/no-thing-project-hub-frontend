@@ -1,15 +1,15 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Box, Button, Chip, Skeleton, Typography } from "@mui/material";
-import { Add, Edit, Delete, Public, Lock, People, Forum, Star } from "@mui/icons-material";
+import { useNavigate, useParams } from "react-router-dom";
+import { Box, Button, Skeleton, Typography, useTheme } from "@mui/material";
+import { Add, Star } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
-import { useGates } from "../hooks/useGates";
+import { useClasses } from "../hooks/useClasses"; // Custom hook for class data
 import useAuth from "../hooks/useAuth";
 import { useNotification } from "../context/NotificationContext";
 import ProfileHeader from "../components/Headers/ProfileHeader";
-import { actionButtonStyles, deleteButtonStyle } from "../styles/BaseStyles";
-import GateFormDialog from "../components/Dialogs/GateFormDialog";
+import { actionButtonStyles } from "../styles/BaseStyles";
 import ClassFormDialog from "../components/Dialogs/ClassFormDialog";
+import GateFormDialog from "../components/Dialogs/GateFormDialog";
 import MemberFormDialog from "../components/Dialogs/MemberFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
 import ClassesFilters from "../components/Classes/ClassesFilters";
@@ -19,69 +19,84 @@ import PropTypes from "prop-types";
 
 const GatePage = () => {
   const navigate = useNavigate();
-  const { showNotification } = useNotification();
+  const theme = useTheme();
   const { gate_id } = useParams();
+  const { showNotification } = useNotification();
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth();
   const {
-    gate: gateData,
+    classes,
+    gateData,
     members,
-    stats,
-    fetchGate,
-    fetchGateMembersList,
-    updateExistingGate,
-    deleteExistingGate,
-    addMemberToGate,
-    removeMemberFromGate,
-    toggleFavoriteGate,
-    setGate,
-    loading: gatesLoading,
+    loading: classesLoading,
     error,
-    updateMemberRole,
-  } = useGates(token, handleLogout, navigate);
+    fetchClassesByGate,
+    fetchGate,
+    createNewClass,
+    updateExistingClass,
+    deleteExistingClass,
+    addMemberToClass,
+    removeMemberFromClass,
+    toggleFavoriteClass,
+    updateMemberRoleInClass,
+  } = useClasses(token, handleLogout, navigate);
 
   const [isLoading, setIsLoading] = useState(true);
-  const [editingGate, setEditingGate] = useState(null);
   const [createClassDialogOpen, setCreateClassDialogOpen] = useState(false);
-  const [memberDialogOpen, setMemberDialogOpen] = useState(false);
-  const [popupClass, setPopupClass] = useState({
-    name: "",
-    description: "",
-    is_public: true,
-    gate_id,
-    type: "group",
-  });
   const [editingClass, setEditingClass] = useState(null);
+  const [editingGate, setEditingGate] = useState(null);
+  const [memberDialogOpen, setMemberDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [classToDelete, setClassToDelete] = useState(null);
   const [quickFilter, setQuickFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [popupClass, setPopupClass] = useState({
+    name: "",
+    description: "",
+    visibility: "public",
+    is_public: true,
+    gate_id,
+    settings: {
+      max_boards: 100,
+      max_members: 50,
+      board_creation_cost: 50,
+      tweet_cost: 1,
+      allow_invites: true,
+      require_approval: false,
+      ai_moderation_enabled: true,
+      auto_archive_after: 30,
+    },
+    tags: [],
+  });
   const [actionLoading, setActionLoading] = useState(false);
 
-  const loadGateData = useCallback(async () => {
-    if (!gate_id || !token) {
-      showNotification("Gate ID or authentication missing.", "error");
-      setIsLoading(false);
-      return;
-    }
-    const controller = new AbortController();
-    setIsLoading(true);
-    try {
-      await Promise.all([
-        fetchGate(gate_id, controller.signal),
-        fetchGateMembersList(gate_id, controller.signal),
-      ]);
-    } catch (err) {
-      if (err.name !== "AbortError") {
-        showNotification(err.message || "Failed to load gate data.", "error");
+  const debouncedSetSearchQuery = useMemo(() => debounce((value) => setSearchQuery(value), 300), []);
+
+  const loadData = useCallback(
+    async (signal) => {
+      if (!isAuthenticated || !token || !gate_id) {
+        showNotification("Authentication or gate ID required.", "error");
+        setIsLoading(false);
+        return;
       }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [gate_id, token, fetchGate, fetchGateMembersList, showNotification]);
+      setIsLoading(true);
+      try {
+        await Promise.all([fetchGate(gate_id, signal), fetchClassesByGate(gate_id, {}, signal)]);
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          showNotification(err.message || "Failed to load gate or classes", "error");
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [isAuthenticated, token, gate_id, fetchGate, fetchClassesByGate, showNotification]
+  );
 
   useEffect(() => {
-    if (isAuthenticated) loadGateData();
-  }, [loadGateData, isAuthenticated]);
+    const controller = new AbortController();
+    loadData(controller.signal);
+    return () => controller.abort();
+  }, [loadData]);
 
   useEffect(() => {
     if (error) {
@@ -89,29 +104,46 @@ const GatePage = () => {
     }
   }, [error, showNotification]);
 
-  const debouncedSetSearchQuery = useMemo(
-    () => debounce((value) => setSearchQuery(value), 300),
-    []
-  );
-
   const filteredClasses = useMemo(() => {
-    const classes = gateData?.classes || [];
-    return classes.filter((classItem) => {
-      const matchesSearch = classItem.name?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
+    const lowerSearchQuery = searchQuery.toLowerCase();
+    return classes.filter((cls) => {
+      const matchesSearch =
+        cls.name?.toLowerCase().includes(lowerSearchQuery) ||
+        cls.description?.toLowerCase().includes(lowerSearchQuery);
       if (!matchesSearch) return false;
       if (quickFilter === "all") return true;
-      if (quickFilter === "public") return classItem.is_public;
-      if (quickFilter === "private") return !classItem.is_public;
-      if (quickFilter === "favorited") return classItem.is_favorited;
+      if (quickFilter === "public") return cls.access?.is_public;
+      if (quickFilter === "private") return !cls.access?.is_public;
+      if (quickFilter === "favorited") return cls.is_favorited;
       return true;
     });
-  }, [gateData, quickFilter, searchQuery]);
+  }, [classes, quickFilter, searchQuery]);
 
-  const handleOpenCreateClass = () => setCreateClassDialogOpen(true);
-  const handleCancelCreateClass = () => {
+  const handleOpenCreateClass = useCallback(() => {
+    setCreateClassDialogOpen(true);
+  }, []);
+
+  const handleCancelCreateClass = useCallback(() => {
     setCreateClassDialogOpen(false);
-    setPopupClass({ name: "", description: "", is_public: true, gate_id, type: "group" });
-  };
+    setPopupClass({
+      name: "",
+      description: "",
+      visibility: "public",
+      is_public: true,
+      gate_id,
+      settings: {
+        max_boards: 100,
+        max_members: 50,
+        board_creation_cost: 50,
+        tweet_cost: 1,
+        allow_invites: true,
+        require_approval: false,
+        ai_moderation_enabled: true,
+        auto_archive_after: 30,
+      },
+      tags: [],
+    });
+  }, [gate_id]);
 
   const handleCreateClass = useCallback(async () => {
     if (!popupClass.name.trim()) {
@@ -120,33 +152,16 @@ const GatePage = () => {
     }
     setActionLoading(true);
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/gates/${gate_id}/classes`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(popupClass),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.errors?.[0] || "Failed to create class");
-      }
-      const newClass = await response.json();
-      setGate((prev) => ({
-        ...prev,
-        classes: [...(prev.classes || []), newClass],
-      }));
+      const createdClass = await createNewClass(gate_id, popupClass);
       setCreateClassDialogOpen(false);
-      setPopupClass({ name: "", description: "", is_public: true, gate_id, type: "group" });
       showNotification("Class created successfully!", "success");
-      navigate(`/class/${newClass.class_id}`);
+      navigate(`/class/${createdClass.class_id}`);
     } catch (err) {
       showNotification(err.message || "Failed to create class", "error");
     } finally {
       setActionLoading(false);
     }
-  }, [gate_id, popupClass, token, navigate, showNotification]);
+  }, [popupClass, createNewClass, navigate, showNotification, gate_id]);
 
   const handleUpdateClass = useCallback(async () => {
     if (!editingClass?.name.trim()) {
@@ -155,28 +170,7 @@ const GatePage = () => {
     }
     setActionLoading(true);
     try {
-      const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/classes/${editingClass.class_id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(editingClass),
-        }
-      );
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.errors?.[0] || "Failed to update class");
-      }
-      const updatedClass = await response.json();
-      setGate((prev) => ({
-        ...prev,
-        classes: prev.classes.map((c) =>
-          c.class_id === updatedClass.class_id ? updatedClass : c
-        ),
-      }));
+      await updateExistingClass(editingClass.class_id, editingClass);
       setEditingClass(null);
       showNotification("Class updated successfully!", "success");
     } catch (err) {
@@ -184,90 +178,33 @@ const GatePage = () => {
     } finally {
       setActionLoading(false);
     }
-  }, [editingClass, token, showNotification]);
+  }, [editingClass, updateExistingClass, showNotification]);
 
   const handleDeleteClass = useCallback(async () => {
     if (!classToDelete) return;
     setActionLoading(true);
     try {
-      await fetch(`${process.env.REACT_APP_API_URL}/classes/${classToDelete}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      setGate((prev) => ({
-        ...prev,
-        classes: prev.classes.filter((c) => c.class_id !== classToDelete),
-      }));
+      await deleteExistingClass(classToDelete);
       setDeleteDialogOpen(false);
       setClassToDelete(null);
       showNotification("Class deleted successfully!", "success");
     } catch (err) {
       showNotification(err.message || "Failed to delete class", "error");
-      setDeleteDialogOpen(false);
-      setClassToDelete(null);
     } finally {
       setActionLoading(false);
     }
-  }, [classToDelete, token, showNotification]);
-
-  const handleUpdateGate = useCallback(async () => {
-    if (!editingGate?.name.trim()) {
-      showNotification("Gate name is required!", "error");
-      return;
-    }
-    setActionLoading(true);
-    try {
-      await updateExistingGate(editingGate.gate_id, editingGate);
-      setEditingGate(null);
-      showNotification("Gate updated successfully!", "success");
-    } catch (err) {
-      showNotification(err.message || "Failed to update gate", "error");
-    } finally {
-      setActionLoading(false);
-    }
-  }, [editingGate, updateExistingGate, showNotification]);
-
-  const handleDeleteGate = useCallback(async () => {
-    setActionLoading(true);
-    try {
-      await deleteExistingGate(gate_id);
-      showNotification("Gate deleted successfully!", "success");
-      navigate("/gates");
-    } catch (err) {
-      showNotification(err.message || "Failed to delete gate", "error");
-    } finally {
-      setActionLoading(false);
-    }
-  }, [gate_id, deleteExistingGate, navigate, showNotification]);
-
-  const handleFavoriteToggle = useCallback(async () => {
-    try {
-      await toggleFavoriteGate(gate_id, gateData.is_favorited);
-      showNotification(
-        gateData.is_favorited ? "Gate removed from favorites!" : "Gate added to favorites!",
-        "success"
-      );
-    } catch (err) {
-      showNotification(
-        gateData.is_favorited
-          ? "Failed to remove gate from favorites"
-          : "Failed to add gate to favorites",
-        "error"
-      );
-    }
-  }, [gate_id, gateData, toggleFavoriteGate, showNotification]);
+  }, [classToDelete, deleteExistingClass, showNotification]);
 
   const handleAddMember = useCallback(
-    async (gateId, memberData) => {
-      if (members.length >= gateData.settings?.max_members) {
-        showNotification("Maximum member limit reached!", "error");
-        return;
-      }
+    async (classId, memberData) => {
       setActionLoading(true);
       try {
-        await addMemberToGate(gateId, memberData);
+        const cls = classes.find((c) => c.class_id === classId);
+        if (cls?.members?.length >= cls?.settings?.max_members) {
+          showNotification("Maximum member limit reached!", "error");
+          return;
+        }
+        await addMemberToClass(classId, memberData);
         showNotification("Member added successfully!", "success");
       } catch (err) {
         showNotification(err.message || "Failed to add member", "error");
@@ -275,14 +212,14 @@ const GatePage = () => {
         setActionLoading(false);
       }
     },
-    [gate_id, members, gateData, addMemberToGate, showNotification]
+    [addMemberToClass, showNotification, classes]
   );
 
   const handleRemoveMember = useCallback(
-    async (gateId, username) => {
+    async (classId, username) => {
       setActionLoading(true);
       try {
-        await removeMemberFromGate(gateId, username);
+        await removeMemberFromClass(classId, username);
         showNotification("Member removed successfully!", "success");
       } catch (err) {
         showNotification(err.message || "Failed to remove member", "error");
@@ -290,14 +227,14 @@ const GatePage = () => {
         setActionLoading(false);
       }
     },
-    [gate_id, removeMemberFromGate, showNotification]
+    [removeMemberFromClass, showNotification]
   );
 
   const handleUpdateMemberRole = useCallback(
-    async (gateId, username, newRole) => {
+    async (classId, username, newRole) => {
       setActionLoading(true);
       try {
-        await updateMemberRole(gateId, username, newRole);
+        await updateMemberRoleInClass(classId, username, newRole);
         showNotification("Member role updated successfully!", "success");
       } catch (err) {
         showNotification(err.message || "Failed to update member role", "error");
@@ -305,28 +242,43 @@ const GatePage = () => {
         setActionLoading(false);
       }
     },
-    [gate_id, updateMemberRole, showNotification]
+    [updateMemberRoleInClass, showNotification]
   );
 
-  const handleResetFilters = () => {
+  const handleFavoriteToggle = useCallback(
+    async (classId, isFavorited) => {
+      setActionLoading(true);
+      try {
+        await toggleFavoriteClass(classId, isFavorited);
+        showNotification(
+          isFavorited ? "Removed from favorites!" : "Added to favorites!",
+          "success"
+        );
+      } catch (err) {
+        showNotification(err.message || "Failed to toggle favorite", "error");
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [toggleFavoriteClass, showNotification]
+  );
+
+  const handleResetFilters = useCallback(() => {
     setQuickFilter("all");
     setSearchQuery("");
-  };
+  }, []);
 
-  const userRole = members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || "none";
-  const canManage = ["owner", "admin"].includes(userRole);
-
-  if (authLoading || gatesLoading || isLoading) {
+  if (authLoading || classesLoading || isLoading) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-        <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
+        <Box sx={{ maxWidth: 1500, mx: "auto", p: { xs: 2, md: 3 } }}>
           <Skeleton variant="rectangular" height={100} sx={{ mb: 2 }} />
           <Skeleton variant="rectangular" height={50} sx={{ mb: 2 }} />
           <Box
             sx={{
               display: "grid",
               gap: 2,
-              gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+              gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fill, minmax(300px, 1fr))" },
             }}
           >
             {[...Array(6)].map((_, i) => (
@@ -343,117 +295,36 @@ const GatePage = () => {
     return null;
   }
 
-  if (!gateData) {
-    showNotification("Gate not found", "error");
-    navigate("/gates");
-    return null;
-  }
-
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-      <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
+      <Box sx={{ maxWidth: 1500, mx: "auto", p: { xs: 2, md: 3 } }}>
         <ProfileHeader user={authData} isOwnProfile={true}>
-          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-            <Button
-              onClick={handleOpenCreateClass}
-              startIcon={<Add />}
-              sx={actionButtonStyles}
-              disabled={actionLoading}
-              aria-label="Create a new class"
-            >
-              Create Class
-            </Button>
-            {canManage && (
-              <>
-                <Button
-                  onClick={() =>
-                    setEditingGate({
-                      gate_id: gateData.gate_id,
-                      name: gateData.name,
-                      description: gateData.description,
-                      is_public: gateData.access?.is_public,
-                      visibility: gateData.access?.is_public ? "public" : "private",
-                      settings: gateData.settings,
-                    })
-                  }
-                  startIcon={<Edit />}
-                  sx={actionButtonStyles}
-                  disabled={actionLoading}
-                  aria-label="Edit gate"
-                >
-                  Edit Gate
-                </Button>
-                <Button
-                  onClick={() => setMemberDialogOpen(true)}
-                  startIcon={<Add />}
-                  sx={actionButtonStyles}
-                  disabled={actionLoading}
-                  aria-label="Manage members"
-                >
-                  Manage Members
-                </Button>
-                {userRole === "owner" && (
-                  <Button
-                    onClick={handleDeleteGate}
-                    startIcon={<Delete />}
-                    sx={deleteButtonStyle}
-                    disabled={actionLoading}
-                    aria-label="Delete gate"
-                  >
-                    Delete Gate
-                  </Button>
-                )}
-              </>
-            )}
-          </Box>
+          <Button
+            onClick={handleOpenCreateClass}
+            startIcon={<Add />}
+            sx={{
+              ...actionButtonStyles,
+              [theme.breakpoints.down("sm")]: { minWidth: 120, fontSize: "0.875rem" },
+            }}
+            aria-label="Create a new class"
+            disabled={actionLoading || classesLoading}
+          >
+            Create Class
+          </Button>
         </ProfileHeader>
         <Box sx={{ my: 2 }}>
-          <Typography variant="h4" sx={{ fontWeight: 600 }}>
-            {gateData.name || "Untitled Gate"}
+          <Typography variant="h4">{gateData?.name || "Gate"}</Typography>
+          <Typography variant="body1" color="text.secondary">
+            {gateData?.description || "No description available."}
           </Typography>
-          {gateData.description && (
-            <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-              {gateData.description}
-            </Typography>
-          )}
-          <Box sx={{ display: "flex", gap: 1, mt: 2, flexWrap: "wrap" }}>
-            <Chip
-              label={gateData.access?.is_public ? "Public" : "Private"}
-              icon={gateData.access?.is_public ? <Public /> : <Lock />}
-              size="small"
-              variant="outlined"
-            />
-            <Chip
-              label={`Members: ${stats?.member_count || members.length}`}
-              icon={<People />}
-              size="small"
-              variant="outlined"
-            />
-            <Chip
-              label={`Classes: ${gateData.classes?.length || 0}`}
-              icon={<Forum />}
-              size="small"
-              variant="outlined"
-            />
-            <Chip
-              label={`Favorites: ${stats?.favorite_count || 0}`}
-              icon={<Star />}
-              size="small"
-              variant="outlined"
-            />
-            <Chip
-              label={`Owner: ${gateData.creator?.username || "Unknown"}`}
-              size="small"
-              variant="outlined"
-            />
-          </Box>
           <Button
-            onClick={handleFavoriteToggle}
-            startIcon={gateData.is_favorited ? <Star color="warning" /> : <Star />}
+            onClick={() => handleFavoriteToggle(gateData?.gate_id, gateData?.is_favorited)}
+            startIcon={gateData?.is_favorited ? <Star color="warning" /> : <Star />}
             sx={{ mt: 2 }}
-            aria-label={gateData.is_favorited ? "Remove from favorites" : "Add to favorites"}
+            aria-label={gateData?.is_favorited ? "Remove from favorites" : "Add to favorites"}
+            disabled={actionLoading}
           >
-            {gateData.is_favorited ? "Remove from Favorites" : "Add to Favorites"}
+            {gateData?.is_favorited ? "Remove from Favorites" : "Add to Favorites"}
           </Button>
         </Box>
         <ClassesFilters
@@ -468,8 +339,9 @@ const GatePage = () => {
           setEditingClass={setEditingClass}
           setClassToDelete={setClassToDelete}
           setDeleteDialogOpen={setDeleteDialogOpen}
+          handleAddMember={handleAddMember}
           handleRemoveMember={handleRemoveMember}
-          members={members}
+          handleFavorite={handleFavoriteToggle}
           navigate={navigate}
           currentUser={authData}
         />
@@ -477,25 +349,25 @@ const GatePage = () => {
       <ClassFormDialog
         open={createClassDialogOpen}
         title="Create New Class"
-        classData={popupClass}
+        classItem={popupClass}
         setClass={setPopupClass}
         onSave={handleCreateClass}
         onCancel={handleCancelCreateClass}
-        token={token}
-        gates={[{ gate_id, name: gateData.name }]}
-        disabled={actionLoading}
+        disabled={actionLoading || classesLoading}
+        gates={[{ gate_id, name: gateData?.name || "Current Gate" }]}
+        fixedGateId={gate_id}
       />
       {editingClass && (
         <ClassFormDialog
           open={true}
           title="Edit Class"
-          classData={editingClass}
+          classItem={editingClass}
           setClass={setEditingClass}
           onSave={handleUpdateClass}
           onCancel={() => setEditingClass(null)}
-          token={token}
-          gates={[{ gate_id, name: gateData.name }]}
-          disabled={actionLoading}
+          disabled={actionLoading || classesLoading}
+          gates={[{ gate_id, name: gateData?.name || "Current Gate" }]}
+          fixedGateId={gate_id}
         />
       )}
       {editingGate && (
@@ -504,7 +376,7 @@ const GatePage = () => {
           title="Edit Gate"
           gate={editingGate}
           setGate={setEditingGate}
-          onSave={handleUpdateGate}
+          onSave={() => {} /* Implement if needed */}
           onCancel={() => setEditingGate(null)}
           disabled={actionLoading}
         />
