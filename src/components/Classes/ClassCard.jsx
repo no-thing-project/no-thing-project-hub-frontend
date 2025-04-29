@@ -1,4 +1,3 @@
-// components/Classes/ClassCard.js
 import React, { memo, useCallback } from "react";
 import {
   Box,
@@ -47,6 +46,7 @@ const ClassCard = ({
   const isPublic = classItem.access?.is_public || classItem.visibility === "public";
   const owner = classItem.members?.find((m) => m.role === "owner");
   const ownerUsername = owner?.username || "Unknown";
+  const typeLabel = classItem.type === "group" ? "Group" : "Personal";
 
   const handleKeyPress = useCallback(
     (e) => {
@@ -97,7 +97,7 @@ const ClassCard = ({
           variant="subtitle2"
           sx={{ fontWeight: 600, fontSize: { xs: "0.875rem", md: "1rem" } }}
         >
-          {classItem.name || "Untitled Class"}
+          {classItem.slug || classItem.name || "Untitled Class"}
         </Typography>
         <Box sx={{ display: "flex", gap: { xs: 0.5, md: 1 } }}>
           {canEdit && (
@@ -111,6 +111,7 @@ const ClassCard = ({
                     description: classItem.description || "",
                     is_public: isPublic,
                     visibility: isPublic ? "public" : "private",
+                    gate_id: classItem.gate_id || "",
                     settings: classItem.settings || {
                       max_boards: 100,
                       max_members: 50,
@@ -193,10 +194,9 @@ const ClassCard = ({
             {classItem.description}
           </Typography>
         )}
-
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 1 }}>
           <Chip
-            label={classItem.type === "group" ? "Group" : "Personal"}
+            label={typeLabel}
             icon={<People />}
             size="small"
             variant="outlined"
@@ -221,6 +221,12 @@ const ClassCard = ({
         <Divider sx={{ my: 1 }} />
 
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+          <Chip
+            label={classItem.gateName}
+            size="small"
+            variant="outlined"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+          />
           <Chip
             label={`Owner: ${ownerUsername}`}
             size="small"
@@ -282,6 +288,7 @@ ClassCard.propTypes = {
   classItem: PropTypes.shape({
     class_id: PropTypes.string.isRequired,
     name: PropTypes.string,
+    slug: PropTypes.string,
     description: PropTypes.string,
     is_favorited: PropTypes.bool,
     creator_id: PropTypes.string,
@@ -309,6 +316,8 @@ ClassCard.propTypes = {
     }),
     visibility: PropTypes.string,
     settings: PropTypes.object,
+    gate_id: PropTypes.string,
+    gateName: PropTypes.string,
   }).isRequired,
   handleFavorite: PropTypes.func.isRequired,
   setEditingClass: PropTypes.func.isRequired,

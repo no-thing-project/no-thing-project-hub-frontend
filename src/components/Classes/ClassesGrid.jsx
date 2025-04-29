@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { Box, Typography, Button, useTheme } from "@mui/material";
+import React from "react";
+import { Box, Typography, useTheme } from "@mui/material";
 import { motion, AnimatePresence } from "framer-motion";
 import ClassCard from "./ClassCard";
 import PropTypes from "prop-types";
@@ -27,17 +27,9 @@ const ClassesGrid = ({
 }) => {
   const theme = useTheme();
 
-  const sortedClasses = useMemo(() => {
-    return [...filteredClasses].sort((a, b) => {
-      if (a.is_favorited && !b.is_favorited) return -1;
-      if (!a.is_favorited && b.is_favorited) return 1;
-      return a.name.localeCompare(b.name);
-    });
-  }, [filteredClasses]);
-
   return (
     <AnimatePresence>
-      {sortedClasses.length === 0 ? (
+      {filteredClasses.length === 0 ? (
         <motion.div
           key="no-classes"
           variants={containerVariants}
@@ -54,19 +46,10 @@ const ClassesGrid = ({
               textAlign: "center",
               color: "text.primary",
             }}
-            role="region"
-            aria-label="No classes found"
           >
-            <Typography variant="body1" sx={{ fontSize: { xs: "1rem", md: "1.25rem" }, mb: 2 }}>
+            <Typography variant="body1" sx={{ fontSize: { xs: "1rem", md: "1.25rem" } }}>
               No classes found. Create a new class to get started!
             </Typography>
-            <Button
-              variant="contained"
-              onClick={() => navigate("/classes")} // Adjust to open create dialog if needed
-              aria-label="Create a new class"
-            >
-              Create Class
-            </Button>
           </Box>
         </motion.div>
       ) : (
@@ -83,10 +66,11 @@ const ClassesGrid = ({
               display: "grid",
               gridTemplateColumns: {
                 xs: "1fr",
-                sm: "repeat(auto-fill, minmax(280px, 1fr))",
-                md: "repeat(auto-fill, minmax(300px, 1fr))",
+                sm: "repeat(2, 1fr)",
+                md: "repeat(3, 1fr)",
+                lg: "repeat(4, 1fr)",
               },
-              gap: { xs: 2, md: 3 },
+              gap: { xs: 2, md: 4 },
               gridAutoFlow: "dense",
               maxWidth: 1500,
               mx: "auto",
@@ -94,14 +78,12 @@ const ClassesGrid = ({
               px: { xs: 2, md: 3 },
               color: "text.primary",
             }}
-            role="grid"
-            aria-label="Classes grid"
           >
             <motion.div
               variants={leftColumnVariants}
               initial="hidden"
               animate="visible"
-              sx={{ gridColumn: { xs: "span 1", sm: "1 / -1" } }}
+              sx={{ gridColumn: { xs: "span 1", sm: "1 / 2" } }}
             >
               <Typography
                 variant="h3"
@@ -117,16 +99,16 @@ const ClassesGrid = ({
                   fontSize: { xs: "1.25rem", md: "1.75rem" },
                 }}
               >
-                Your Learning Spaces
+                Your Spaces for Focused Learning
               </Typography>
               <Typography
                 variant="body1"
                 sx={{ lineHeight: 1.7, fontSize: { xs: "0.875rem", md: "1rem" } }}
               >
-                Classes are focused learning environments within gates. Create a class to share knowledge, collaborate on projects, or discuss specific topics.
+                Classes are dedicated spaces within gates for learning and collaboration. Create a class to share knowledge, work on projects, or dive into specific topics with your community.
               </Typography>
             </motion.div>
-            {sortedClasses.map((classItem) => (
+            {filteredClasses.map((classItem) => (
               <ClassCard
                 key={classItem.class_id}
                 classItem={classItem}
@@ -148,19 +130,7 @@ const ClassesGrid = ({
 };
 
 ClassesGrid.propTypes = {
-  filteredClasses: PropTypes.arrayOf(
-    PropTypes.shape({
-      class_id: PropTypes.string.isRequired,
-      name: PropTypes.string,
-      description: PropTypes.string,
-      is_favorited: PropTypes.bool,
-      is_public: PropTypes.bool,
-      visibility: PropTypes.string,
-      members: PropTypes.array,
-      stats: PropTypes.object,
-      settings: PropTypes.object,
-    })
-  ).isRequired,
+  filteredClasses: PropTypes.array.isRequired,
   handleFavorite: PropTypes.func.isRequired,
   setEditingClass: PropTypes.func.isRequired,
   setClassToDelete: PropTypes.func.isRequired,
@@ -168,10 +138,7 @@ ClassesGrid.propTypes = {
   handleAddMember: PropTypes.func.isRequired,
   handleRemoveMember: PropTypes.func.isRequired,
   navigate: PropTypes.func.isRequired,
-  currentUser: PropTypes.shape({
-    anonymous_id: PropTypes.string,
-    username: PropTypes.string,
-  }),
+  currentUser: PropTypes.object,
 };
 
 export default React.memo(ClassesGrid);

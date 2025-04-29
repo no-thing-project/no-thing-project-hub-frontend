@@ -26,7 +26,6 @@ const ClassesPage = () => {
     classes,
     loading: classesLoading,
     error,
-    lastUpdated,
     fetchClassesList,
     createNewClass,
     updateExistingClass,
@@ -42,14 +41,10 @@ const ClassesPage = () => {
     navigate
   );
 
-  const [dialogState, setDialogState] = useState({
-    createOpen: false,
-    editOpen: false,
-    memberOpen: false,
-    deleteOpen: false,
-  });
   const [isLoading, setIsLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [memberDialogOpen, setMemberDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [classToDelete, setClassToDelete] = useState(null);
@@ -74,7 +69,7 @@ const ClassesPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
 
   const debouncedSetSearchQuery = useMemo(
-    () => debounce((value) => setSearchQuery(value), 500),
+    () => debounce((value) => setSearchQuery(value), 300),
     []
   );
 
@@ -87,10 +82,8 @@ const ClassesPage = () => {
       }
       setIsLoading(true);
       try {
-        const now = Date.now();
-        const isStale = !lastUpdated || now - lastUpdated > 5 * 60 * 1000; // 5 minutes
         await Promise.all([
-          isStale ? fetchClassesList({}, signal) : Promise.resolve(),
+          fetchClassesList({}, signal),
           fetchGatesList({ visibility: "public" }, signal),
         ]);
       } catch (err) {
@@ -101,7 +94,7 @@ const ClassesPage = () => {
         setIsLoading(false);
       }
     },
-    [isAuthenticated, token, lastUpdated, fetchClassesList, fetchGatesList, showNotification]
+    [isAuthenticated, token, fetchClassesList, fetchGatesList, showNotification]
   );
 
   useEffect(() => {
@@ -117,25 +110,32 @@ const ClassesPage = () => {
 
   const filteredClasses = useMemo(() => {
     const lowerSearchQuery = searchQuery.toLowerCase();
-    return classes.filter((classItem) => {
-      const matchesSearch =
-        classItem.name?.toLowerCase().includes(lowerSearchQuery) ||
-        classItem.description?.toLowerCase().includes(lowerSearchQuery);
-      if (!matchesSearch) return false;
-      if (quickFilter === "all") return true;
-      if (quickFilter === "public") return classItem.is_public;
-      if (quickFilter === "private") return !classItem.is_public;
-      if (quickFilter === "favorited") return classItem.is_favorited;
-      return true;
-    });
-  }, [classes, quickFilter, searchQuery]);
+    return classes
+      .map((classItem) => {
+        const gate = gates.find((g) => g.gate_id === classItem.gate_id);
+        return {
+          ...classItem,
+          gateName: gate ? gate.name : "No Gate",
+        };
+      })
+      .filter((classItem) => {
+        const matchesSearch =
+          classItem.name?.toLowerCase().includes(lowerSearchQuery) ||
+          classItem.description?.toLowerCase().includes(lowerSearchQuery) ||
+          classItem.gateName.toLowerCase().includes(lowerSearchQuery);
+        if (!matchesSearch) return false;
+        if (quickFilter === "all") return true;
+        if (quickFilter === "public") return classItem.is_public;
+        if (quickFilter === "private") return !classItem.is_public;
+        if (quickFilter === "favorited") return classItem.is_favorited;
+        return true;
+      });
+  }, [classes, gates, quickFilter, searchQuery]);
 
-  const handleOpenCreateClass = useCallback(() => {
-    setDialogState((prev) => ({ ...prev, createOpen: true }));
-  }, []);
+  const handleOpenCreateClass = useCallback(() => setCreateDialogOpen(true), []);
 
   const handleCancelCreateClass = useCallback(() => {
-    setDialogState((prev) => ({ ...prev, createOpen: false }));
+    setCreateDialogOpen(false);
     setPopupClass({
       name: "",
       description: "",
@@ -160,10 +160,9 @@ const ClassesPage = () => {
       showNotification("Class name is required!", "error");
       return;
     }
-    setActionLoading(true);
     try {
       const createdClass = await createNewClass(popupClass);
-      setDialogState((prev) => ({ ...prev, createOpen: false }));
+      setCreateDialogOpen(false);
       setPopupClass({
         name: "",
         description: "",
@@ -185,53 +184,39 @@ const ClassesPage = () => {
       navigate(`/class/${createdClass.class_id}`);
     } catch (err) {
       showNotification(err.message || "Failed to create class", "error");
-    } finally {
-      setActionLoading(false);
     }
   }, [popupClass, createNewClass, navigate, showNotification]);
 
   const handleUpdateClass = useCallback(async () => {
-    if (!editingClass?.name?.trim()) {
+    if (!editingClass?.name.trim()) {
       showNotification("Class name is required!", "error");
       return;
     }
-    if (!editingClass?.class_id || typeof editingClass.class_id !== "string") {
-      showNotification("Invalid class ID!", "error");
-      return;
-    }
-    setActionLoading(true);
     try {
       await updateExistingClass(editingClass.class_id, editingClass);
-      setDialogState((prev) => ({ ...prev, editOpen: false }));
       setEditingClass(null);
       showNotification("Class updated successfully!", "success");
     } catch (err) {
       showNotification(err.message || "Failed to update class", "error");
-    } finally {
-      setActionLoading(false);
     }
   }, [editingClass, updateExistingClass, showNotification]);
 
   const handleDeleteClass = useCallback(async () => {
     if (!classToDelete) return;
-    setActionLoading(true);
     try {
       await deleteExistingClass(classToDelete);
-      setDialogState((prev) => ({ ...prev, deleteOpen: false }));
+      setDeleteDialogOpen(false);
       setClassToDelete(null);
       showNotification("Class deleted successfully!", "success");
     } catch (err) {
       showNotification(err.message || "Failed to delete class", "error");
-    } finally {
-      setActionLoading(false);
-      setDialogState((prev) => ({ ...prev, deleteOpen: false }));
+      setDeleteDialogOpen(false);
       setClassToDelete(null);
     }
   }, [classToDelete, deleteExistingClass, showNotification]);
 
   const handleAddMember = useCallback(
     async (classId, memberData) => {
-      setActionLoading(true);
       try {
         const classItem = classes.find((c) => c.class_id === classId);
         if (classItem?.members?.length >= classItem?.settings?.max_members) {
@@ -242,8 +227,6 @@ const ClassesPage = () => {
         showNotification("Member added successfully!", "success");
       } catch (err) {
         showNotification(err.message || "Failed to add member", "error");
-      } finally {
-        setActionLoading(false);
       }
     },
     [addMemberToClass, showNotification, classes]
@@ -251,14 +234,11 @@ const ClassesPage = () => {
 
   const handleRemoveMember = useCallback(
     async (classId, username) => {
-      setActionLoading(true);
       try {
         await removeMemberFromClass(classId, username);
         showNotification("Member removed successfully!", "success");
       } catch (err) {
         showNotification(err.message || "Failed to remove member", "error");
-      } finally {
-        setActionLoading(false);
       }
     },
     [removeMemberFromClass, showNotification]
@@ -266,14 +246,11 @@ const ClassesPage = () => {
 
   const handleUpdateMemberRole = useCallback(
     async (classId, username, newRole) => {
-      setActionLoading(true);
       try {
         await updateMemberRole(classId, username, newRole);
         showNotification("Member role updated successfully!", "success");
       } catch (err) {
         showNotification(err.message || "Failed to update member role", "error");
-      } finally {
-        setActionLoading(false);
       }
     },
     [updateMemberRole, showNotification]
@@ -281,25 +258,18 @@ const ClassesPage = () => {
 
   const handleOpenMemberDialog = useCallback((classId) => {
     setSelectedClassId(classId);
-    setDialogState((prev) => ({ ...prev, memberOpen: true }));
+    setMemberDialogOpen(true);
   }, []);
 
   const handleCancelMemberDialog = useCallback(() => {
-    setDialogState((prev) => ({ ...prev, memberOpen: false }));
+    setMemberDialogOpen(false);
     setSelectedClassId(null);
   }, []);
 
   const handleResetFilters = useCallback(() => {
     setQuickFilter("all");
     setSearchQuery("");
-    debouncedSetSearchQuery("");
-  }, [debouncedSetSearchQuery]);
-
-  useEffect(() => {
-    return () => {
-      debouncedSetSearchQuery.cancel();
-    };
-  }, [debouncedSetSearchQuery]);
+  }, []);
 
   if (authLoading || classesLoading || gatesLoading || isLoading) {
     return (
@@ -340,7 +310,6 @@ const ClassesPage = () => {
               [theme.breakpoints.down("sm")]: { minWidth: 120, fontSize: "0.875rem" },
             }}
             aria-label="Create a new class"
-            disabled={actionLoading || classesLoading || gatesLoading}
           >
             Create Class
           </Button>
@@ -355,12 +324,9 @@ const ClassesPage = () => {
         <ClassesGrid
           filteredClasses={filteredClasses}
           handleFavorite={toggleFavoriteClass}
-          setEditingClass={(classItem) => {
-            setEditingClass(classItem);
-            setDialogState((prev) => ({ ...prev, editOpen: true }));
-          }}
+          setEditingClass={setEditingClass}
           setClassToDelete={setClassToDelete}
-          setDeleteDialogOpen={(open) => setDialogState((prev) => ({ ...prev, deleteOpen: open }))}
+          setDeleteDialogOpen={setDeleteDialogOpen}
           handleAddMember={handleOpenMemberDialog}
           handleRemoveMember={handleRemoveMember}
           navigate={navigate}
@@ -368,49 +334,46 @@ const ClassesPage = () => {
         />
       </Box>
       <ClassFormDialog
-        open={dialogState.createOpen}
+        open={createDialogOpen}
         title="Create New Class"
         classItem={popupClass}
         setClass={setPopupClass}
         onSave={handleCreateClass}
         onCancel={handleCancelCreateClass}
-        disabled={actionLoading || classesLoading || gatesLoading}
+        disabled={classesLoading || gatesLoading}
         gates={gates}
       />
       {editingClass && (
         <ClassFormDialog
-          open={dialogState.editOpen}
+          open={true}
           title="Edit Class"
           classItem={editingClass}
           setClass={setEditingClass}
           onSave={handleUpdateClass}
-          onCancel={() => {
-            setDialogState((prev) => ({ ...prev, editOpen: false }));
-            setEditingClass(null);
-          }}
-          disabled={actionLoading || classesLoading || gatesLoading}
+          onCancel={() => setEditingClass(null)}
+          disabled={classesLoading || gatesLoading}
           gates={gates}
         />
       )}
       <MemberFormDialog
-        open={dialogState.memberOpen}
+        open={memberDialogOpen}
         title="Manage Members"
-        gateId={selectedClassId} // Reusing gateId prop as classId
+        classId={selectedClassId}
         token={token}
         onSave={() => {}}
         onCancel={handleCancelMemberDialog}
-        disabled={actionLoading || classesLoading}
+        disabled={classesLoading}
         members={classes.find((c) => c.class_id === selectedClassId)?.members || []}
         addMember={handleAddMember}
         removeMember={handleRemoveMember}
         updateMemberRole={handleUpdateMemberRole}
       />
       <DeleteConfirmationDialog
-        open={dialogState.deleteOpen}
-        onClose={() => setDialogState((prev) => ({ ...prev, deleteOpen: false }))}
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDeleteClass}
         message="Are you sure you want to delete this class? This action cannot be undone."
-        disabled={actionLoading || classesLoading}
+        disabled={classesLoading}
       />
     </AppLayout>
   );
@@ -419,10 +382,7 @@ const ClassesPage = () => {
 ClassesPage.propTypes = {
   navigate: PropTypes.func,
   token: PropTypes.string,
-  authData: PropTypes.shape({
-    anonymous_id: PropTypes.string,
-    username: PropTypes.string,
-  }),
+  authData: PropTypes.object,
   handleLogout: PropTypes.func,
   isAuthenticated: PropTypes.bool,
   authLoading: PropTypes.bool,

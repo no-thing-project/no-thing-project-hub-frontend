@@ -17,7 +17,7 @@ import {
   updateClassMember,
 } from "../api/classesApi";
 
-// Константи для повідомлень про помилки
+// Constants for error messages
 const ERROR_MESSAGES = {
   AUTH_REQUIRED: "Authentication required.",
   CLASS_ID_MISSING: "Class ID is missing.",
@@ -33,23 +33,20 @@ const ERROR_MESSAGES = {
   GENERIC: "An error occurred.",
 };
 
-// Константа для максимального розміру кешу
+// Constants for cache
 const MAX_CACHE_SIZE = 10;
-const CACHE_VERSION = "v1"; // Для інвалідизації кешу при змінах схеми
+const CACHE_VERSION = "v1";
 
-// Кеш для списків класів і окремих класів
+// Cache for class lists and items
 const classListCache = new Map();
 const classItemCache = new Map();
 
 /**
- * Хук для управління класами та їх членами
- * @param {string|null} token - Токен авторизації
- * @param {function} onLogout - Функція для обробки виходу
- * @param {function} navigate - Функція для навігації
- * @returns {object} Об'єкт із станами та методами для роботи з класами
- * @example
- * const { classes, fetchClassesList } = useClasses(token, handleLogout, navigate);
- * useEffect(() => { fetchClassesList(); }, [fetchClassesList]);
+ * Hook for managing classes and their members
+ * @param {string|null} token - Authorization token
+ * @param {function} onLogout - Function to handle logout
+ * @param {function} navigate - Function for navigation
+ * @returns {object} Object with states and methods for class operations
  */
 export const useClasses = (token, onLogout, navigate) => {
   const [classes, setClasses] = useState([]);
@@ -62,17 +59,17 @@ export const useClasses = (token, onLogout, navigate) => {
   const [lastUpdated, setLastUpdated] = useState(null);
 
   /**
-   * Обробка помилок авторизації з підтримкою повторних спроб для 429
-   * @param {Error} err - Об'єкт помилки
-   * @param {number} [retryCount=0] - Кількість повторних спроб
-   * @returns {null} Завжди повертає null
+   * Handle authentication errors with retry for 429
+   * @param {Error} err - Error object
+   * @param {number} [retryCount=0] - Retry count
+   * @returns {null} Always returns null
    */
   const handleAuthError = useCallback(
     async (err, retryCount = 0) => {
       const status = err.status || 500;
       if (status === 429 && retryCount < 3) {
         await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
-        return; // Повторна спроба буде викликана в оригінальній функції
+        return;
       }
       if (status === 401 || status === 403) {
         onLogout("Your session has expired. Please log in again.");
@@ -91,8 +88,8 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   /**
-   * Скидання стану хука
-   * @param {boolean} [fullReset=true] - Чи очищати всі стани
+   * Reset hook state
+   * @param {boolean} [fullReset=true] - Whether to reset all states
    */
   const resetState = useCallback((fullReset = true) => {
     ReactDOM.unstable_batchedUpdates(() => {
@@ -109,11 +106,9 @@ export const useClasses = (token, onLogout, navigate) => {
   }, []);
 
   /**
-   * Нормалізація даних членів класу
-   * @param {Array} members - Масив членів
-   * @returns {Array} Нормалізований масив членів
-   * @example
-   * normalizeMembers([{ username: "user1" }]) // [{ username: "user1", role: "viewer", ... }]
+   * Normalize class members data
+   * @param {Array} members - Array of members
+   * @returns {Array} Normalized array of members
    */
   const normalizeMembers = useCallback((members = []) => {
     return members.map((member) => ({
@@ -128,10 +123,10 @@ export const useClasses = (token, onLogout, navigate) => {
   }, []);
 
   /**
-   * Отримання списку класів із кешуванням
-   * @param {object} [filters={}] - Фільтри для запиту
-   * @param {AbortSignal} [signal] - Сигнал для скасування запиту
-   * @returns {Promise<object|null>} Дані класів або null у разі помилки
+   * Fetch list of classes with caching
+   * @param {object} [filters={}] - Query filters
+   * @param {AbortSignal} [signal] - Abort signal for request cancellation
+   * @returns {Promise<object|null>} Classes data or null if error
    */
   const fetchClassesList = useCallback(
     async (filters = {}, signal) => {
@@ -184,11 +179,11 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   /**
-   * Отримання класів за ID гейта
-   * @param {string} gateId - ID гейта
-   * @param {object} [filters={}] - Фільтри для запиту
-   * @param {AbortSignal} [signal] - Сигнал для скасування запиту
-   * @returns {Promise<object|null>} Дані класів або null у разі помилки
+   * Fetch classes by gate ID
+   * @param {string} gateId - Gate ID
+   * @param {object} [filters={}] - Query filters
+   * @param {AbortSignal} [signal] - Abort signal for request cancellation
+   * @returns {Promise<object|null>} Classes data or null if error
    */
   const fetchClassesByGate = useCallback(
     async (gateId, filters = {}, signal) => {
@@ -241,10 +236,10 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   /**
-   * Отримання даних одного класу
-   * @param {string} classId - ID класу
-   * @param {AbortSignal} [signal] - Сигнал для скасування запиту
-   * @returns {Promise<object|null>} Дані класу або null у разі помилки
+   * Fetch a single class by ID
+   * @param {string} classId - Class ID
+   * @param {AbortSignal} [signal] - Abort signal for request cancellation
+   * @returns {Promise<object|null>} Class data or null if error
    */
   const fetchClass = useCallback(
     async (classId, signal) => {
@@ -299,9 +294,10 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   /**
-   * Створення нового класу
-   * @param {object} classData - Дані класу
-   * @returns {Promise<object|null>} Створений клас або null у разі помилки
+   * Create a new class
+   * @param {object} classData - Class data
+   * @param {number} [retryCount=0] - Retry count
+   * @returns {Promise<object|null>} Created class or null if error
    */
   const createNewClass = useCallback(
     async (classData, retryCount = 0) => {
@@ -365,39 +361,32 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   /**
-   * Оновлення існуючого класу
-   * @param {string} classId - ID класу
-   * @param {object} classData - Дані для оновлення
-   * @returns {Promise<object|null>} Оновлений клас або null у разі помилки
-   */
-  /**
    * Update an existing class
-   * @param {string} classId - ID of the class
+   * @param {string} classId - Class ID
    * @param {object} classData - Data to update
+   * @param {number} [retryCount=0] - Retry count
    * @returns {Promise<object|null>} Updated class or null if error
    */
   const updateExistingClass = useCallback(
     async (classId, classData, retryCount = 0) => {
-      if (!token) {
-        setError(ERROR_MESSAGES.AUTH_REQUIRED);
-        return null;
-      }
-      if (!classId || typeof classId !== "string") {
-        setError(ERROR_MESSAGES.CLASS_ID_MISSING);
-        return null;
-      }
-      if (!classData?.name?.trim()) {
-        setError(ERROR_MESSAGES.CLASS_NAME_MISSING);
+      if (!token || !classId || !classData?.name?.trim()) {
+        setError(
+          !token
+            ? ERROR_MESSAGES.AUTH_REQUIRED
+            : !classId
+            ? ERROR_MESSAGES.CLASS_ID_MISSING
+            : ERROR_MESSAGES.CLASS_NAME_MISSING
+        );
         return null;
       }
       if (classData.is_public && !classData.gate_id) {
         setError(ERROR_MESSAGES.GATE_ID_MISSING);
         return null;
       }
-  
+
       setLoading(true);
       setError(null);
-  
+
       try {
         const { class_id, ...updateData } = classData;
         const updatedClass = await updateClass(
@@ -441,10 +430,11 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   /**
-   * Оновлення статусу класу
-   * @param {string} classId - ID класу
-   * @param {object} statusData - Дані статусу
-   * @returns {Promise<object|null>} Оновлений клас або null у разі помилки
+   * Update class status
+   * @param {string} classId - Class ID
+   * @param {object} statusData - Status data
+   * @param {number} [retryCount=0] - Retry count
+   * @returns {Promise<object|null>} Updated class or null if error
    */
   const updateClassStatusById = useCallback(
     async (classId, statusData, retryCount = 0) => {
@@ -497,9 +487,10 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   /**
-   * Видалення класу
-   * @param {string} classId - ID класу
-   * @returns {Promise<boolean|null>} true у разі успіху, null у разі помилки
+   * Delete a class
+   * @param {string} classId - Class ID
+   * @param {number} [retryCount=0] - Retry count
+   * @returns {Promise<boolean|null>} True if successful, null if error
    */
   const deleteExistingClass = useCallback(
     async (classId, retryCount = 0) => {
@@ -545,10 +536,11 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   /**
-   * Додавання члена до класу
-   * @param {string} classId - ID класу
-   * @param {object} memberData - Дані члена { username, role }
-   * @returns {Promise<object|null>} Оновлений клас або null у разі помилки
+   * Add a member to a class
+   * @param {string} classId - Class ID
+   * @param {object} memberData - Member data { username, role }
+   * @param {number} [retryCount=0] - Retry count
+   * @returns {Promise<object|null>} Updated class or null if error
    */
   const addMemberToClass = useCallback(
     async (classId, { username, role = "member" }, retryCount = 0) => {
@@ -602,10 +594,11 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   /**
-   * Видалення члена з класу
-   * @param {string} classId - ID класу
-   * @param {string} username - Ім'я користувача
-   * @returns {Promise<object|null>} Оновлений клас або null у разі помилки
+   * Remove a member from a class
+   * @param {string} classId - Class ID
+   * @param {string} username - Username
+   * @param {number} [retryCount=0] - Retry count
+   * @returns {Promise<object|null>} Updated class or null if error
    */
   const removeMemberFromClass = useCallback(
     async (classId, username, retryCount = 0) => {
@@ -659,11 +652,12 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   /**
-   * Оновлення ролі члена класу
-   * @param {string} classId - ID класу
-   * @param {string} username - Ім'я користувача
-   * @param {string} role - Нова роль
-   * @returns {Promise<object|null>} Оновлений клас або null у разі помилки
+   * Update a member's role in a class
+   * @param {string} classId - Class ID
+   * @param {string} username - Username
+   * @param {string} role - New role
+   * @param {number} [retryCount=0] - Retry count
+   * @returns {Promise<object|null>} Updated class or null if error
    */
   const updateMemberRole = useCallback(
     async (classId, username, role, retryCount = 0) => {
@@ -719,10 +713,10 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   /**
-   * Отримання списку членів класу
-   * @param {string} classId - ID класу
-   * @param {AbortSignal} [signal] - Сигнал для скасування запиту
-   * @returns {Promise<object|null>} Дані членів або null у разі помилки
+   * Fetch class members list
+   * @param {string} classId - Class ID
+   * @param {AbortSignal} [signal] - Abort signal for request cancellation
+   * @returns {Promise<object|null>} Members data or null if error
    */
   const fetchClassMembersList = useCallback(
     async (classId, signal) => {
@@ -756,10 +750,11 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   /**
-   * Перемикання статусу "улюблене" для класу
-   * @param {string} classId - ID класу
-   * @param {boolean} isFavorited - Поточний статус
-   * @returns {Promise<object|null>} Оновлений клас або null у разі помилки
+   * Toggle favorite status for a class
+   * @param {string} classId - Class ID
+   * @param {boolean} isFavorited - Current favorite status
+   * @param {number} [retryCount=0] - Retry count
+   * @returns {Promise<object|null>} Updated class or null if error
    */
   const toggleFavoriteClass = useCallback(
     async (classId, isFavorited, retryCount = 0) => {
@@ -807,7 +802,7 @@ export const useClasses = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Очищення кешу та скидання стану при зміні токена
+  // Clear cache and reset state on token change
   useEffect(() => {
     if (!token) {
       classListCache.clear();

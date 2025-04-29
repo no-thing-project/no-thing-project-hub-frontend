@@ -14,7 +14,7 @@ import {
   updateGateMember,
 } from "../api/gatesApi";
 
-// Константи для повідомлень про помилки
+// Constants for error messages
 const ERROR_MESSAGES = {
   AUTH_REQUIRED: "Authentication required.",
   GATE_ID_MISSING: "Gate ID is missing.",
@@ -25,18 +25,18 @@ const ERROR_MESSAGES = {
   GENERIC: "An error occurred.",
 };
 
-// Константа для максимального розміру кешу
+// Constant for maximum cache size
 const MAX_CACHE_SIZE = 10;
 
-// Кеш для списків гейтів
+// Cache for gate lists
 const gateListCache = new Map();
 
 /**
- * Хук для управління гейтами та їх членами
- * @param {string|null} token - Токен авторизації
- * @param {function} onLogout - Функція для обробки виходу
- * @param {function} navigate - Функція для навігації
- * @returns {object} Об'єкт із станами та методами для роботи з гейтами
+ * Hook for managing gates and their members
+ * @param {string|null} token - Authorization token
+ * @param {function} onLogout - Function to handle logout
+ * @param {function} navigate - Function for navigation
+ * @returns {object} Object with states and methods for gate operations
  */
 export const useGates = (token, onLogout, navigate) => {
   const [gates, setGates] = useState([]);
@@ -48,9 +48,9 @@ export const useGates = (token, onLogout, navigate) => {
   const [error, setError] = useState(null);
 
   /**
-   * Обробка помилок авторизації
-   * @param {Error} err - Об'єкт помилки
-   * @returns {null} Завжди повертає null
+   * Handle authentication errors
+   * @param {Error} err - Error object
+   * @returns {null} Always returns null
    */
   const handleAuthError = useCallback(
     (err) => {
@@ -66,7 +66,7 @@ export const useGates = (token, onLogout, navigate) => {
   );
 
   /**
-   * Скидання стану хука
+   * Reset hook state
    */
   const resetState = useCallback(() => {
     setGates([]);
@@ -78,9 +78,9 @@ export const useGates = (token, onLogout, navigate) => {
   }, []);
 
   /**
-   * Нормалізація даних членів гейта
-   * @param {Array} members - Масив членів
-   * @returns {Array} Нормалізований масив членів
+   * Normalize gate members data
+   * @param {Array} members - Array of members
+   * @returns {Array} Normalized array of members
    */
   const normalizeMembers = useCallback((members = []) => {
     return members.map((member) => ({
@@ -95,10 +95,10 @@ export const useGates = (token, onLogout, navigate) => {
   }, []);
 
   /**
-   * Отримання списку гейтів із кешуванням
-   * @param {object} [filters={}] - Фільтри для запиту
-   * @param {AbortSignal} [signal] - Сигнал для скасування запиту
-   * @returns {Promise<object|null>} Дані гейтів або null у разі помилки
+   * Fetch list of gates with caching
+   * @param {object} [filters={}] - Query filters
+   * @param {AbortSignal} [signal] - Abort signal for request cancellation
+   * @returns {Promise<object|null>} Gate data or null if error
    */
   const fetchGatesList = useCallback(
     async (filters = {}, signal) => {
@@ -144,10 +144,10 @@ export const useGates = (token, onLogout, navigate) => {
   );
 
   /**
-   * Отримання даних одного гейта
-   * @param {string} gateId - ID гейта
-   * @param {AbortSignal} [signal] - Сигнал для скасування запиту
-   * @returns {Promise<object|null>} Дані гейта або null у разі помилки
+   * Fetch a single gate by ID
+   * @param {string} gateId - Gate ID
+   * @param {AbortSignal} [signal] - Abort signal for request cancellation
+   * @returns {Promise<object|null>} Gate data or null if error
    */
   const fetchGate = useCallback(
     async (gateId, signal) => {
@@ -180,9 +180,9 @@ export const useGates = (token, onLogout, navigate) => {
   );
 
   /**
-   * Створення нового гейта
-   * @param {object} gateData - Дані гейта
-   * @returns {Promise<object|null>} Створений гейт або null у разі помилки
+   * Create a new gate
+   * @param {object} gateData - Gate data
+   * @returns {Promise<object|null>} Created gate or null if error
    */
   const createNewGate = useCallback(
     async (gateData) => {
@@ -212,7 +212,7 @@ export const useGates = (token, onLogout, navigate) => {
         );
         if (!newGate) throw new Error("Failed to create gate");
         setGates((prev) => [...prev, newGate]);
-        gateListCache.clear(); // Очищення кешу
+        gateListCache.clear();
         setError(null);
         return newGate;
       } catch (err) {
@@ -226,10 +226,10 @@ export const useGates = (token, onLogout, navigate) => {
   );
 
   /**
-   * Оновлення існуючого гейта
-   * @param {string} gateId - ID гейта
-   * @param {object} gateData - Дані для оновлення
-   * @returns {Promise<object|null>} Оновлений гейт або null у разі помилки
+   * Update an existing gate
+   * @param {string} gateId - Gate ID
+   * @param {object} gateData - Data to update
+   * @returns {Promise<object|null>} Updated gate or null if error
    */
   const updateExistingGate = useCallback(
     async (gateId, gateData) => {
@@ -253,7 +253,7 @@ export const useGates = (token, onLogout, navigate) => {
         if (!updatedGate) throw new Error("Failed to update gate");
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         setGate((prev) => (prev?.gate_id === gateId ? updatedGate : prev));
-        gateListCache.clear(); // Очищення кешу
+        gateListCache.clear();
         setError(null);
         return updatedGate;
       } catch (err) {
@@ -267,10 +267,10 @@ export const useGates = (token, onLogout, navigate) => {
   );
 
   /**
-   * Оновлення статусу гейта
-   * @param {string} gateId - ID гейта
-   * @param {object} statusData - Дані статусу
-   * @returns {Promise<object|null>} Оновлений гейт або null у разі помилки
+   * Update gate status
+   * @param {string} gateId - Gate ID
+   * @param {object} statusData - Status data
+   * @returns {Promise<object|null>} Updated gate or null if error
    */
   const updateGateStatusById = useCallback(
     async (gateId, statusData) => {
@@ -293,7 +293,7 @@ export const useGates = (token, onLogout, navigate) => {
         if (!updatedGate) throw new Error("Failed to update gate status");
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         setGate((prev) => (prev?.gate_id === gateId ? updatedGate : prev));
-        gateListCache.clear(); // Очищення кешу
+        gateListCache.clear();
         setError(null);
         return updatedGate;
       } catch (err) {
@@ -307,9 +307,9 @@ export const useGates = (token, onLogout, navigate) => {
   );
 
   /**
-   * Видалення гейта
-   * @param {string} gateId - ID гейта
-   * @returns {Promise<boolean|null>} true у разі успіху, null у разі помилки
+   * Delete a gate
+   * @param {string} gateId - Gate ID
+   * @returns {Promise<boolean|null>} True if successful, null if error
    */
   const deleteExistingGate = useCallback(
     async (gateId) => {
@@ -325,7 +325,7 @@ export const useGates = (token, onLogout, navigate) => {
         await deleteGate(gateId, token);
         setGates((prev) => prev.filter((g) => g.gate_id !== gateId));
         setGate(null);
-        gateListCache.clear(); // Очищення кешу
+        gateListCache.clear();
         setError(null);
         return true;
       } catch (err) {
@@ -339,10 +339,10 @@ export const useGates = (token, onLogout, navigate) => {
   );
 
   /**
-   * Додавання члена до гейта
-   * @param {string} gateId - ID гейта
-   * @param {object} memberData - Дані члена { username, role }
-   * @returns {Promise<object|null>} Оновлений гейт або null у разі помилки
+   * Add a member to a gate
+   * @param {string} gateId - Gate ID
+   * @param {object} memberData - Member data { username, role }
+   * @returns {Promise<object|null>} Updated gate or null if error
    */
   const addMemberToGate = useCallback(
     async (gateId, { username, role = "viewer" }) => {
@@ -366,7 +366,7 @@ export const useGates = (token, onLogout, navigate) => {
         setMembers(normalizeMembers(gate.members));
         setGate((prev) => (prev?.gate_id === gateId ? gate : prev));
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? gate : g)));
-        gateListCache.clear(); // Очищення кешу
+        gateListCache.clear();
         setError(null);
         return gate;
       } catch (err) {
@@ -380,10 +380,10 @@ export const useGates = (token, onLogout, navigate) => {
   );
 
   /**
-   * Видалення члена з гейта
-   * @param {string} gateId - ID гейта
-   * @param {string} username - Ім'я користувача
-   * @returns {Promise<object|null>} Оновлений гейт або null у разі помилки
+   * Remove a member from a gate
+   * @param {string} gateId - Gate ID
+   * @param {string} username - Username
+   * @returns {Promise<object|null>} Updated gate or null if error
    */
   const removeMemberFromGate = useCallback(
     async (gateId, username) => {
@@ -407,7 +407,7 @@ export const useGates = (token, onLogout, navigate) => {
         setMembers(normalizeMembers(gate.members));
         setGate((prev) => (prev?.gate_id === gateId ? gate : prev));
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? gate : g)));
-        gateListCache.clear(); // Очищення кешу
+        gateListCache.clear();
         setError(null);
         return gate;
       } catch (err) {
@@ -421,11 +421,11 @@ export const useGates = (token, onLogout, navigate) => {
   );
 
   /**
-   * Оновлення ролі члена гейта
-   * @param {string} gateId - ID гейта
-   * @param {string} username - Ім'я користувача
-   * @param {string} role - Нова роль
-   * @returns {Promise<object|null>} Оновлений гейт або null у разі помилки
+   * Update a member's role in a gate
+   * @param {string} gateId - Gate ID
+   * @param {string} username - Username
+   * @param {string} role - New role
+   * @returns {Promise<object|null>} Updated gate or null if error
    */
   const updateMemberRole = useCallback(
     async (gateId, username, role) => {
@@ -451,7 +451,7 @@ export const useGates = (token, onLogout, navigate) => {
         setMembers(normalizeMembers(gate.members));
         setGate((prev) => (prev?.gate_id === gateId ? gate : prev));
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? gate : g)));
-        gateListCache.clear(); // Очищення кешу
+        gateListCache.clear();
         setError(null);
         return gate;
       } catch (err) {
@@ -465,10 +465,10 @@ export const useGates = (token, onLogout, navigate) => {
   );
 
   /**
-   * Отримання списку членів гейта
-   * @param {string} gateId - ID гейта
-   * @param {AbortSignal} [signal] - Сигнал для скасування запиту
-   * @returns {Promise<object|null>} Дані членів або null у разі помилки
+   * Fetch gate members list
+   * @param {string} gateId - Gate ID
+   * @param {AbortSignal} [signal] - Abort signal for request cancellation
+   * @returns {Promise<object|null>} Members data or null if error
    */
   const fetchGateMembersList = useCallback(
     async (gateId, signal) => {
@@ -484,7 +484,7 @@ export const useGates = (token, onLogout, navigate) => {
         const data = await fetchGateMembers(gateId, token, signal);
         if (!data) throw new Error("No members data received");
         setMembers(normalizeMembers(data.members));
-        gateListCache.clear(); // Очищення кешу
+        gateListCache.clear();
         setError(null);
         return data;
       } catch (err) {
@@ -501,10 +501,10 @@ export const useGates = (token, onLogout, navigate) => {
   );
 
   /**
-   * Перемикання статусу "улюблене" для гейта
-   * @param {string} gateId - ID гейта
-   * @param {boolean} isFavorited - Поточний статус
-   * @returns {Promise<object|null>} Оновлений гейт або null у разі помилки
+   * Toggle favorite status for a gate
+   * @param {string} gateId - Gate ID
+   * @param {boolean} isFavorited - Current favorite status
+   * @returns {Promise<object|null>} Updated gate or null if error
    */
   const toggleFavoriteGate = useCallback(
     async (gateId, isFavorited) => {
@@ -523,7 +523,7 @@ export const useGates = (token, onLogout, navigate) => {
         if (!updatedGate) throw new Error("Failed to toggle favorite status");
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         setGate((prev) => (prev?.gate_id === gateId ? updatedGate : prev));
-        gateListCache.clear(); // Очищення кешу
+        gateListCache.clear();
         setError(null);
         return updatedGate;
       } catch (err) {
@@ -536,7 +536,7 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Очищення кешу та скидання стану при зміні токена
+  // Clear cache and reset state on token change
   useEffect(() => {
     if (!token) {
       gateListCache.clear();

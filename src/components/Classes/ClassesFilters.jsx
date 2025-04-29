@@ -1,4 +1,3 @@
-// components/Classes/ClassesFilters.js
 import React, { useState, useCallback } from "react";
 import { Box, Button, TextField, useTheme } from "@mui/material";
 import { motion } from "framer-motion";
@@ -37,13 +36,6 @@ const ClassesFilters = ({ quickFilter, setQuickFilter, searchQuery, setSearchQue
     },
     [localSearch, setSearchQuery]
   );
-
-  const handleReset = useCallback(() => {
-    setLocalSearch("");
-    setSearchQuery("");
-    setQuickFilter("all");
-    onReset();
-  }, [setSearchQuery, setQuickFilter, onReset]);
 
   return (
     <motion.div
