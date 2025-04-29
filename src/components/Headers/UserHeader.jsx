@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Card, CardContent, Typography } from "@mui/material";
-import StatusBadge from "../Bages/StatusBage";
+import StatusBadge from "../Badges/StatusBadge";
 
 const UserHeader = ({ username, accessLevel, actionButton = null }) => {
   return (

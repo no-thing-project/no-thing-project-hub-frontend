@@ -1,6 +1,6 @@
-// src/components/Layout/LeftDrawer/LeftDrawer.jsx
 import React from "react";
 import { useLocation, Link } from "react-router-dom";
+import PropTypes from "prop-types";
 import {
   Drawer,
   List,
@@ -9,31 +9,113 @@ import {
   IconButton,
   Box,
   Tooltip,
+  BottomNavigation,
+  BottomNavigationAction,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import StyleRoundedIcon from "@mui/icons-material/StyleRounded";
 import ClassRoundedIcon from "@mui/icons-material/ClassRounded";
-import PeopleRoundedIcon from "@mui/icons-material/PeopleRounded"; // Іконка для "Друзів"
-import MessageRoundedIcon from "@mui/icons-material/MessageRounded"; // Іконка для "Повідомлень"
+import PeopleRoundedIcon from "@mui/icons-material/PeopleRounded";
+import MessageRoundedIcon from "@mui/icons-material/MessageRounded";
 import ExitToAppRoundedIcon from "@mui/icons-material/ExitToAppRounded";
 
 const isActiveRoute = (route, subroute, currentPath) => {
   if (currentPath === route) return true;
+  if (!subroute) return false;
   const regexPattern = "^" + subroute.replace(/:[^/]+/g, "[^/]+") + "$";
   const regex = new RegExp(regexPattern);
   return regex.test(currentPath);
 };
 
-
 const LeftDrawer = ({ onLogout }) => {
   const location = useLocation();
   const currentPath = location.pathname;
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
+  const navItems = [
+    { to: "/home", label: "Home", icon: <HomeRoundedIcon sx={{ fontSize: 30 }} /> },
+    { to: "/boards", label: "Boards", icon: <DashboardIcon sx={{ fontSize: 30 }} /> },
+    {
+      to: "/gates",
+      label: "Gates",
+      icon: <StyleRoundedIcon sx={{ fontSize: 30 }} />,
+      subroute: "/gate/:gate_id",
+    },
+    {
+      to: "/classes",
+      label: "Classes",
+      icon: <ClassRoundedIcon sx={{ fontSize: 30 }} />,
+      subroute: "/class/:class_id",
+    },
+    { to: "/friends", label: "Friends", icon: <PeopleRoundedIcon sx={{ fontSize: 30 }} /> },
+    { to: "/messages", label: "Messages", icon: <MessageRoundedIcon sx={{ fontSize: 30 }} /> },
+    {
+      to: "#logout",
+      label: "Logout",
+      icon: <ExitToAppRoundedIcon sx={{ fontSize: 30 }} />,
+      onClick: onLogout,
+    },
+  ];
+
+  if (isMobile) {
+    return (
+      <BottomNavigation
+        value={currentPath}
+        sx={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: "rgba(255, 255, 255, 0.1)",
+          backdropFilter: "blur(10px)",
+          borderTop: "1px solid rgba(255, 255, 255, 0.2)",
+          zIndex: theme.zIndex.drawer,
+          paddingBottom: "env(safe-area-inset-bottom)",
+          "& .MuiBottomNavigationAction-root": {
+            minWidth: 0,
+            padding: "6px 8px",
+            "&.Mui-selected": {
+              color: "var(--color-icon-hover)",
+            },
+            "&:hover": {
+              color: "var(--color-icon-hover)",
+            },
+          },
+        }}
+        role="navigation"
+        aria-label="Main navigation"
+      >
+        {navItems.map((item) => (
+          <Tooltip key={item.to} title={item.label} placement="top">
+            <BottomNavigationAction
+              component={item.to === "#logout" ? "button" : Link}
+              to={item.to !== "#logout" ? item.to : undefined}
+              onClick={item.onClick}
+              value={item.to}
+              icon={item.icon}
+              sx={{
+                color:
+                  item.to === "#logout"
+                    ? "var(--color-icon-default)"
+                    : isActiveRoute(item.to, item.subroute, currentPath)
+                    ? "var(--color-icon-hover)"
+                    : "var(--color-icon-default)",
+              }}
+              aria-label={item.label}
+            />
+          </Tooltip>
+        ))}
+      </BottomNavigation>
+    );
+  }
 
   return (
     <Drawer
       variant="permanent"
-      className="left-drawer"
       PaperProps={{
         sx: {
           boxShadow: "none",
@@ -42,7 +124,7 @@ const LeftDrawer = ({ onLogout }) => {
           flexDirection: "column",
           alignItems: "center",
           width: 72,
-          backgroundColor: "rgba(255, 255, 255, 0)",
+          backgroundColor: "rgba(255, 255, 255, 0.1)",
           backdropFilter: "blur(10px)",
           borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
         },
@@ -60,170 +142,36 @@ const LeftDrawer = ({ onLogout }) => {
         }}
       >
         <List sx={{ p: 0, m: 0 }}>
-          <ListItem
-            button
-            component={Link}
-            to="/home"
-            sx={{
-              justifyContent: "center",
-              "&:hover .MuiListItemIcon-root": {
-                color: "var(--color-icon-hover)",
-              },
-            }}
-          >
-            <Tooltip title="Home" placement="right">
-              <ListItemIcon
-                sx={{
-                  minWidth: 0,
-                  justifyContent: "center",
-                  color:
-                    currentPath === "/home"
+          {navItems.slice(0, -1).map((item) => (
+            <ListItem
+              key={item.to}
+              button
+              component={Link}
+              to={item.to}
+              sx={{
+                justifyContent: "center",
+                "&:hover .MuiListItemIcon-root": {
+                  color: "var(--color-icon-hover)",
+                },
+              }}
+            >
+              <Tooltip title={item.label} placement="right">
+                <ListItemIcon
+                  sx={{
+                    minWidth: 0,
+                    justifyContent: "center",
+                    color: isActiveRoute(item.to, item.subroute, currentPath)
                       ? "var(--color-icon-hover)"
                       : "var(--color-icon-default)",
-                }}
-              >
-                <HomeRoundedIcon sx={{ fontSize: 30 }} aria-label="Home" />
-              </ListItemIcon>
-            </Tooltip>
-          </ListItem>
-
-          <ListItem
-            button
-            component={Link}
-            to="/boards"
-            sx={{
-              justifyContent: "center",
-              "&:hover .MuiListItemIcon-root": {
-                color: "var(--color-icon-hover)",
-              },
-            }}
-          >
-            <Tooltip title="Boards" placement="right">
-              <ListItemIcon
-                sx={{
-                  minWidth: 0,
-                  justifyContent: "center",
-                  color:
-                    currentPath === "/boards"
-                      ? "var(--color-icon-hover)"
-                      : "var(--color-icon-default)",
-                }}
-              >
-                <DashboardIcon sx={{ fontSize: 30 }} aria-label="Boards" />
-              </ListItemIcon>
-            </Tooltip>
-          </ListItem>
-
-          <ListItem
-            button
-            component={Link}
-            to="/gates"
-            sx={{
-              justifyContent: "center",
-              "&:hover .MuiListItemIcon-root": {
-                color: "var(--color-icon-hover)",
-              },
-            }}
-          >
-            <Tooltip title="Gates" placement="right">
-              <ListItemIcon
-                sx={{
-                  minWidth: 0,
-                  justifyContent: "center",
-                  color:
-                  isActiveRoute("/gates", "/gate/:gate_id", currentPath)
-                      ? "var(--color-icon-hover)"
-                      : "var(--color-icon-default)",
-                }}
-              >
-                <StyleRoundedIcon sx={{ fontSize: 30 }} aria-label="Gates" />
-              </ListItemIcon>
-            </Tooltip>
-          </ListItem>
-
-          <ListItem
-            button
-            component={Link}
-            to="/classes"
-            sx={{
-              justifyContent: "center",
-              "&:hover .MuiListItemIcon-root": {
-                color: "var(--color-icon-hover)",
-              },
-            }}
-          >
-            <Tooltip title="Classes" placement="right">
-              <ListItemIcon
-                sx={{
-                  minWidth: 0,
-                  justifyContent: "center",
-                  color:
-                  isActiveRoute("/classes", "/class/:class_id", currentPath)
-                      ? "var(--color-icon-hover)"
-                      : "var(--color-icon-default)",
-                }}
-              >
-                <ClassRoundedIcon sx={{ fontSize: 30 }} aria-label="Classes" />
-              </ListItemIcon>
-            </Tooltip>
-          </ListItem>
-
-          <ListItem
-            button
-            component={Link}
-            to="/friends"
-            sx={{
-              justifyContent: "center",
-              "&:hover .MuiListItemIcon-root": {
-                color: "var(--color-icon-hover)",
-              },
-            }}
-          >
-            <Tooltip title="Friends" placement="right">
-              <ListItemIcon
-                sx={{
-                  minWidth: 0,
-                  justifyContent: "center",
-                  color:
-                    currentPath === "/friends"
-                      ? "var(--color-icon-hover)"
-                      : "var(--color-icon-default)",
-                }}
-              >
-                <PeopleRoundedIcon sx={{ fontSize: 30 }} aria-label="Friends" />
-              </ListItemIcon>
-            </Tooltip>
-          </ListItem>
-
-          <ListItem
-            button
-            component={Link}
-            to="/messages"
-            sx={{
-              justifyContent: "center",
-              "&:hover .MuiListItemIcon-root": {
-                color: "var(--color-icon-hover)",
-              },
-            }}
-          >
-            <Tooltip title="Messages" placement="right">
-              <ListItemIcon
-                sx={{
-                  minWidth: 0,
-                  justifyContent: "center",
-                  color:
-                    currentPath === "/messages"
-                      ? "var(--color-icon-hover)"
-                      : "var(--color-icon-default)",
-                }}
-              >
-                <MessageRoundedIcon sx={{ fontSize: 30 }} aria-label="Messages" />
-              </ListItemIcon>
-            </Tooltip>
-          </ListItem>
+                  }}
+                >
+                  {item.icon}
+                </ListItemIcon>
+              </Tooltip>
+            </ListItem>
+          ))}
         </List>
       </Box>
-
       <Tooltip title="Logout" placement="right">
         <IconButton
           onClick={onLogout}
@@ -241,6 +189,10 @@ const LeftDrawer = ({ onLogout }) => {
       </Tooltip>
     </Drawer>
   );
+};
+
+LeftDrawer.propTypes = {
+  onLogout: PropTypes.func.isRequired,
 };
 
 export default LeftDrawer;
