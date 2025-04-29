@@ -57,6 +57,11 @@ const GatesPage = () => {
   const [quickFilter, setQuickFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const debouncedSetSearchQuery = useMemo(
+    () => debounce((value) => setSearchQuery(value), 300),
+    []
+  );
+
   const loadGatesData = useCallback(
     async (signal) => {
       if (!isAuthenticated || !token) {
@@ -90,18 +95,16 @@ const GatesPage = () => {
     }
   }, [error, showNotification]);
 
-  const debouncedSetSearchQuery = useMemo(
-    () => debounce((value) => setSearchQuery(value), 300),
-    []
-  );
-
   const filteredGates = useMemo(() => {
+    const lowerSearchQuery = searchQuery.toLowerCase();
     return gates.filter((gate) => {
-      const matchesSearch = gate.name?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
+      const matchesSearch =
+        gate.name?.toLowerCase().includes(lowerSearchQuery) ||
+        gate.description?.toLowerCase().includes(lowerSearchQuery);
       if (!matchesSearch) return false;
       if (quickFilter === "all") return true;
-      if (quickFilter === "public") return gate.access?.is_public;
-      if (quickFilter === "private") return !gate.access?.is_public;
+      if (quickFilter === "public") return gate.is_public;
+      if (quickFilter === "private") return !gate.is_public;
       if (quickFilter === "favorited") return gate.is_favorited;
       return true;
     });
