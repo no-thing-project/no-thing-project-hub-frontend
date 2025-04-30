@@ -17,7 +17,8 @@ import {
   Lock,
   People,
   Forum,
-  GroupAdd,
+  Group,
+  Visibility,
 } from "@mui/icons-material";
 import PropTypes from "prop-types";
 
@@ -27,8 +28,7 @@ const BoardCard = ({
   setEditingBoard,
   setBoardToDelete,
   setDeleteDialogOpen,
-  handleAddMember,
-  handleRemoveMember,
+  openMemberDialog,
   navigate,
   currentUser,
 }) => {
@@ -148,16 +148,16 @@ const BoardCard = ({
             </IconButton>
           </Tooltip>
           {canEdit && (
-            <Tooltip title="Add Member">
+            <Tooltip title="Manage Members">
               <IconButton
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleAddMember(board.board_id);
+                  openMemberDialog(board.board_id);
                 }}
                 size="small"
-                aria-label="Add member to board"
+                aria-label="Manage board members"
               >
-                <GroupAdd fontSize="small" />
+                <Group fontSize="small" />
               </IconButton>
             </Tooltip>
           )}
@@ -205,37 +205,64 @@ const BoardCard = ({
             size="small"
             variant="outlined"
             sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+            aria-label={`Board type: ${typeLabel}`}
           />
-          <Chip
-            label={`Members: ${board.members?.length || 0}`}
-            icon={<People />}
-            size="small"
-            variant="outlined"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
-          />
+          {isPublic ? (
+            <Chip
+              label={`Views: ${board.stats?.view_count || 0}`}
+              icon={<Visibility />}
+              size="small"
+              variant="outlined"
+              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              aria-label={`Views: ${board.stats?.view_count || 0}`}
+            />
+          ) : (
+            <Chip
+              label={`Members: ${board.members?.length || 0}`}
+              icon={<People />}
+              size="small"
+              variant="outlined"
+              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              aria-label={`Members: ${board.members?.length || 0}`}
+            />
+          )}
           <Chip
             label={`Tweets: ${board.stats?.tweet_count || 0}`}
             icon={<Forum />}
             size="small"
             variant="outlined"
             sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+            aria-label={`Tweets: ${board.stats?.tweet_count || 0}`}
           />
         </Box>
 
         <Divider sx={{ my: 1 }} />
 
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-          <Chip
-            label={board.gateName}
-            size="small"
-            variant="outlined"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
-          />
+          {board.gateName && board.gateName !== "No Gate" && (
+            <Chip
+              label={`Gate: ${board.gateName}`}
+              size="small"
+              variant="outlined"
+              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              aria-label={`Gate: ${board.gateName}`}
+            />
+          )}
+          {board.className && board.className !== "No Class" && (
+            <Chip
+              label={`Class: ${board.className}`}
+              size="small"
+              variant="outlined"
+              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              aria-label={`Class: ${board.className}`}
+            />
+          )}
           <Chip
             label={`Owner: ${ownerUsername}`}
             size="small"
             variant="outlined"
             sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+            aria-label={`Owner: ${ownerUsername}`}
           />
           {(board.stats?.favorite_count || 0) > 0 && (
             <Chip
@@ -244,6 +271,7 @@ const BoardCard = ({
               size="small"
               variant="outlined"
               sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              aria-label={`Favorites: ${board.stats.favorite_count}`}
             />
           )}
           {board.tags?.length > 0 && (
@@ -252,6 +280,7 @@ const BoardCard = ({
               size="small"
               variant="outlined"
               sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              aria-label={`Tags: ${board.tags.join(", ")}`}
             />
           )}
           {board.parent_board_id && (
@@ -260,6 +289,7 @@ const BoardCard = ({
               size="small"
               variant="outlined"
               sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              aria-label="Board has parent"
             />
           )}
           {board.child_board_ids?.length > 0 && (
@@ -268,6 +298,7 @@ const BoardCard = ({
               size="small"
               variant="outlined"
               sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              aria-label={`Children: ${board.child_board_ids.length}`}
             />
           )}
         </Box>
@@ -322,6 +353,7 @@ BoardCard.propTypes = {
     stats: PropTypes.shape({
       tweet_count: PropTypes.number,
       favorite_count: PropTypes.number,
+      view_count: PropTypes.number,
     }),
     type: PropTypes.string,
     tags: PropTypes.arrayOf(PropTypes.string),
@@ -339,8 +371,7 @@ BoardCard.propTypes = {
   setEditingBoard: PropTypes.func.isRequired,
   setBoardToDelete: PropTypes.func.isRequired,
   setDeleteDialogOpen: PropTypes.func.isRequired,
-  handleAddMember: PropTypes.func.isRequired,
-  handleRemoveMember: PropTypes.func.isRequired,
+  openMemberDialog: PropTypes.func.isRequired,
   navigate: PropTypes.func.isRequired,
   currentUser: PropTypes.shape({
     anonymous_id: PropTypes.string,

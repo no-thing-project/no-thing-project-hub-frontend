@@ -41,11 +41,7 @@ const BoardsFilters = ({ quickFilter, setQuickFilter, searchQuery, setSearchQuer
     "all",
     "public",
     "private",
-    "liked",
-    "personal",
-    "group",
-    "gate",
-    "class",
+    "favorite",
   ];
 
   return (
@@ -92,24 +88,6 @@ const BoardsFilters = ({ quickFilter, setQuickFilter, searchQuery, setSearchQuer
               {filter.charAt(0).toUpperCase() + filter.slice(1)}
             </Button>
           ))}
-          <Button
-            variant="outlined"
-            onClick={onReset}
-            sx={{
-              minWidth: { xs: 80, sm: 100 },
-              fontSize: { xs: "0.75rem", sm: "0.875rem" },
-              backgroundColor: "background.default",
-              color: "text.primary",
-              borderColor: "text.primary",
-              borderRadius: theme.shape.borderRadiusSmall,
-              "&:hover": {
-                backgroundColor: "background.hover",
-              },
-            }}
-            aria-label="Reset filters"
-          >
-            Reset
-          </Button>
         </Box>
         <TextField
           variant="outlined"

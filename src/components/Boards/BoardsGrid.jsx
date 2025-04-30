@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Typography, useTheme } from "@mui/material";
 import { motion, AnimatePresence } from "framer-motion";
-import BoardCard from "./BoardsCard";
+import BoardCard from "./BoardsCard"; // Adjusted import path to match your structure
 import PropTypes from "prop-types";
 
 const containerVariants = {
@@ -20,10 +20,10 @@ const BoardsGrid = ({
   setEditingBoard,
   setBoardToDelete,
   setDeleteDialogOpen,
-  handleAddMember,
-  handleRemoveMember,
+  openMemberDialog,
   navigate,
   currentUser,
+  token,
 }) => {
   const theme = useTheme();
 
@@ -116,10 +116,10 @@ const BoardsGrid = ({
                 setEditingBoard={setEditingBoard}
                 setBoardToDelete={setBoardToDelete}
                 setDeleteDialogOpen={setDeleteDialogOpen}
-                handleAddMember={handleAddMember}
-                handleRemoveMember={handleRemoveMember}
+                openMemberDialog={openMemberDialog}
                 navigate={navigate}
                 currentUser={currentUser}
+                token={token}
               />
             ))}
           </Box>
@@ -135,10 +135,10 @@ BoardsGrid.propTypes = {
   setEditingBoard: PropTypes.func.isRequired,
   setBoardToDelete: PropTypes.func.isRequired,
   setDeleteDialogOpen: PropTypes.func.isRequired,
-  handleAddMember: PropTypes.func.isRequired,
-  handleRemoveMember: PropTypes.func.isRequired,
+  openMemberDialog: PropTypes.func.isRequired,
   navigate: PropTypes.func.isRequired,
   currentUser: PropTypes.object,
+  token: PropTypes.string,
 };
 
 export default React.memo(BoardsGrid);

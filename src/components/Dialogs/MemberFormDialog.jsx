@@ -38,6 +38,8 @@ const MemberFormDialog = ({
   open,
   title,
   gateId,
+  classId,
+  boardId,
   token,
   onSave,
   onCancel,
@@ -56,6 +58,14 @@ const MemberFormDialog = ({
   const [userSuggestions, setUserSuggestions] = useState([]);
 
   const validRoles = ["viewer", "moderator", "admin", "owner"];
+
+  // Determine the context (gate, class, or board) based on provided IDs
+  const context = useMemo(() => {
+    if (gateId) return { type: "gate", id: gateId, name: "Gate" };
+    if (classId) return { type: "class", id: classId, name: "Class" };
+    if (boardId) return { type: "board", id: boardId, name: "Board" };
+    return { type: null, id: null, name: "Unknown" };
+  }, [gateId, classId, boardId]);
 
   const validationRules = useMemo(
     () => ({
@@ -86,7 +96,7 @@ const MemberFormDialog = ({
           }));
           setUserSuggestions(suggestions);
           if (!suggestions.length) {
-            showNotification("No users found for this query", "info");
+            showNotification(`No users found for this ${context.name.toLowerCase()}`, "info");
           }
         } catch (err) {
           console.error("Search users error:", err);
@@ -94,7 +104,7 @@ const MemberFormDialog = ({
           setUserSuggestions([]);
         }
       }, 300),
-    [searchUsersByUsername, showNotification]
+    [searchUsersByUsername, showNotification, context.name]
   );
 
   const handleUsernameChange = useCallback(
@@ -148,43 +158,59 @@ const MemberFormDialog = ({
       return;
     }
 
+    if (!context.id) {
+      showNotification(`No valid ${context.name.toLowerCase()} ID provided`, "error");
+      return;
+    }
+
     try {
-      await addMember(gateId, { username: selectedUser.username, role });
+      await addMember(context.id, { username: selectedUser.username, role });
       setUsername("");
       setRole("viewer");
       setErrors({});
       setUserSuggestions([]);
-      showNotification("Member added successfully!", "success");
+      showNotification(`Member added to ${context.name.toLowerCase()} successfully!`, "success");
+      onSave();
     } catch (err) {
-      console.error("Add member error:", err);
-      showNotification(err.message || "Failed to add member", "error");
+      console.error(`Add ${context.name.toLowerCase()} member error:`, err);
+      showNotification(err.message || `Failed to add member to ${context.name.toLowerCase()}`, "error");
     }
-  }, [gateId, username, role, userSuggestions, addMember, showNotification, validationRules]);
+  }, [context, username, role, userSuggestions, addMember, showNotification, validationRules, onSave]);
 
   const handleRemoveMember = useCallback(
     async (username) => {
+      if (!context.id) {
+        showNotification(`No valid ${context.name.toLowerCase()} ID provided`, "error");
+        return;
+      }
+
       try {
-        await removeMember(gateId, username);
-        showNotification("Member removed successfully!", "success");
+        await removeMember(context.id, username);
+        showNotification(`Member removed from ${context.name.toLowerCase()} successfully!`, "success");
       } catch (err) {
-        console.error("Remove member error:", err);
-        showNotification(err.message || "Failed to remove member", "error");
+        console.error(`Remove ${context.name.toLowerCase()} member error:`, err);
+        showNotification(err.message || `Failed to remove member from ${context.name.toLowerCase()}`, "error");
       }
     },
-    [gateId, removeMember, showNotification]
+    [context, removeMember, showNotification]
   );
 
   const handleUpdateRole = useCallback(
     async (username, newRole) => {
+      if (!context.id) {
+        showNotification(`No valid ${context.name.toLowerCase()} ID provided`, "error");
+        return;
+      }
+
       try {
-        await updateMemberRole(gateId, username, newRole);
-        showNotification("Member role updated successfully!", "success");
+        await updateMemberRole(context.id, username, newRole);
+        showNotification(`Member role updated in ${context.name.toLowerCase()} successfully!`, "success");
       } catch (err) {
-        console.error("Update role error:", err);
-        showNotification(err.message || "Failed to update member role", "error");
+        console.error(`Update ${context.name.toLowerCase()} role error:`, err);
+        showNotification(err.message || `Failed to update member role in ${context.name.toLowerCase()}`, "error");
       }
     },
-    [gateId, updateMemberRole, showNotification]
+    [context, updateMemberRole, showNotification]
   );
 
   useEffect(() => {
@@ -209,7 +235,9 @@ const MemberFormDialog = ({
         },
       }}
     >
-      <DialogTitle sx={{ fontSize: { xs: "1.25rem", md: "1.5rem" } }}>{title}</DialogTitle>
+      <DialogTitle sx={{ fontSize: { xs: "1.25rem", md: "1.5rem" } }}>
+        {title || `Manage ${context.name} Members`}
+      </DialogTitle>
       <DialogContent>
         <Box
           sx={{
@@ -239,7 +267,7 @@ const MemberFormDialog = ({
                 required
                 disabled={disabled}
                 error={!!errors.username}
-                helperText={errors.username}
+                helperText={errors.username || `Search for a user to add to the ${context.name.toLowerCase()}`}
                 InputProps={{
                   ...params.InputProps,
                   endAdornment: (
@@ -251,7 +279,7 @@ const MemberFormDialog = ({
                 }}
               />
             )}
-            aria-label="Search for a user to add"
+            aria-label={`Search for a user to add to ${context.name.toLowerCase()}`}
           />
           <FormControl
             sx={{ minWidth: { xs: "100%", sm: 150 }, mt: 0, ...selectStyles }}
@@ -279,7 +307,7 @@ const MemberFormDialog = ({
               fontSize: { xs: "0.75rem", sm: "0.875rem" },
             }}
             disabled={disabled || Object.keys(errors).some((key) => errors[key])}
-            aria-label="Add member"
+            aria-label={`Add member to ${context.name.toLowerCase()}`}
           >
             Add
           </Button>
@@ -289,7 +317,7 @@ const MemberFormDialog = ({
           variant="h6"
           sx={{ mb: 2, fontSize: { xs: "1.25rem", md: "1.5rem" } }}
         >
-          Current Members
+          Current {context.name} Members
         </Typography>
         {members?.length > 0 ? (
           <TableContainer component={Paper} sx={{ borderRadius: theme.shape.borderRadiusSmall }}>
@@ -352,7 +380,7 @@ const MemberFormDialog = ({
                         <IconButton
                           onClick={() => handleRemoveMember(member.username)}
                           disabled={disabled}
-                          aria-label={`Remove member ${member.username || "Unknown"}`}
+                          aria-label={`Remove member ${member.username || "Unknown"} from ${context.name.toLowerCase()}`}
                         >
                           <Delete fontSize="small" color="error" />
                         </IconButton>
@@ -365,7 +393,7 @@ const MemberFormDialog = ({
           </TableContainer>
         ) : (
           <Typography variant="body2" color="text.secondary">
-            No members yet.
+            No members in this {context.name.toLowerCase()} yet.
           </Typography>
         )}
       </DialogContent>
@@ -390,8 +418,10 @@ const MemberFormDialog = ({
 
 MemberFormDialog.propTypes = {
   open: PropTypes.bool.isRequired,
-  title: PropTypes.string.isRequired,
+  title: PropTypes.string,
   gateId: PropTypes.string,
+  classId: PropTypes.string,
+  boardId: PropTypes.string,
   token: PropTypes.string,
   onSave: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,

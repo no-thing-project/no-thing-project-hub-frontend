@@ -26,7 +26,7 @@ const BoardsPage = () => {
   const {
     boards,
     loading: boardsLoading,
-    error,
+    error: boardsError,
     fetchBoardsList,
     createNewBoard,
     updateExistingBoard,
@@ -50,13 +50,14 @@ const BoardsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [memberDialogOpen, setMemberDialogOpen] = useState(false);
+  const [selectedBoardId, setSelectedBoardId] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingBoard, setEditingBoard] = useState(null);
-  const [selectedBoardId, setSelectedBoardId] = useState(null);
   const [boardToDelete, setBoardToDelete] = useState(null);
   const [popupBoard, setPopupBoard] = useState({
     name: "",
     description: "",
+    is_public: false,
     visibility: "private",
     type: "personal",
     gate_id: null,
@@ -67,6 +68,7 @@ const BoardsPage = () => {
       max_members: 50,
       ai_moderation_enabled: true,
     },
+    tags: [],
   });
   const [quickFilter, setQuickFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -108,10 +110,10 @@ const BoardsPage = () => {
   }, [loadData]);
 
   useEffect(() => {
-    if (error) showNotification(error, "error");
+    if (boardsError) showNotification(boardsError, "error");
     if (gatesError) showNotification(gatesError, "error");
     if (classesError) showNotification(classesError, "error");
-  }, [error, gatesError, classesError, showNotification]);
+  }, [boardsError, gatesError, classesError, showNotification]);
 
   const filteredBoards = useMemo(() => {
     const lowerSearchQuery = searchQuery.toLowerCase();
@@ -151,6 +153,7 @@ const BoardsPage = () => {
     setPopupBoard({
       name: "",
       description: "",
+      is_public: false,
       visibility: "private",
       type: "personal",
       gate_id: null,
@@ -161,6 +164,7 @@ const BoardsPage = () => {
         max_members: 50,
         ai_moderation_enabled: true,
       },
+      tags: [],
     });
   }, []);
 
@@ -175,6 +179,7 @@ const BoardsPage = () => {
       setPopupBoard({
         name: "",
         description: "",
+        is_public: false,
         visibility: "private",
         type: "personal",
         gate_id: null,
@@ -185,6 +190,7 @@ const BoardsPage = () => {
           max_members: 50,
           ai_moderation_enabled: true,
         },
+        tags: [],
       });
       showNotification("Board created successfully!", "success");
       navigate(`/board/${createdBoard.board_id}`);
@@ -220,6 +226,16 @@ const BoardsPage = () => {
       setBoardToDelete(null);
     }
   }, [boardToDelete, deleteExistingBoard, showNotification]);
+
+  const handleOpenMemberDialog = useCallback((boardId) => {
+    setSelectedBoardId(boardId);
+    setMemberDialogOpen(true);
+  }, []);
+
+  const handleCancelMemberDialog = useCallback(() => {
+    setMemberDialogOpen(false);
+    setSelectedBoardId(null);
+  }, []);
 
   const handleAddMember = useCallback(
     async (boardId, memberData) => {
@@ -261,16 +277,6 @@ const BoardsPage = () => {
     },
     [updateMemberRole, showNotification]
   );
-
-  const handleOpenMemberDialog = useCallback((boardId) => {
-    setSelectedBoardId(boardId);
-    setMemberDialogOpen(true);
-  }, []);
-
-  const handleCancelMemberDialog = useCallback(() => {
-    setMemberDialogOpen(false);
-    setSelectedBoardId(null);
-  }, []);
 
   const handleResetFilters = useCallback(() => {
     setQuickFilter("all");
@@ -333,10 +339,10 @@ const BoardsPage = () => {
           setEditingBoard={setEditingBoard}
           setBoardToDelete={setBoardToDelete}
           setDeleteDialogOpen={setDeleteDialogOpen}
-          handleAddMember={handleOpenMemberDialog}
-          handleRemoveMember={handleRemoveMember}
+          openMemberDialog={handleOpenMemberDialog}
           navigate={navigate}
           currentUser={authData}
+          token={token}
         />
       </Box>
       <BoardFormDialog
@@ -365,10 +371,10 @@ const BoardsPage = () => {
       )}
       <MemberFormDialog
         open={memberDialogOpen}
-        title="Manage Members"
+        title="Manage Board Members"
         boardId={selectedBoardId}
         token={token}
-        onSave={() => {}}
+        onSave={() => handleCancelMemberDialog()}
         onCancel={handleCancelMemberDialog}
         disabled={boardsLoading}
         members={boards.find((b) => b.board_id === selectedBoardId)?.members || []}

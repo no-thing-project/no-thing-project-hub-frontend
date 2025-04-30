@@ -1,4 +1,3 @@
-// api/boardsApi.js
 import api from "./apiClient";
 import { handleApiError } from "./apiClient";
 
@@ -14,7 +13,6 @@ const ERROR_MESSAGES = {
   ROLE_REQUIRED: "Role is required",
   DATA_REQUIRED: "Board data is required",
   STATUS_REQUIRED: "Status is required",
-  INVALID_RESPONSE: "Invalid response from server",
 };
 
 /**
@@ -24,7 +22,7 @@ const ERROR_MESSAGES = {
  * @throws {Error} If parameter is invalid
  */
 const validateStringParam = (param, paramName) => {
-  if (!param || typeof param !== "string") {
+  if (!param || typeof param !== "string" || !param.trim()) {
     throw new Error(ERROR_MESSAGES[`${paramName.toUpperCase()}_REQUIRED`]);
   }
 };
@@ -223,7 +221,7 @@ export const updateBoard = async (boardId, boardData, token) => {
   validateStringParam(token, "token");
   validateObjectParam(boardData, "data");
   try {
-    const response = await api.put(`${BASE_BOARD_PATH}/${boardId}`, boardData, {
+    const response = await api.patch(`${BASE_BOARD_PATH}/${boardId}`, boardData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content || null;
@@ -244,7 +242,7 @@ export const updateBoardStatus = async (boardId, statusData, token) => {
   validateStringParam(token, "token");
   validateObjectParam(statusData, "status");
   try {
-    const response = await api.put(`${BASE_BOARD_PATH}/${boardId}/status`, statusData, {
+    const response = await api.patch(`${BASE_BOARD_PATH}/${boardId}/status`, statusData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content || null;
@@ -329,7 +327,7 @@ export const updateMember = async (boardId, username, roleData, token) => {
   validateStringParam(token, "token");
   validateObjectParam(roleData, "role");
   try {
-    const response = await api.put(`${BASE_BOARD_PATH}/${boardId}/members/${username}`, roleData, {
+    const response = await api.patch(`${BASE_BOARD_PATH}/${boardId}/members/${username}`, roleData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content || null;
@@ -392,47 +390,6 @@ export const fetchBoardMembers = async (boardId, token, signal) => {
       signal,
     });
     return response.data.content || { members: [] };
-  } catch (error) {
-    throw handleApiError(error);
-  }
-};
-
-/**
- * Invite a user to a board
- * @param {string} boardId - Board UUID
- * @param {object} inviteData - Invite data (username)
- * @param {string} token - Authorization token
- * @returns {Promise<object>} Updated board data
- */
-export const inviteUser = async (boardId, inviteData, token) => {
-  validateStringParam(boardId, "boardId");
-  validateStringParam(token, "token");
-  validateObjectParam(inviteData, "data");
-  validateStringParam(inviteData.username, "username");
-  try {
-    const response = await api.post(`${BASE_BOARD_PATH}/${boardId}/invite`, inviteData, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return response.data.content || null;
-  } catch (error) {
-    throw handleApiError(error);
-  }
-};
-
-/**
- * Accept an invitation to a board
- * @param {string} boardId - Board UUID
- * @param {string} token - Authorization token
- * @returns {Promise<object>} Updated board data
- */
-export const acceptInvite = async (boardId, token) => {
-  validateStringParam(boardId, "boardId");
-  validateStringParam(token, "token");
-  try {
-    const response = await api.post(`${BASE_BOARD_PATH}/${boardId}/accept-invite`, {}, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return response.data.content || null;
   } catch (error) {
     throw handleApiError(error);
   }

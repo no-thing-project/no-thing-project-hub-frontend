@@ -1,4 +1,3 @@
-// hooks/useBoards.js
 import { useState, useCallback, useEffect, useMemo } from "react";
 import ReactDOM from "react-dom";
 import {
@@ -19,8 +18,6 @@ import {
   favoriteBoard,
   unfavoriteBoard,
   fetchBoardMembers,
-  inviteUser,
-  acceptInvite,
 } from "../api/boardsApi";
 
 // Constants for error messages
@@ -32,18 +29,17 @@ const ERROR_MESSAGES = {
   STATUS_DATA_MISSING: "Status data is missing.",
   USERNAME_MISSING: "Username is missing.",
   ROLE_MISSING: "Role is missing.",
-  GATE_ID_MISSING: "Gate ID is missing for public board.",
-  CLASS_ID_MISSING: "Class ID is missing.",
-  PARENT_BOARD_ID_MISSING: "Parent board ID is missing.",
+  GATE_ID_MISSING: "Gate ID is required.",
+  CLASS_ID_MISSING: "Class ID is required.",
+  PARENT_BOARD_ID_MISSING: "Parent board ID is required.",
   DATA_MISSING: "Required data is missing.",
-  MEMBER_LIMIT_EXCEEDED: "Member limit exceeded.",
-  RATE_LIMIT_EXCEEDED: "Rate limit exceeded, please try again later.",
   GENERIC: "An error occurred.",
 };
 
 // Constants for cache
 const MAX_CACHE_SIZE = 10;
 const CACHE_VERSION = "v1";
+const CACHE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
 
 // Cache for board lists and items
 const boardListCache = new Map();
@@ -68,7 +64,7 @@ export const useBoards = (token, onLogout, navigate) => {
   const [lastUpdated, setLastUpdated] = useState(null);
 
   /**
-   * Handle authentication errors with retry for 429
+   * Handle authentication errors
    * @param {Error} err - Error object
    * @param {number} [retryCount=0] - Retry count
    * @returns {null} Always returns null
@@ -85,9 +81,7 @@ export const useBoards = (token, onLogout, navigate) => {
         navigate("/login");
       }
       setError(
-        status === 429
-          ? ERROR_MESSAGES.RATE_LIMIT_EXCEEDED
-          : status === 404
+        status === 404
           ? ERROR_MESSAGES.BOARD_NOT_FOUND
           : err.message || ERROR_MESSAGES.GENERIC
       );
@@ -122,18 +116,219 @@ export const useBoards = (token, onLogout, navigate) => {
    */
   const normalizeMembers = useCallback((members = []) => {
     return members.map((member) => ({
+      member_id: member.member_id || member.anonymous_id || "",
       username: member.username || "Unknown",
       role: member.role || "viewer",
       joined_at: member.joined_at || null,
       avatar: member.avatar || null,
       total_points: member.total_points || 0,
+      anonymous_id: member.anonymous_id || member.member_id || "",
     }));
   }, []);
 
   /**
-   * Fetch list of boards with caching
-   * @param {object} [filters={}] - Query filters
+   * Check if cache entry is expired
+   * @param {object} cacheEntry - Cache entry with timestamp
+   * @returns {boolean} True if expired
+   */
+  const isCacheExpired = useCallback((cacheEntry) => {
+    return Date.now() - cacheEntry.timestamp > CACHE_EXPIRY_MS;
+  }, []);
+
+  /**
+   * Add a member to a board
+   * @param {string} boardId - Board UUID
+   * @param {object} memberData - Member data { username, role }
+   * @param {number} [retryCount=0] - Retry count
+   * @returns {Promise<object|null>} Updated board or null if error
+   */
+  const addMemberToBoard = useCallback(
+    async (boardId, { username, role = "viewer" }, retryCount = 0) => {
+      if (!token || !boardId?.trim() || !username?.trim()) {
+        setError(
+          !token
+            ? ERROR_MESSAGES.AUTH_REQUIRED
+            : !boardId
+            ? ERROR_MESSAGES.BOARD_ID_MISSING
+            : ERROR_MESSAGES.USERNAME_MISSING
+        );
+        return null;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const board = await addMember(boardId, { username, role }, token);
+        if (!board) throw new Error("Failed to add member");
+        const cacheKey = `${CACHE_VERSION}:${boardId}`;
+        ReactDOM.unstable_batchedUpdates(() => {
+          setMembers(normalizeMembers(board.members));
+          setBoardItem((prev) => (prev?.board_id === boardId ? board : prev));
+          setBoards((prev) => prev.map((b) => (b.board_id === boardId ? board : b)));
+          setLastUpdated(Date.now());
+        });
+        boardListCache.clear();
+        boardItemCache.set(cacheKey, { ...board, timestamp: Date.now() });
+        return board;
+      } catch (err) {
+        if (err.status === 429 && retryCount < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
+          return addMemberToBoard(boardId, { username, role }, retryCount + 1);
+        }
+        console.error("Add member error:", err);
+        return handleAuthError(err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, handleAuthError, normalizeMembers]
+  );
+
+  /**
+   * Remove a member from a board
+   * @param {string} boardId - Board UUID
+   * @param {string} username - Username
+   * @param {number} [retryCount=0] - Retry count
+   * @returns {Promise<object|null>} Updated board or null if error
+   */
+  const removeMemberFromBoard = useCallback(
+    async (boardId, username, retryCount = 0) => {
+      if (!token || !boardId?.trim() || !username?.trim()) {
+        setError(
+          !token
+            ? ERROR_MESSAGES.AUTH_REQUIRED
+            : !boardId
+            ? ERROR_MESSAGES.BOARD_ID_MISSING
+            : ERROR_MESSAGES.USERNAME_MISSING
+        );
+        return null;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const board = await removeMember(boardId, username, token);
+        if (!board) throw new Error("Failed to remove member");
+        const cacheKey = `${CACHE_VERSION}:${boardId}`;
+        ReactDOM.unstable_batchedUpdates(() => {
+          setMembers(normalizeMembers(board.members));
+          setBoardItem((prev) => (prev?.board_id === boardId ? board : prev));
+          setBoards((prev) => prev.map((b) => (b.board_id === boardId ? board : b)));
+          setLastUpdated(Date.now());
+        });
+        boardListCache.clear();
+        boardItemCache.set(cacheKey, { ...board, timestamp: Date.now() });
+        return board;
+      } catch (err) {
+        if (err.status === 429 && retryCount < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
+          return removeMemberFromBoard(boardId, username, retryCount + 1);
+        }
+        console.error("Remove member error:", err);
+        return handleAuthError(err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, handleAuthError, normalizeMembers]
+  );
+
+  /**
+   * Update a member's role in a board
+   * @param {string} boardId - Board UUID
+   * @param {string} username - Username
+   * @param {string} role - New role
+   * @param {number} [retryCount=0] - Retry count
+   * @returns {Promise<object|null>} Updated board or null if error
+   */
+  const updateMemberRole = useCallback(
+    async (boardId, username, role, retryCount = 0) => {
+      if (!token || !boardId?.trim() || !username?.trim() || !role?.trim()) {
+        setError(
+          !token
+            ? ERROR_MESSAGES.AUTH_REQUIRED
+            : !boardId
+            ? ERROR_MESSAGES.BOARD_ID_MISSING
+            : !username
+            ? ERROR_MESSAGES.USERNAME_MISSING
+            : ERROR_MESSAGES.ROLE_MISSING
+        );
+        return null;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const board = await updateMember(boardId, username, { role }, token);
+        if (!board) throw new Error("Failed to update member role");
+        const cacheKey = `${CACHE_VERSION}:${boardId}`;
+        ReactDOM.unstable_batchedUpdates(() => {
+          setMembers(normalizeMembers(board.members));
+          setBoardItem((prev) => (prev?.board_id === boardId ? board : prev));
+          setBoards((prev) => prev.map((b) => (b.board_id === boardId ? board : b)));
+          setLastUpdated(Date.now());
+        });
+        boardListCache.clear();
+        boardItemCache.set(cacheKey, { ...board, timestamp: Date.now() });
+        return board;
+      } catch (err) {
+        if (err.status === 429 && retryCount < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
+          return updateMemberRole(boardId, username, role, retryCount + 1);
+        }
+        console.error("Update member role error:", err);
+        return handleAuthError(err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, handleAuthError, normalizeMembers]
+  );
+
+  /**
+   * Fetch board members list
+   * @param {string} boardId - Board UUID
    * @param {AbortSignal} [signal] - Abort signal for request cancellation
+   * @returns {Promise<object|null>} Members data or null if error
+   */
+  const fetchBoardMembersList = useCallback(
+    async (boardId, signal) => {
+      if (!token || !boardId?.trim()) {
+        setError(token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
+        return null;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const data = await fetchBoardMembers(boardId, token, signal);
+        if (!data) throw new Error("No members data received");
+        ReactDOM.unstable_batchedUpdates(() => {
+          setMembers(normalizeMembers(data.members));
+          setLastUpdated(Date.now());
+        });
+        return data;
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          console.error("Fetch board members error:", err);
+          return handleAuthError(err);
+        }
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [token, handleAuthError, normalizeMembers]
+  );
+
+  /**
+   * Fetch list of boards
+   * @param {object} [filters={}] - Query filters
+   * @param {AbortSignal} [signal] - Abort signal
    * @returns {Promise<object|null>} Boards data or null if error
    */
   const fetchBoardsList = useCallback(
@@ -144,7 +339,7 @@ export const useBoards = (token, onLogout, navigate) => {
       }
 
       const cacheKey = `${CACHE_VERSION}:${JSON.stringify(filters)}`;
-      if (boardListCache.has(cacheKey)) {
+      if (boardListCache.has(cacheKey) && !isCacheExpired(boardListCache.get(cacheKey))) {
         const cachedData = boardListCache.get(cacheKey);
         ReactDOM.unstable_batchedUpdates(() => {
           setBoards(cachedData.boards || []);
@@ -187,25 +382,25 @@ export const useBoards = (token, onLogout, navigate) => {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, handleAuthError, isCacheExpired]
   );
 
   /**
    * Fetch boards by gate ID
    * @param {string} gateId - Gate UUID
    * @param {object} [filters={}] - Query filters
-   * @param {AbortSignal} [signal] - Abort signal for request cancellation
+   * @param {AbortSignal} [signal] - Abort signal
    * @returns {Promise<object|null>} Boards data or null if error
    */
   const fetchBoardsByGate = useCallback(
     async (gateId, filters = {}, signal) => {
-      if (!token || !gateId) {
+      if (!token || !gateId?.trim()) {
         setError(token ? ERROR_MESSAGES.GATE_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
 
       const cacheKey = `${CACHE_VERSION}:gate:${gateId}:${JSON.stringify(filters)}`;
-      if (boardListCache.has(cacheKey)) {
+      if (boardListCache.has(cacheKey) && !isCacheExpired(boardListCache.get(cacheKey))) {
         const cachedData = boardListCache.get(cacheKey);
         ReactDOM.unstable_batchedUpdates(() => {
           setBoards(cachedData.boards || []);
@@ -248,25 +443,25 @@ export const useBoards = (token, onLogout, navigate) => {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, handleAuthError, isCacheExpired]
   );
 
   /**
    * Fetch boards by class ID
    * @param {string} classId - Class UUID
    * @param {object} [filters={}] - Query filters
-   * @param {AbortSignal} [signal] - Abort signal for request cancellation
+   * @param {AbortSignal} [signal] - Abort signal
    * @returns {Promise<object|null>} Boards data or null if error
    */
   const fetchBoardsByClass = useCallback(
     async (classId, filters = {}, signal) => {
-      if (!token || !classId) {
+      if (!token || !classId?.trim()) {
         setError(token ? ERROR_MESSAGES.CLASS_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
 
       const cacheKey = `${CACHE_VERSION}:class:${classId}:${JSON.stringify(filters)}`;
-      if (boardListCache.has(cacheKey)) {
+      if (boardListCache.has(cacheKey) && !isCacheExpired(boardListCache.get(cacheKey))) {
         const cachedData = boardListCache.get(cacheKey);
         ReactDOM.unstable_batchedUpdates(() => {
           setBoards(cachedData.boards || []);
@@ -309,24 +504,24 @@ export const useBoards = (token, onLogout, navigate) => {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, handleAuthError, isCacheExpired]
   );
 
   /**
    * Fetch a single board by ID
    * @param {string} boardId - Board UUID
-   * @param {AbortSignal} [signal] - Abort signal for request cancellation
+   * @param {AbortSignal} [signal] - Abort signal
    * @returns {Promise<object|null>} Board data or null if error
    */
   const fetchBoard = useCallback(
     async (boardId, signal) => {
-      if (!token || !boardId) {
+      if (!token || !boardId?.trim()) {
         setError(token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
 
       const cacheKey = `${CACHE_VERSION}:${boardId}`;
-      if (boardItemCache.has(cacheKey)) {
+      if (boardItemCache.has(cacheKey) && !isCacheExpired(boardItemCache.get(cacheKey))) {
         const cachedData = boardItemCache.get(cacheKey);
         ReactDOM.unstable_batchedUpdates(() => {
           setBoardItem(cachedData);
@@ -340,8 +535,12 @@ export const useBoards = (token, onLogout, navigate) => {
       setError(null);
 
       try {
-        const data = await fetchBoardById(boardId, token, signal);
-        if (!data) throw new Error("No board data received");
+        const [boardData, membersData] = await Promise.all([
+          fetchBoardById(boardId, token, signal),
+          fetchBoardMembers(boardId, token, signal),
+        ]);
+        if (!boardData) throw new Error("No board data received");
+        const data = { ...boardData, members: membersData?.members || [] };
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setBoardItem(data);
@@ -365,7 +564,7 @@ export const useBoards = (token, onLogout, navigate) => {
         setLoading(false);
       }
     },
-    [token, handleAuthError, normalizeMembers]
+    [token, handleAuthError, normalizeMembers, isCacheExpired]
   );
 
   /**
@@ -436,7 +635,7 @@ export const useBoards = (token, onLogout, navigate) => {
    */
   const createNewBoardInGate = useCallback(
     async (gateId, boardData, retryCount = 0) => {
-      if (!token || !gateId || !boardData?.name?.trim()) {
+      if (!token || !gateId?.trim() || !boardData?.name?.trim()) {
         setError(
           !token
             ? ERROR_MESSAGES.AUTH_REQUIRED
@@ -484,7 +683,7 @@ export const useBoards = (token, onLogout, navigate) => {
    */
   const createNewBoardInClass = useCallback(
     async (classId, boardData, retryCount = 0) => {
-      if (!token || !classId || !boardData?.name?.trim()) {
+      if (!token || !classId?.trim() || !boardData?.name?.trim()) {
         setError(
           !token
             ? ERROR_MESSAGES.AUTH_REQUIRED
@@ -499,7 +698,8 @@ export const useBoards = (token, onLogout, navigate) => {
       setError(null);
 
       try {
-        const newBoard = await createBoardInClass(classId, boardData, token);
+        const { class_id, ...cleanedBoardData } = boardData;
+        const newBoard = await createBoardInClass(classId, cleanedBoardData, token);
         if (!newBoard) throw new Error("Failed to create board in class");
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
@@ -532,7 +732,7 @@ export const useBoards = (token, onLogout, navigate) => {
    */
   const createNewBoardInBoard = useCallback(
     async (parentBoardId, boardData, retryCount = 0) => {
-      if (!token || !parentBoardId || !boardData?.name?.trim()) {
+      if (!token || !parentBoardId?.trim() || !boardData?.name?.trim()) {
         setError(
           !token
             ? ERROR_MESSAGES.AUTH_REQUIRED
@@ -574,13 +774,13 @@ export const useBoards = (token, onLogout, navigate) => {
   /**
    * Update an existing board
    * @param {string} boardId - Board UUID
-   * @param {object} boardData - Data to update
+   * @param {object} boardData - Updated board data
    * @param {number} [retryCount=0] - Retry count
    * @returns {Promise<object|null>} Updated board or null if error
    */
   const updateExistingBoard = useCallback(
     async (boardId, boardData, retryCount = 0) => {
-      if (!token || !boardId || !boardData?.name?.trim()) {
+      if (!token || !boardId?.trim() || !boardData?.name?.trim()) {
         setError(
           !token
             ? ERROR_MESSAGES.AUTH_REQUIRED
@@ -632,13 +832,13 @@ export const useBoards = (token, onLogout, navigate) => {
   /**
    * Update board status
    * @param {string} boardId - Board UUID
-   * @param {object} statusData - Status data
+   * @param {object} statusData - New status data
    * @param {number} [retryCount=0] - Retry count
    * @returns {Promise<object|null>} Updated board or null if error
    */
   const updateBoardStatusById = useCallback(
     async (boardId, statusData, retryCount = 0) => {
-      if (!token || !boardId || !statusData) {
+      if (!token || !boardId?.trim() || !statusData) {
         setError(
           !token
             ? ERROR_MESSAGES.AUTH_REQUIRED
@@ -687,14 +887,14 @@ export const useBoards = (token, onLogout, navigate) => {
   );
 
   /**
-   * Delete a board
+   * Delete an existing board
    * @param {string} boardId - Board UUID
    * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<boolean|null>} True if successful, null if error
+   * @returns {Promise<boolean|null>} True if deleted, null if error
    */
   const deleteExistingBoard = useCallback(
     async (boardId, retryCount = 0) => {
-      if (!token || !boardId) {
+      if (!token || !boardId?.trim()) {
         setError(token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
@@ -736,221 +936,7 @@ export const useBoards = (token, onLogout, navigate) => {
   );
 
   /**
-   * Add a member to a board
-   * @param {string} boardId - Board UUID
-   * @param {object} memberData - Member data { username, role }
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated board or null if error
-   */
-  const addMemberToBoard = useCallback(
-    async (boardId, { username, role = "viewer" }, retryCount = 0) => {
-      if (!token || !boardId || !username?.trim()) {
-        setError(
-          !token
-            ? ERROR_MESSAGES.AUTH_REQUIRED
-            : !boardId
-            ? ERROR_MESSAGES.BOARD_ID_MISSING
-            : ERROR_MESSAGES.USERNAME_MISSING
-        );
-        return null;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const boardItem = await addMember(boardId, { username, role }, token);
-        if (!boardItem) throw new Error("Failed to add member");
-        const cacheKey = `${CACHE_VERSION}:${boardId}`;
-        ReactDOM.unstable_batchedUpdates(() => {
-          setMembers(normalizeMembers(boardItem.members));
-          setBoardItem((prev) => (prev?.board_id === boardId ? boardItem : prev));
-          setBoards((prev) => prev.map((b) => (b.board_id === boardId ? boardItem : b)));
-          setLastUpdated(Date.now());
-        });
-        boardListCache.forEach((value, key) => {
-          if (value.boards.some((b) => b.board_id === boardId)) {
-            boardListCache.set(key, {
-              ...value,
-              boards: value.boards.map((b) => (b.board_id === boardId ? boardItem : b)),
-              timestamp: Date.now(),
-            });
-          }
-        });
-        boardItemCache.set(cacheKey, { ...boardItem, timestamp: Date.now() });
-        return boardItem;
-      } catch (err) {
-        if (err.status === 429 && retryCount < 3) {
-          await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
-          return addMemberToBoard(boardId, { username, role }, retryCount + 1);
-        }
-        console.error("Add member error:", err);
-        return handleAuthError(err);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleAuthError, normalizeMembers]
-  );
-
-  /**
-   * Remove a member from a board
-   * @param {string} boardId - Board UUID
-   * @param {string} username - Username
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated board or null if error
-   */
-  const removeMemberFromBoard = useCallback(
-    async (boardId, username, retryCount = 0) => {
-      if (!token || !boardId || !username) {
-        setError(
-          !token
-            ? ERROR_MESSAGES.AUTH_REQUIRED
-            : !boardId
-            ? ERROR_MESSAGES.BOARD_ID_MISSING
-            : ERROR_MESSAGES.USERNAME_MISSING
-        );
-        return null;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const boardItem = await removeMember(boardId, username, token);
-        if (!boardItem) throw new Error("Failed to remove member");
-        const cacheKey = `${CACHE_VERSION}:${boardId}`;
-        ReactDOM.unstable_batchedUpdates(() => {
-          setMembers(normalizeMembers(boardItem.members));
-          setBoardItem((prev) => (prev?.board_id === boardId ? boardItem : prev));
-          setBoards((prev) => prev.map((b) => (b.board_id === boardId ? boardItem : b)));
-          setLastUpdated(Date.now());
-        });
-        boardListCache.forEach((value, key) => {
-          if (value.boards.some((b) => b.board_id === boardId)) {
-            boardListCache.set(key, {
-              ...value,
-              boards: value.boards.map((b) => (b.board_id === boardId ? boardItem : b)),
-              timestamp: Date.now(),
-            });
-          }
-        });
-        boardItemCache.set(cacheKey, { ...boardItem, timestamp: Date.now() });
-        return boardItem;
-      } catch (err) {
-        if (err.status === 429 && retryCount < 3) {
-          await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
-          return removeMemberFromBoard(boardId, username, retryCount + 1);
-        }
-        console.error("Remove member error:", err);
-        return handleAuthError(err);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleAuthError, normalizeMembers]
-  );
-
-  /**
-   * Update a member's role in a board
-   * @param {string} boardId - Board UUID
-   * @param {string} username - Username
-   * @param {string} role - New role
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated board or null if error
-   */
-  const updateMemberRole = useCallback(
-    async (boardId, username, role, retryCount = 0) => {
-      if (!token || !boardId || !username || !role) {
-        setError(
-          !token
-            ? ERROR_MESSAGES.AUTH_REQUIRED
-            : !boardId
-            ? ERROR_MESSAGES.BOARD_ID_MISSING
-            : !username
-            ? ERROR_MESSAGES.USERNAME_MISSING
-            : ERROR_MESSAGES.ROLE_MISSING
-        );
-        return null;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const boardItem = await updateMember(boardId, username, { role }, token);
-        if (!boardItem) throw new Error("Failed to update member role");
-        const cacheKey = `${CACHE_VERSION}:${boardId}`;
-        ReactDOM.unstable_batchedUpdates(() => {
-          setMembers(normalizeMembers(boardItem.members));
-          setBoardItem((prev) => (prev?.board_id === boardId ? boardItem : prev));
-          setBoards((prev) => prev.map((b) => (b.board_id === boardId ? boardItem : b)));
-          setLastUpdated(Date.now());
-        });
-        boardListCache.forEach((value, key) => {
-          if (value.boards.some((b) => b.board_id === boardId)) {
-            boardListCache.set(key, {
-              ...value,
-              boards: value.boards.map((b) => (b.board_id === boardId ? boardItem : b)),
-              timestamp: Date.now(),
-            });
-          }
-        });
-        boardItemCache.set(cacheKey, { ...boardItem, timestamp: Date.now() });
-        return boardItem;
-      } catch (err) {
-        if (err.status === 429 && retryCount < 3) {
-          await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
-          return updateMemberRole(boardId, username, role, retryCount + 1);
-        }
-        console.error("Update member role error:", err);
-        return handleAuthError(err);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleAuthError, normalizeMembers]
-  );
-
-  /**
-   * Fetch board members list
-   * @param {string} boardId - Board UUID
-   * @param {AbortSignal} [signal] - Abort signal for request cancellation
-   * @returns {Promise<object|null>} Members data or null if error
-   */
-  const fetchBoardMembersList = useCallback(
-    async (boardId, signal) => {
-      if (!token || !boardId) {
-        setError(token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
-        return null;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const data = await fetchBoardMembers(boardId, token, signal);
-        if (!data) throw new Error("No members data received");
-        ReactDOM.unstable_batchedUpdates(() => {
-          setMembers(normalizeMembers(data.members));
-          setLastUpdated(Date.now());
-        });
-        return data;
-      } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch board members error:", err);
-          return handleAuthError(err);
-        }
-        return null;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleAuthError, normalizeMembers]
-  );
-
-  /**
-   * Toggle favorite status for a board
+   * Toggle favorite status of a board
    * @param {string} boardId - Board UUID
    * @param {boolean} isFavorited - Current favorite status
    * @param {number} [retryCount=0] - Retry count
@@ -958,7 +944,7 @@ export const useBoards = (token, onLogout, navigate) => {
    */
   const toggleFavoriteBoard = useCallback(
     async (boardId, isFavorited, retryCount = 0) => {
-      if (!token || !boardId) {
+      if (!token || !boardId?.trim()) {
         setError(token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
@@ -994,103 +980,6 @@ export const useBoards = (token, onLogout, navigate) => {
           return toggleFavoriteBoard(boardId, isFavorited, retryCount + 1);
         }
         console.error("Toggle favorite error:", err);
-        return handleAuthError(err);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleAuthError]
-  );
-
-  /**
-   * Invite a user to a board
-   * @param {string} boardId - Board UUID
-   * @param {string} username - Username
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated board or null if error
-   */
-  const inviteUserToBoard = useCallback(
-    async (boardId, username, retryCount = 0) => {
-      if (!token || !boardId || !username?.trim()) {
-        setError(
-          !token
-            ? ERROR_MESSAGES.AUTH_REQUIRED
-            : !boardId
-            ? ERROR_MESSAGES.BOARD_ID_MISSING
-            : ERROR_MESSAGES.USERNAME_MISSING
-        );
-        return null;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const updatedBoard = await inviteUser(boardId, { username }, token);
-        if (!updatedBoard) throw new Error("Failed to invite user");
-        const cacheKey = `${CACHE_VERSION}:${boardId}`;
-        ReactDOM.unstable_batchedUpdates(() => {
-          setBoardItem((prev) => (prev?.board_id === boardId ? updatedBoard : prev));
-          setLastUpdated(Date.now());
-        });
-        boardItemCache.set(cacheKey, { ...updatedBoard, timestamp: Date.now() });
-        return updatedBoard;
-      } catch (err) {
-        if (err.status === 429 && retryCount < 3) {
-          await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
-          return inviteUserToBoard(boardId, username, retryCount + 1);
-        }
-        console.error("Invite user error:", err);
-        return handleAuthError(err);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleAuthError]
-  );
-
-  /**
-   * Accept an invitation to a board
-   * @param {string} boardId - Board UUID
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated board or null if error
-   */
-  const acceptBoardInvite = useCallback(
-    async (boardId, retryCount = 0) => {
-      if (!token || !boardId) {
-        setError(token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
-        return null;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const updatedBoard = await acceptInvite(boardId, token);
-        if (!updatedBoard) throw new Error("Failed to accept invite");
-        const cacheKey = `${CACHE_VERSION}:${boardId}`;
-        ReactDOM.unstable_batchedUpdates(() => {
-          setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
-          setBoardItem((prev) => (prev?.board_id === boardId ? updatedBoard : prev));
-          setLastUpdated(Date.now());
-        });
-        boardListCache.forEach((value, key) => {
-          if (value.boards.some((b) => b.board_id === boardId)) {
-            boardListCache.set(key, {
-              ...value,
-              boards: value.boards.map((b) => (b.board_id === boardId ? updatedBoard : b)),
-              timestamp: Date.now(),
-            });
-          }
-        });
-        boardItemCache.set(cacheKey, { ...updatedBoard, timestamp: Date.now() });
-        return updatedBoard;
-      } catch (err) {
-        if (err.status === 429 && retryCount < 3) {
-          await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
-          return acceptBoardInvite(boardId, retryCount + 1);
-        }
-        console.error("Accept invite error:", err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -1135,8 +1024,6 @@ export const useBoards = (token, onLogout, navigate) => {
       updateMemberRole,
       fetchBoardMembersList,
       toggleFavoriteBoard,
-      inviteUserToBoard,
-      acceptBoardInvite,
       resetState,
     }),
     [
@@ -1165,8 +1052,6 @@ export const useBoards = (token, onLogout, navigate) => {
       updateMemberRole,
       fetchBoardMembersList,
       toggleFavoriteBoard,
-      inviteUserToBoard,
-      acceptBoardInvite,
       resetState,
     ]
   );
