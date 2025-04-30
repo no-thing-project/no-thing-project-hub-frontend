@@ -103,7 +103,7 @@ const Board = ({
   const userRole = boardData?.creator_id === currentUser?.anonymous_id
     ? "owner"
     : boardData?.members?.find((m) => m.anonymous_id === currentUser?.anonymous_id)?.role || "viewer";
-  const canEdit = userRole === "owner" || userRole === "editor";
+  const canEdit = userRole === "owner" || userRole === "admin";
 
   useEffect(() => {
     if (pointsData?.total_points < prevPoints) {

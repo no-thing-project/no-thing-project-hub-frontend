@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import React, { memo, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -6,128 +6,163 @@ import {
   Tooltip,
   Chip,
   Divider,
+  useTheme,
 } from "@mui/material";
 import {
   Edit,
   Delete,
-  Favorite,
-  FavoriteBorder,
+  Star,
+  StarBorder,
   Public,
   Lock,
-  LockOpen,
-  Group,
-  Visibility,
-  Forum,
-  AutoAwesome,
   People,
+  Forum,
+  GroupAdd,
 } from "@mui/icons-material";
+import PropTypes from "prop-types";
 
 const BoardCard = ({
   board,
-  localLikes,
-  handleLike,
+  handleFavorite,
   setEditingBoard,
   setBoardToDelete,
   setDeleteDialogOpen,
+  handleAddMember,
+  handleRemoveMember,
   navigate,
+  currentUser,
 }) => {
-  const totalLength =
-    board.name.length + (board.description ? board.description.length : 0);
+  const theme = useTheme();
+  const totalLength = (board.name?.length || 0) + (board.description?.length || 0);
   let span = 1;
   if (totalLength > 100) span = 3;
   else if (totalLength > 40) span = 2;
 
-  const isLiked =
-    localLikes[board.board_id] !== undefined
-      ? localLikes[board.board_id]
-      : board.liked_by?.some(
-          (l) => l.anonymous_id === board.current_user?.anonymous_id
-        );
-
-  // Визначаємо роль користувача
-  const userRole = board.current_user?.role || "viewer"; // За замовчуванням "viewer", якщо ролі немає
-  const isOwner = board.creator_id === board.current_user?.anonymous_id;
-  const canEdit = isOwner || userRole === "editor";
+  const isFavorited = board.is_favorited || false;
+  const userRole = board.members?.find((m) => m.anonymous_id === currentUser?.anonymous_id)?.role || "none";
+  const isOwner = board.creator_id === currentUser?.anonymous_id;
+  const canEdit = isOwner || userRole === "admin";
   const canDelete = isOwner;
+  const isPublic = board.is_public || board.visibility === "public";
+  const owner = board.members?.find((m) => m.role === "owner");
+  const ownerUsername = owner?.username || "Unknown";
+  const typeLabel = board.type === "group" ? "Group" : "Personal";
 
-  const handleKeyPress = (e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      navigate(`/board/${board.board_id}`);
-    }
-  };
+  const handleKeyPress = useCallback(
+    (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        navigate(`/board/${board.board_id}`);
+      }
+    },
+    [navigate, board.board_id]
+  );
+
+  const handleNavigate = useCallback(() => {
+    navigate(`/board/${board.board_id}`);
+  }, [navigate, board.board_id]);
 
   const getVisibilityIcon = () => {
-    if (board.is_public && board.type === "group") {
-      return <Public fontSize="small" />;
-    } else if (board.is_public && board.type === "personal") {
-      return <LockOpen fontSize="small" color="primary" />;
-    } else if (!board.is_public && board.type === "group") {
-      return <Lock fontSize="small" color="primary" />;
-    } else {
-      return <Lock fontSize="small" color="error" />;
-    }
+    return isPublic ? (
+      <Public fontSize="small" color="success" />
+    ) : (
+      <Lock fontSize="small" color="error" />
+    );
   };
 
   return (
     <Box
-      key={board.board_id}
       sx={{
         gridColumn: { xs: "span 1", md: `span ${span}` },
         backgroundColor: "background.paper",
-        borderRadius: 2,
-        p: 2,
+        borderRadius: theme.shape.borderRadiusMedium,
+        p: { xs: 1.5, md: 2 },
         cursor: "pointer",
         display: "flex",
         flexDirection: "column",
-        minHeight: 250,
+        minHeight: { xs: 200, md: 250 },
         transition: "all 0.3s ease-in-out",
-        ":hover": {
+        "&:hover": {
           backgroundColor: "background.hover",
           transform: "scale(1.02)",
         },
       }}
-      onClick={() => navigate(`/board/${board.board_id}`)}
+      onClick={handleNavigate}
       onKeyPress={handleKeyPress}
       tabIndex={0}
       role="button"
-      aria-label={`View board ${board.name}`}
+      aria-label={`View board ${board.name || "Untitled Board"}`}
     >
       <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-          {board.slug}
+        <Typography
+          variant="subtitle2"
+          sx={{ fontWeight: 600, fontSize: { xs: "0.875rem", md: "1rem" } }}
+        >
+          {board.slug || board.name || "Untitled Board"}
         </Typography>
-        <Box sx={{ display: "flex", gap: 1 }}>
-          {board.ai_moderation?.is_enabled && (
-            <Tooltip title="AI Moderation Enabled">
-              <AutoAwesome fontSize="small" />
-            </Tooltip>
-          )}
+        <Box sx={{ display: "flex", gap: { xs: 0.5, md: 1 } }}>
           {canEdit && (
-            <Tooltip title="Edit">
+            <Tooltip title="Edit Board">
               <IconButton
                 onClick={(e) => {
                   e.stopPropagation();
-                  setEditingBoard({ ...board });
+                  setEditingBoard({
+                    board_id: board.board_id,
+                    name: board.name || "",
+                    description: board.description || "",
+                    is_public: isPublic,
+                    visibility: isPublic ? "public" : "private",
+                    type: board.type || "personal",
+                    tags: board.tags || [],
+                    gate_id: board.gate_id || "",
+                    class_id: board.class_id || "",
+                    settings: board.settings || {
+                      max_tweets: 100,
+                      max_members: 50,
+                      tweet_cost: 1,
+                      favorite_cost: 1,
+                      points_to_creator: 1,
+                      allow_invites: true,
+                      require_approval: false,
+                      ai_moderation_enabled: true,
+                      auto_archive_after: 30,
+                    },
+                  });
                 }}
                 size="small"
+                aria-label="Edit board"
               >
                 <Edit fontSize="small" />
               </IconButton>
             </Tooltip>
           )}
-          <Tooltip title={isLiked ? "Unlike" : "Like"}>
+          <Tooltip title={isFavorited ? "Remove from Favorites" : "Add to Favorites"}>
             <IconButton
               onClick={(e) => {
                 e.stopPropagation();
-                handleLike(board.board_id, isLiked);
+                handleFavorite(board.board_id, isFavorited);
               }}
               size="small"
+              aria-label={isFavorited ? "Remove from favorites" : "Add to favorites"}
             >
-              {isLiked ? <Favorite color="error" /> : <FavoriteBorder />}
+              {isFavorited ? <Star color="warning" /> : <StarBorder />}
             </IconButton>
           </Tooltip>
+          {canEdit && (
+            <Tooltip title="Add Member">
+              <IconButton
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAddMember(board.board_id);
+                }}
+                size="small"
+                aria-label="Add member to board"
+              >
+                <GroupAdd fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           {canDelete && (
-            <Tooltip title="Delete">
+            <Tooltip title="Delete Board">
               <IconButton
                 onClick={(e) => {
                   e.stopPropagation();
@@ -135,8 +170,9 @@ const BoardCard = ({
                   setDeleteDialogOpen(true);
                 }}
                 size="small"
+                aria-label="Delete board"
               >
-                <Delete />
+                <Delete fontSize="small" color="error" />
               </IconButton>
             </Tooltip>
           )}
@@ -144,87 +180,171 @@ const BoardCard = ({
       </Box>
 
       <Box sx={{ flexGrow: 1 }}>
-        <Typography variant="h6" sx={{ mb: 1 }}>
-          {board.name}
+        <Typography
+          variant="h6"
+          sx={{ mb: 1, fontSize: { xs: "1.25rem", md: "1.5rem" } }}
+        >
+          {board.name || "Untitled Board"}
         </Typography>
         {board.description && (
-          <Typography variant="body2" sx={{ mb: 1, color: "text.secondary" }}>
+          <Typography
+            variant="body2"
+            sx={{
+              mb: 1,
+              color: "text.secondary",
+              fontSize: { xs: "0.75rem", md: "0.875rem" },
+            }}
+          >
             {board.description}
           </Typography>
         )}
-
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 1 }}>
           <Chip
-            label={board.type === "group" ? "Group" : "Personal"}
-            icon={<Group />}
+            label={typeLabel}
+            icon={<People />}
             size="small"
+            variant="outlined"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
           />
-          {/* <Chip label={`Tweets: ${board.stats?.tweet_count ?? 0}`} size="small" /> */}
-          {/* <Chip label={`Likes: ${board.stats?.like_count ?? 0}`} size="small" /> */}
-          {/* <Chip label={`Views: ${board.stats?.view_count ?? 0}`} size="small" /> */}
-
+          <Chip
+            label={`Members: ${board.members?.length || 0}`}
+            icon={<People />}
+            size="small"
+            variant="outlined"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+          />
+          <Chip
+            label={`Tweets: ${board.stats?.tweet_count || 0}`}
+            icon={<Forum />}
+            size="small"
+            variant="outlined"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+          />
         </Box>
 
         <Divider sx={{ my: 1 }} />
 
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-          {board.gate?.name && (
-            <Chip label={`Gate: ${board.gate.name}`} size="small" />
+          <Chip
+            label={board.gateName}
+            size="small"
+            variant="outlined"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+          />
+          <Chip
+            label={`Owner: ${ownerUsername}`}
+            size="small"
+            variant="outlined"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+          />
+          {(board.stats?.favorite_count || 0) > 0 && (
+            <Chip
+              label={`Favorites: ${board.stats.favorite_count}`}
+              icon={<Star />}
+              size="small"
+              variant="outlined"
+              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+            />
           )}
-          {board.class?.name && (
-            <Chip label={`Class: ${board.class.name}`} size="small" />
-          )}
-          {board.settings?.tweet_cost && (
-            <Chip label={`Tweet Cost: ${board.settings.tweet_cost}`} size="small" />
-          )}
-          {board.settings?.like_cost && (
-            <Chip label={`Like Cost: ${board.settings.like_cost}`} size="small" />
-          )}
-          {board.settings?.points_to_creator && (
-            <Chip label={`Creator Reward: ${board.settings.points_to_creator}`} size="small" />
-          )}
-          {board.type === "group" && board.members?.length > 0 && (
-            <Chip label={`Members: ${board.members.length}`} size="small" icon={<People />} />
-          )}
-          <Chip label={`Points: ${board.stats?.points_earned ?? 0}`} size="small" />
           {board.tags?.length > 0 && (
-            <Chip label={`Tags: ${board.tags.join(", ")}`} size="small" />
+            <Chip
+              label={`Tags: ${board.tags.join(", ")}`}
+              size="small"
+              variant="outlined"
+              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+            />
           )}
-          {board.parent_board_id && <Chip label="Has Parent" size="small" />}
+          {board.parent_board_id && (
+            <Chip
+              label="Has Parent"
+              size="small"
+              variant="outlined"
+              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+            />
+          )}
           {board.child_board_ids?.length > 0 && (
-            <Chip label={`Children: ${board.child_board_ids.length}`} size="small" />
-          )}
-          {board.settings?.max_tweets && (
-            <Chip label={`Max Tweets: ${board.settings.max_tweets}`} size="small" />
-          )}
-          {board.settings?.max_members && (
-            <Chip label={`Max Members: ${board.settings.max_members}`} size="small" />
+            <Chip
+              label={`Children: ${board.child_board_ids.length}`}
+              size="small"
+              variant="outlined"
+              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+            />
           )}
         </Box>
       </Box>
 
-      <Box sx={{ mt: 2, display: "flex", justifyContent: "space-between" }}>
+      <Box
+        sx={{
+          mt: 2,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           {getVisibilityIcon()}
-          <Typography variant="caption">
-            {board.visibility.charAt(0).toUpperCase() + board.visibility.slice(1)}
+          <Typography
+            variant="caption"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+          >
+            {isPublic ? "Public" : "Private"}
           </Typography>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Forum fontSize="small" />
-          <Typography variant="caption">
-            {board.stats?.tweet_count ?? 0}
-          </Typography>
-        </Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Visibility fontSize="small" />
-          <Typography variant="caption">
-            {board.stats?.view_count || 0}
+          <Typography
+            variant="caption"
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+          >
+            {board.stats?.tweet_count || 0}
           </Typography>
         </Box>
       </Box>
     </Box>
   );
+};
+
+BoardCard.propTypes = {
+  board: PropTypes.shape({
+    board_id: PropTypes.string.isRequired,
+    name: PropTypes.string,
+    slug: PropTypes.string,
+    description: PropTypes.string,
+    is_favorited: PropTypes.bool,
+    creator_id: PropTypes.string,
+    members: PropTypes.arrayOf(
+      PropTypes.shape({
+        anonymous_id: PropTypes.string,
+        username: PropTypes.string,
+        role: PropTypes.string,
+      })
+    ),
+    stats: PropTypes.shape({
+      tweet_count: PropTypes.number,
+      favorite_count: PropTypes.number,
+    }),
+    type: PropTypes.string,
+    tags: PropTypes.arrayOf(PropTypes.string),
+    is_public: PropTypes.bool,
+    visibility: PropTypes.string,
+    settings: PropTypes.object,
+    gate_id: PropTypes.string,
+    gateName: PropTypes.string,
+    class_id: PropTypes.string,
+    className: PropTypes.string,
+    parent_board_id: PropTypes.string,
+    child_board_ids: PropTypes.arrayOf(PropTypes.string),
+  }).isRequired,
+  handleFavorite: PropTypes.func.isRequired,
+  setEditingBoard: PropTypes.func.isRequired,
+  setBoardToDelete: PropTypes.func.isRequired,
+  setDeleteDialogOpen: PropTypes.func.isRequired,
+  handleAddMember: PropTypes.func.isRequired,
+  handleRemoveMember: PropTypes.func.isRequired,
+  navigate: PropTypes.func.isRequired,
+  currentUser: PropTypes.shape({
+    anonymous_id: PropTypes.string,
+  }),
 };
 
 export default memo(BoardCard);

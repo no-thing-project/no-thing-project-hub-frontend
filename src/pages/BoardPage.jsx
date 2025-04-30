@@ -180,7 +180,7 @@ const BoardPage = () => {
           Options
         </Button>
         <Menu id="board-menu" anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
-          {userRole === "owner" || userRole === "editor" ? (
+          {userRole === "owner" || userRole === "admin" ? (
             <MenuItem onClick={handleEdit}>Edit Board</MenuItem>
           ) : (
             <MenuItem disabled>Edit Board</MenuItem>

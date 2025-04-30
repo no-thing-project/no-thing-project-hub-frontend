@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, memo } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   Box,
   Dialog,
@@ -6,27 +6,19 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Select,
-  MenuItem,
-  Button,
   FormControl,
   InputLabel,
+  Select,
+  MenuItem,
   FormHelperText,
-  CircularProgress,
-  Chip,
-  Collapse,
-  IconButton,
-  List,
-  ListItem,
-  ListItemText,
-  Tooltip,
-  Typography,
+  Button,
+  Switch,
+  FormControlLabel,
+  useTheme,
 } from "@mui/material";
 import { motion } from "framer-motion";
-import { ExpandMore, ExpandLess, PersonAdd, Remove as RemoveIcon } from "@mui/icons-material";
 import PropTypes from "prop-types";
-import { useGates } from "../../hooks/useGates";
-import { useClasses } from "../../hooks/useClasses";
+import { validateForm, validateField } from "../../utils/validations";
 import {
   inputStyles,
   selectStyles,
@@ -46,136 +38,113 @@ const BoardFormDialog = ({
   setBoard,
   onSave,
   onCancel,
-  errorMessage: externalError,
-  token,
-  onLogout,
-  navigate,
-  userRole,
+  disabled,
+  gates,
+  classes,
 }) => {
+  const theme = useTheme();
   const [errors, setErrors] = useState({});
-  const [isSaving, setIsSaving] = useState(false);
-  const [localTags, setLocalTags] = useState(board.tags?.join(", ") || "");
-  const [showMoreOptions, setShowMoreOptions] = useState(false);
-  const [showMembers, setShowMembers] = useState(false);
-  const [newMemberId, setNewMemberId] = useState("");
-  const [newMemberRole, setNewMemberRole] = useState("viewer");
 
-  const isEditable = userRole === "owner" || userRole === "editor";
-  const { gates, fetchGatesList, loading: gatesLoading } = useGates(token, onLogout, navigate);
-  const { classes, fetchClassesList, loading: classesLoading } = useClasses(token, onLogout, navigate);
-
-  useEffect(() => {
-    if (open && token && isEditable) {
-      fetchGatesList();
-      fetchClassesList();
-    }
-    if (open) {
-      setLocalTags(board.tags?.join(", ") || "");
-    }
-  }, [open, token, isEditable, fetchGatesList, fetchClassesList, board.tags]);
-
-  const validateField = useCallback((name, value, updatedBoard) => {
-    const numValue = Number(value);
-    const checks = {
-      name: () => (!value.trim() ? "Board name is required" : ""),
-      visibility: () => (!value ? "Visibility is required" : ""),
-      type: () =>
-        value === "group" && updatedBoard.visibility === "public" && !updatedBoard.gate_id && !updatedBoard.class_id
-          ? "Public group board requires a gate or class"
-          : "",
-      "settings.tweet_cost": () => (numValue < 0 || numValue > 100 ? "Must be 0-100" : ""),
-      "settings.like_cost": () => (numValue < 0 || numValue > 100 ? "Must be 0-100" : ""),
-      "settings.points_to_creator": () => (numValue < 0 || numValue > 100 ? "Points to creator must be 0-100" : ""),
-      "settings.max_members": () => (numValue < 1 ? "Must be at least 1" : ""),
-      "settings.tweets_limit_trigger": () => (numValue < 11 ? "Must be at least 11" : ""),
-    };
-    return checks[name] ? checks[name]() : "";
-  }, []);
+  const validationRules = useMemo(
+    () => ({
+      name: {
+        value: board.name,
+        rules: { required: true, minLength: 3, maxLength: 100 },
+      },
+      description: {
+        value: board.description,
+        rules: { maxLength: 1000 },
+      },
+      visibility: {
+        value: board.visibility,
+        rules: { required: true },
+      },
+      type: {
+        value: board.type,
+        rules: { required: true },
+      },
+      "settings.max_tweets": {
+        value: board.settings.max_tweets,
+        rules: { required: true, minValue: 1 },
+      },
+      "settings.tweet_cost": {
+        value: board.settings.tweet_cost,
+        rules: { required: true, minValue: 0 },
+      },
+      "settings.max_members": {
+        value: board.settings.max_members,
+        rules: { required: true, minValue: 1 },
+      },
+      gate_id: {
+        value: board.gate_id,
+        rules: {
+          required: board.visibility === "public" && !board.class_id,
+        },
+      },
+      class_id: {
+        value: board.class_id,
+        rules: {
+          required: board.visibility === "public" && !board.gate_id,
+        },
+      },
+    }),
+    [board]
+  );
 
   const handleChange = useCallback(
-    (field) => (e) => {
-      if (!isEditable) return;
-      const value =
-        field.startsWith("settings.") || field === "tweets_limit_trigger"
-          ? Number(e.target.value) || 0
-          : field === "tags"
-          ? e.target.value
-          : e.target.value;
+    (e) => {
+      const { name, value, checked } = e.target;
+      let newValue = name === "settings.ai_moderation_enabled" ? checked : value;
 
-      const newBoard =
-        field.startsWith("settings.")
-          ? { ...board, settings: { ...board.settings, [field.split(".")[1]]: value } }
-          : { ...board, [field]: value };
-
-      if (field === "tags") {
-        setLocalTags(value);
-        newBoard.tags = value.split(",").map((t) => t.trim()).filter(Boolean);
+      if (name === "gate_id" || name === "class_id") {
+        newValue = value || null; // Convert empty string to null
+      } else if (name.startsWith("settings.")) {
+        const settingKey = name.split(".")[1];
+        newValue = settingKey === "ai_moderation_enabled" ? newValue : Number(newValue) || 0;
+        setBoard((prev) => ({
+          ...prev,
+          settings: { ...prev.settings, [settingKey]: newValue },
+        }));
+      } else {
+        setBoard((prev) => ({
+          ...prev,
+          [name]: newValue,
+        }));
       }
 
-      if (field === "visibility") {
-        newBoard.is_public = value === "public";
+      if (name !== "settings.ai_moderation_enabled" && !name.startsWith("settings.")) {
+        setBoard((prev) => ({
+          ...prev,
+          [name]: newValue,
+        }));
       }
 
-      setBoard(newBoard);
+      const fieldRules = validationRules[name]?.rules || {};
+      const fieldErrors = validateField(name, newValue, fieldRules);
       setErrors((prev) => ({
         ...prev,
-        [field]: validateField(field, value, newBoard),
-        type: validateField("type", newBoard.type, newBoard),
-        visibility: validateField("visibility", newBoard.visibility, newBoard),
+        [name]: fieldErrors[0] || null,
+        gate_id: validateField("gate_id", name === "gate_id" ? newValue : board.gate_id, validationRules.gate_id.rules, {
+          visibility: name === "visibility" ? value : board.visibility,
+          class_id: name === "class_id" ? value : board.class_id,
+        }),
+        class_id: validateField("class_id", name === "class_id" ? newValue : board.class_id, validationRules.class_id.rules, {
+          visibility: name === "visibility" ? value : board.visibility,
+          gate_id: name === "gate_id" ? value : board.gate_id,
+        }),
       }));
     },
-    [board, setBoard, isEditable, validateField]
+    [setBoard, board, validationRules]
   );
 
-  const handleAddMember = useCallback(() => {
-    if (!isEditable || !newMemberId.trim()) return;
-    const newMember = {
-      anonymous_id: newMemberId.trim(),
-      role: newMemberRole,
-    };
-    setBoard((prev) => ({
-      ...prev,
-      members: [...(prev.members || []), newMember],
-    }));
-    setNewMemberId("");
-    setNewMemberRole("viewer");
-  }, [isEditable, newMemberId, newMemberRole, setBoard]);
-
-  const handleRemoveMember = useCallback(
-    (anonymous_id) => {
-      if (!isEditable) return;
-      setBoard((prev) => ({
-        ...prev,
-        members: prev.members.filter((m) => m.anonymous_id !== anonymous_id),
-      }));
-    },
-    [isEditable, setBoard]
-  );
-
-  const isFormValid = useCallback(() => {
-    if (!isEditable) return false;
-    const requiredFields = ["name", "visibility", "type"];
-    const hasRequired = requiredFields.every((field) => board[field]?.trim());
-    const noErrors = Object.values(errors).every((err) => !err);
-    return hasRequired && noErrors;
-  }, [board, errors, isEditable]);
-
-  const handleSave = useCallback(async () => {
-    if (!isEditable) return;
-    setIsSaving(true);
-    try {
-      await onSave();
-      setErrors({});
-      onCancel();
-    } catch (err) {
-      setErrors((prev) => ({ ...prev, form: err.message || "Failed to save" }));
-    } finally {
-      setIsSaving(false);
+  const handleSave = useCallback(() => {
+    const formErrors = validateForm(validationRules);
+    if (Object.keys(formErrors).length > 0) {
+      setErrors(formErrors);
+      return;
     }
-  }, [onSave, onCancel, isEditable]);
-
-  const toggleMoreOptions = () => setShowMoreOptions((prev) => !prev);
-  const toggleMembers = () => setShowMembers((prev) => !prev);
+    onSave();
+  }, [onSave, validationRules]);
 
   return (
     <Dialog
@@ -183,6 +152,12 @@ const BoardFormDialog = ({
       onClose={onCancel}
       maxWidth="sm"
       fullWidth
+      sx={{
+        "& .MuiDialog-paper": {
+          borderRadius: theme.shape.borderRadiusMedium,
+          p: { xs: 1, md: 2 },
+        },
+      }}
       aria-labelledby="board-form-dialog-title"
     >
       <motion.div
@@ -191,379 +166,224 @@ const BoardFormDialog = ({
         variants={dialogVariants}
         transition={{ duration: 0.3 }}
       >
-        <Box sx={{ p: 2 }}>
-          <DialogTitle id="board-form-dialog-title">{title}</DialogTitle>
-          <DialogContent>
-            {isEditable ? (
-              <TextField
-                label="Board Name"
-                fullWidth
-                variant="outlined"
-                value={board.name || ""}
-                onChange={handleChange("name")}
-                sx={inputStyles}
-                error={!!errors.name || !!externalError}
-                helperText={errors.name || externalError}
-                required
-                inputProps={{ maxLength: 100 }}
-              />
-            ) : (
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2">Board Name</Typography>
-                <Typography>{board.name || "N/A"}</Typography>
-              </Box>
-            )}
-            {isEditable ? (
-              <TextField
-                label="Description"
-                fullWidth
-                variant="outlined"
-                value={board.description || ""}
-                onChange={handleChange("description")}
-                sx={{ ...inputStyles, mt: 2 }}
-                multiline
-                rows={2}
-                inputProps={{ maxLength: 500 }}
-              />
-            ) : (
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2">Description</Typography>
-                <Typography>{board.description || "No description"}</Typography>
-              </Box>
-            )}
-            {isEditable ? (
-              <FormControl fullWidth margin="normal" error={!!errors.visibility}>
-                <InputLabel>Visibility</InputLabel>
-                <Select
-                  value={board.visibility || "private"}
-                  onChange={handleChange("visibility")}
-                  sx={selectStyles}
-                >
-                  <MenuItem value="private">Private</MenuItem>
-                  <MenuItem value="public">Public</MenuItem>
-                </Select>
-                <FormHelperText>{errors.visibility}</FormHelperText>
-              </FormControl>
-            ) : (
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2">Visibility</Typography>
-                <Typography>{board.visibility || "Private"}</Typography>
-              </Box>
-            )}
-            {isEditable ? (
-              <FormControl fullWidth margin="normal" error={!!errors.type}>
-                <InputLabel>Type</InputLabel>
-                <Select
-                  value={board.type || "personal"}
-                  onChange={handleChange("type")}
-                  sx={selectStyles}
-                >
-                  <MenuItem value="personal">Personal</MenuItem>
-                  <MenuItem value="group">Group</MenuItem>
-                </Select>
-                <FormHelperText>{errors.type}</FormHelperText>
-              </FormControl>
-            ) : (
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2">Type</Typography>
-                <Typography>{board.type || "Personal"}</Typography>
-              </Box>
-            )}
-
-            {(board.type === "group" || board.visibility === "public") && (
+        <DialogTitle
+          id="board-form-dialog-title"
+          sx={{ fontSize: { xs: "1.25rem", md: "1.5rem" } }}
+        >
+          {title}
+        </DialogTitle>
+        <DialogContent>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: { xs: 1.5, md: 2 },
+              mt: 2,
+            }}
+          >
+            <TextField
+              label="Board Name"
+              name="name"
+              value={board.name || ""}
+              onChange={handleChange}
+              fullWidth
+              required
+              error={!!errors.name}
+              helperText={errors.name}
+              sx={{ ...inputStyles, mt: 0 }}
+              disabled={disabled}
+              inputProps={{ maxLength: 100 }}
+              aria-label="Board name"
+            />
+            <TextField
+              label="Description"
+              name="description"
+              value={board.description || ""}
+              onChange={handleChange}
+              fullWidth
+              multiline
+              rows={4}
+              error={!!errors.description}
+              helperText={errors.description}
+              sx={{ ...inputStyles, mt: 0 }}
+              disabled={disabled}
+              inputProps={{ maxLength: 1000 }}
+              aria-label="Board description"
+            />
+            <FormControl
+              fullWidth
+              error={!!errors.visibility}
+              disabled={disabled}
+              sx={{ ...selectStyles, mt: 0 }}
+            >
+              <InputLabel>Visibility</InputLabel>
+              <Select
+                name="visibility"
+                value={board.visibility || "private"}
+                onChange={handleChange}
+                label="Visibility"
+                aria-label="Board visibility"
+              >
+                <MenuItem value="public">Public</MenuItem>
+                <MenuItem value="private">Private</MenuItem>
+              </Select>
+              {errors.visibility && <FormHelperText>{errors.visibility}</FormHelperText>}
+            </FormControl>
+            <FormControl
+              fullWidth
+              error={!!errors.type}
+              disabled={disabled}
+              sx={{ ...selectStyles, mt: 0 }}
+            >
+              <InputLabel>Type</InputLabel>
+              <Select
+                name="type"
+                value={board.type || "personal"}
+                onChange={handleChange}
+                label="Type"
+                aria-label="Board type"
+              >
+                <MenuItem value="personal">Personal</MenuItem>
+                <MenuItem value="group">Group</MenuItem>
+              </Select>
+              {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
+            </FormControl>
+            {board.visibility === "public" && (
               <>
-                {isEditable ? (
-                  <Tooltip title="Select a Gate if this board is tied to a specific gate">
-                    <FormControl fullWidth margin="normal">
-                      <InputLabel>Gate</InputLabel>
-                      <Select
-                        value={board.gate_id || ""}
-                        onChange={handleChange("gate_id")}
-                        sx={selectStyles}
-                        disabled={gatesLoading}
-                      >
-                        <MenuItem value="">None</MenuItem>
-                        {gates.map((gate) => (
-                          <MenuItem key={gate.gate_id} value={gate.gate_id}>
-                            {gate.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                      {gatesLoading && <FormHelperText>Loading gates...</FormHelperText>}
-                    </FormControl>
-                  </Tooltip>
-                ) : (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2">Gate</Typography>
-                    <Typography>{board.gate_name || "None"}</Typography>
-                  </Box>
-                )}
-                {isEditable ? (
-                  <Tooltip title="Select a Class if this board is tied to a specific class">
-                    <FormControl fullWidth margin="normal">
-                      <InputLabel>Class</InputLabel>
-                      <Select
-                        value={board.class_id || ""}
-                        onChange={handleChange("class_id")}
-                        sx={selectStyles}
-                        disabled={classesLoading}
-                      >
-                        <MenuItem value="">None</MenuItem>
-                        {classes.map((cls) => (
-                          <MenuItem key={cls.class_id} value={cls.class_id}>
-                            {cls.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                      {classesLoading && <FormHelperText>Loading classes...</FormHelperText>}
-                    </FormControl>
-                  </Tooltip>
-                  ) : (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2">Class</Typography>
-                    <Typography>{board.class_name || "None"}</Typography>
-                  </Box>
-                )}
+                <FormControl
+                  fullWidth
+                  error={!!errors.gate_id}
+                  disabled={disabled}
+                  sx={{ ...selectStyles, mt: 0 }}
+                >
+                  <InputLabel>Gate</InputLabel>
+                  <Select
+                    name="gate_id"
+                    value={board.gate_id || ""}
+                    onChange={handleChange}
+                    label="Gate"
+                    aria-label="Board gate"
+                  >
+                    <MenuItem value="">None</MenuItem>
+                    {gates.map((gate) => (
+                      <MenuItem key={gate.gate_id} value={gate.gate_id}>
+                        {gate.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {errors.gate_id && <FormHelperText>{errors.gate_id}</FormHelperText>}
+                </FormControl>
+                <FormControl
+                  fullWidth
+                  error={!!errors.class_id}
+                  disabled={disabled}
+                  sx={{ ...selectStyles, mt: 0 }}
+                >
+                  <InputLabel>Class</InputLabel>
+                  <Select
+                    name="class_id"
+                    value={board.class_id || ""}
+                    onChange={handleChange}
+                    label="Class"
+                    aria-label="Board class"
+                  >
+                    <MenuItem value="">None</MenuItem>
+                    {classes.map((cls) => (
+                      <MenuItem key={cls.class_id} value={cls.class_id}>
+                        {cls.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {errors.class_id && <FormHelperText>{errors.class_id}</FormHelperText>}
+                </FormControl>
               </>
             )}
-
-            {board.type === "group" && (
-              <Box sx={{ mt: 2 }}>
-                <Button
-                  onClick={toggleMembers}
-                  endIcon={showMembers ? <ExpandLess /> : <ExpandMore />}
-                  disabled={!isEditable}
-                >
-                  Manage Members
-                </Button>
-                <Collapse in={showMembers}>
-                  <List>
-                    {board.members?.length > 0 ? (
-                      board.members.map((member) => (
-                        <ListItem key={member.anonymous_id}>
-                          <ListItemText primary={member.anonymous_id} secondary={member.role} />
-                          {isEditable && (
-                            <IconButton
-                              onClick={() => handleRemoveMember(member.anonymous_id)}
-                              aria-label={`Remove member ${member.anonymous_id}`}
-                            >
-                              <RemoveIcon />
-                            </IconButton>
-                          )}
-                        </ListItem>
-                      ))
-                    ) : (
-                      <ListItem>
-                        <ListItemText primary="No members" />
-                      </ListItem>
-                    )}
-                    {isEditable && (
-                      <ListItem>
-                        <IconButton disabled aria-label="Add member">
-                          <PersonAdd />
-                        </IconButton>
-                        <TextField
-                          label="Add Member (Anonymous ID)"
-                          value={newMemberId}
-                          onChange={(e) => setNewMemberId(e.target.value)}
-                          sx={{ ...inputStyles, mr: 2 }}
-                        />
-                        <FormControl sx={{ minWidth: 120 }}>
-                          <InputLabel>Role</InputLabel>
-                          <Select
-                            value={newMemberRole}
-                            onChange={(e) => setNewMemberRole(e.target.value)}
-                            sx={selectStyles}
-                          >
-                            <MenuItem value="viewer">Viewer</MenuItem>
-                            <MenuItem value="editor">Editor</MenuItem>
-                          </Select>
-                        </FormControl>
-                        <Button onClick={handleAddMember} disabled={!newMemberId.trim()}>
-                          Add
-                        </Button>
-                      </ListItem>
-                    )}
-                  </List>
-                </Collapse>
-              </Box>
-            )}
-
-            <Box sx={{ mt: 2 }}>
-              <Button
-                onClick={toggleMoreOptions}
-                endIcon={showMoreOptions ? <ExpandLess /> : <ExpandMore />}
-                disabled={!isEditable}
-              >
-                More Options
-              </Button>
-              <Collapse in={showMoreOptions}>
-                <Box sx={{ mt: 2 }}>
-                  {isEditable ? (
-                    <>
-                      <TextField
-                        label="Tags (comma-separated)"
-                        fullWidth
-                        variant="outlined"
-                        value={localTags}
-                        onChange={handleChange("tags")}
-                        sx={inputStyles}
-                        helperText="Separate tags with commas"
-                      />
-                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
-                        {board.tags?.map((tag) => (
-                          <Chip
-                            key={tag}
-                            label={tag}
-                            onDelete={() => {
-                              const newTags = board.tags.filter((t) => t !== tag);
-                              setBoard({ ...board, tags: newTags });
-                              setLocalTags(newTags.join(", "));
-                            }}
-                          />
-                        ))}
-                      </Box>
-                    </>
-                  ) : (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="subtitle2">Tags</Typography>
-                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                        {board.tags?.length > 0 ? (
-                          board.tags.map((tag) => <Chip key={tag} label={tag} size="small" />)
-                        ) : (
-                          <Typography>No tags</Typography>
-                        )}
-                      </Box>
-                    </Box>
-                  )}
-                  {isEditable ? (
-                    <TextField
-                      label="Tweet Cost"
-                      type="number"
-                      fullWidth
-                      value={board.settings?.tweet_cost ?? 1}
-                      onChange={handleChange("settings.tweet_cost")}
-                      sx={{ ...inputStyles, mt: 2 }}
-                      error={!!errors["settings.tweet_cost"]}
-                      helperText={errors["settings.tweet_cost"] || "Cost in points (0-100)"}
-                      inputProps={{ min: 0, max: 100 }}
-                    />
-                  ) : (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="subtitle2">Tweet Cost</Typography>
-                      <Typography>{board.settings?.tweet_cost ?? 1}</Typography>
-                    </Box>
-                  )}
-                  {isEditable ? (
-                    <TextField
-                      label="Like Cost"
-                      type="number"
-                      fullWidth
-                      value={board.settings?.like_cost ?? 1}
-                      onChange={handleChange("settings.like_cost")}
-                      sx={{ ...inputStyles, mt: 2 }}
-                      error={!!errors["settings.like_cost"]}
-                      helperText={errors["settings.like_cost"] || "Cost in points (0-100)"}
-                      inputProps={{ min: 0, max: 100 }}
-                    />
-                  ) : (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="subtitle2">Like Cost</Typography>
-                      <Typography>{board.settings?.like_cost ?? 1}</Typography>
-                    </Box>
-                  )}
-                  {isEditable ? (
-                    <TextField
-                      label="Points to Creator"
-                      type="number"
-                      fullWidth
-                      value={board.settings?.points_to_creator ?? 1}
-                      onChange={handleChange("settings.points_to_creator")}
-                      sx={{ ...inputStyles, mt: 2 }}
-                      error={!!errors["settings.points_to_creator"]}
-                      helperText={errors["settings.points_to_creator"] || "Points per action (0-100)"}
-                      inputProps={{ min: 0, max: 100 }}
-                    />
-                  ) : (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="subtitle2">Points to Creator</Typography>
-                      <Typography>{board.settings?.points_to_creator ?? 1}</Typography>
-                    </Box>
-                  )}
-                  {isEditable ? (
-                    <TextField
-                      label="Max Members"
-                      type="number"
-                      fullWidth
-                      value={board.settings?.max_members ?? 11}
-                      onChange={handleChange("settings.max_members")}
-                      sx={{ ...inputStyles, mt: 2 }}
-                      error={!!errors["settings.max_members"]}
-                      helperText={errors["settings.max_members"] || "Max number of members"}
-                      inputProps={{ min: 1 }}
-                    />
-                  ) : (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="subtitle2">Max Members</Typography>
-                      <Typography>{board.settings?.max_members ?? 11}</Typography>
-                    </Box>
-                  )}
-                  {isEditable ? (
-                    <TextField
-                      label="Tweet Limit Trigger"
-                      type="number"
-                      fullWidth
-                      value={board.settings?.tweets_limit_trigger ?? 111}
-                      onChange={handleChange("settings.tweets_limit_trigger")}
-                      sx={{ ...inputStyles, mt: 2 }}
-                      error={!!errors["settings.tweets_limit_trigger"]}
-                      helperText={errors["settings.tweets_limit_trigger"] || "Tweets before limit"}
-                      inputProps={{ min: 11 }}
-                    />
-                  ) : (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="subtitle2">Tweet Limit Trigger</Typography>
-                      <Typography>{board.settings?.tweets_limit_trigger ?? 111}</Typography>
-                    </Box>
-                  )}
-                </Box>
-              </Collapse>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            {isEditable ? (
-              <>
-                <Button
-                  variant="contained"
-                  onClick={handleSave}
-                  sx={actionButtonStyles}
-                  disabled={!isFormValid() || isSaving || gatesLoading || classesLoading}
-                  aria-label="Save board"
-                >
-                  {isSaving ? <CircularProgress size={24} /> : "Save"}
-                </Button>
-                <Button
-                  variant="contained"
-                  onClick={onCancel}
-                  sx={cancelButtonStyle}
-                  disabled={isSaving}
-                  aria-label="Cancel"
-                >
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="contained"
-                onClick={onCancel}
-                sx={cancelButtonStyle}
-                aria-label="Close"
-              >
-                Close
-              </Button>
-            )}
-          </DialogActions>
-        </Box>
+            <TextField
+              label="Max Tweets"
+              name="settings.max_tweets"
+              type="number"
+              value={board.settings.max_tweets || 100}
+              onChange={handleChange}
+              fullWidth
+              required
+              error={!!errors["settings.max_tweets"]}
+              helperText={errors["settings.max_tweets"] || "Maximum number of tweets"}
+              sx={{ ...inputStyles, mt: 0 }}
+              disabled={disabled}
+              inputProps={{ min: 1 }}
+              aria-label="Maximum tweets"
+            />
+            <TextField
+              label="Tweet Creation Cost"
+              name="settings.tweet_cost"
+              type="number"
+              value={board.settings.tweet_cost || 1}
+              onChange={handleChange}
+              fullWidth
+              required
+              error={!!errors["settings.tweet_cost"]}
+              helperText={errors["settings.tweet_cost"] || "Cost in points (0 or more)"}
+              sx={{ ...inputStyles, mt: 0 }}
+              disabled={disabled}
+              inputProps={{ min: 0 }}
+              aria-label="Tweet creation cost"
+            />
+            <TextField
+              label="Max Members"
+              name="settings.max_members"
+              type="number"
+              value={board.settings.max_members || 50}
+              onChange={handleChange}
+              fullWidth
+              required
+              error={!!errors["settings.max_members"]}
+              helperText={errors["settings.max_members"] || "Maximum number of members"}
+              sx={{ ...inputStyles, mt: 0 }}
+              disabled={disabled}
+              inputProps={{ min: 1 }}
+              aria-label="Maximum members"
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  name="settings.ai_moderation_enabled"
+                  checked={board.settings.ai_moderation_enabled || false}
+                  onChange={handleChange}
+                  disabled={disabled}
+                  aria-label="Enable AI moderation"
+                />
+              }
+              label="Enable AI Moderation"
+              sx={{ mt: 1 }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={onCancel}
+            sx={{
+              ...cancelButtonStyle,
+              minWidth: { xs: "100%", sm: 150 },
+              fontSize: { xs: "0.75rem", sm: "0.875rem" },
+            }}
+            disabled={disabled}
+            aria-label="Cancel"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            sx={{
+              ...actionButtonStyles,
+              minWidth: { xs: "100%", sm: 150 },
+              fontSize: { xs: "0.75rem", sm: "0.875rem" },
+            }}
+            disabled={disabled}
+            aria-label="Save board"
+          >
+            Save
+          </Button>
+        </DialogActions>
       </motion.div>
     </Dialog>
   );
@@ -572,15 +392,36 @@ const BoardFormDialog = ({
 BoardFormDialog.propTypes = {
   open: PropTypes.bool.isRequired,
   title: PropTypes.string.isRequired,
-  board: PropTypes.object.isRequired,
+  board: PropTypes.shape({
+    name: PropTypes.string,
+    description: PropTypes.string,
+    visibility: PropTypes.string,
+    type: PropTypes.string,
+    gate_id: PropTypes.string,
+    class_id: PropTypes.string,
+    settings: PropTypes.shape({
+      max_tweets: PropTypes.number,
+      tweet_cost: PropTypes.number,
+      max_members: PropTypes.number,
+      ai_moderation_enabled: PropTypes.bool,
+    }),
+  }).isRequired,
   setBoard: PropTypes.func.isRequired,
   onSave: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,
-  errorMessage: PropTypes.string,
-  token: PropTypes.string.isRequired,
-  onLogout: PropTypes.func.isRequired,
-  navigate: PropTypes.func.isRequired,
-  userRole: PropTypes.string.isRequired,
+  disabled: PropTypes.bool,
+  gates: PropTypes.arrayOf(
+    PropTypes.shape({
+      gate_id: PropTypes.string,
+      name: PropTypes.string,
+    })
+  ).isRequired,
+  classes: PropTypes.arrayOf(
+    PropTypes.shape({
+      class_id: PropTypes.string,
+      name: PropTypes.string,
+    })
+  ).isRequired,
 };
 
-export default memo(BoardFormDialog);
+export default React.memo(BoardFormDialog);

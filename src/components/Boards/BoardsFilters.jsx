@@ -1,14 +1,17 @@
 import React, { useState, useCallback } from "react";
-import { Box, Button, TextField, debounce } from "@mui/material";
+import { Box, Button, TextField, useTheme } from "@mui/material";
 import { motion } from "framer-motion";
 import { inputStylesWhite } from "../../styles/BaseStyles";
+import { debounce } from "lodash";
+import PropTypes from "prop-types";
 
 const filterVariants = {
   hidden: { opacity: 0, y: -10 },
   visible: { opacity: 1, y: 0 },
 };
 
-const BoardsFilters = ({ quickFilter, setQuickFilter, searchQuery, setSearchQuery, additionalFilters = [] }) => {
+const BoardsFilters = ({ quickFilter, setQuickFilter, searchQuery, setSearchQuery, onReset }) => {
+  const theme = useTheme();
   const [localSearch, setLocalSearch] = useState(searchQuery);
 
   const debouncedSearch = useCallback(
@@ -16,17 +19,34 @@ const BoardsFilters = ({ quickFilter, setQuickFilter, searchQuery, setSearchQuer
     [setSearchQuery]
   );
 
-  const handleSearchChange = (e) => {
-    const value = e.target.value;
-    setLocalSearch(value);
-    debouncedSearch(value);
-  };
+  const handleSearchChange = useCallback(
+    (e) => {
+      const value = e.target.value;
+      setLocalSearch(value);
+      debouncedSearch(value);
+    },
+    [debouncedSearch]
+  );
 
-  const handleKeyPress = (e) => {
-    if (e.key === "Enter") {
-      setSearchQuery(localSearch);
-    }
-  };
+  const handleKeyPress = useCallback(
+    (e) => {
+      if (e.key === "Enter") {
+        setSearchQuery(localSearch);
+      }
+    },
+    [localSearch, setSearchQuery]
+  );
+
+  const filterOptions = [
+    "all",
+    "public",
+    "private",
+    "liked",
+    "personal",
+    "group",
+    "gate",
+    "class",
+  ];
 
   return (
     <motion.div
@@ -38,92 +58,83 @@ const BoardsFilters = ({ quickFilter, setQuickFilter, searchQuery, setSearchQuer
       <Box
         sx={{
           maxWidth: 1500,
-          margin: "0 auto",
+          mx: "auto",
           display: "flex",
-          gap: 2,
-          mb: 2,
+          gap: { xs: 1, md: 2 },
+          mb: { xs: 2, md: 3 },
           alignItems: "center",
           justifyContent: "space-between",
           flexWrap: "wrap",
+          flexDirection: { xs: "column", sm: "row" },
         }}
       >
-        <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-          <Button
-            variant={quickFilter === "all" ? "contained" : "outlined"}
-            onClick={() => setQuickFilter("all")}
-            sx={{
-              backgroundColor: quickFilter === "all" ? "background.button" : "transparent",
-              color: quickFilter === "all" ? "background.paper" : "text.primary",
-              borderColor: quickFilter === "all" ? "background.button" : "text.primary",
-            }}
-            aria-label="Filter all boards"
-          >
-            All
-          </Button>
-          <Button
-            variant={quickFilter === "public" ? "contained" : "outlined"}
-            onClick={() => setQuickFilter("public")}
-            sx={{
-              backgroundColor: quickFilter === "public" ? "background.button" : "transparent",
-              color: quickFilter === "public" ? "background.paper" : "text.primary",
-              borderColor: quickFilter === "public" ? "background.button" : "text.primary",
-            }}
-            aria-label="Filter public boards"
-          >
-            Public
-          </Button>
-          <Button
-            variant={quickFilter === "private" ? "contained" : "outlined"}
-            onClick={() => setQuickFilter("private")}
-            sx={{
-              backgroundColor: quickFilter === "private" ? "background.button" : "transparent",
-              color: quickFilter === "private" ? "background.paper" : "text.primary",
-              borderColor: quickFilter === "private" ? "background.button" : "text.primary",
-            }}
-            aria-label="Filter private boards"
-          >
-            Private
-          </Button>
-          <Button
-            variant={quickFilter === "liked" ? "contained" : "outlined"}
-            onClick={() => setQuickFilter("liked")}
-            sx={{
-              backgroundColor: quickFilter === "liked" ? "background.button" : "transparent",
-              color: quickFilter === "liked" ? "background.paper" : "text.primary",
-              borderColor: quickFilter === "liked" ? "background.button" : "text.primary",
-            }}
-            aria-label="Filter favorite boards"
-          >
-            Favorite
-          </Button>
-          {additionalFilters.map((filter) => (
+        <Box sx={{ display: "flex", gap: { xs: 1, md: 2 }, flexWrap: "wrap" }}>
+          {filterOptions.map((filter) => (
             <Button
               key={filter}
               variant={quickFilter === filter ? "contained" : "outlined"}
               onClick={() => setQuickFilter(filter)}
               sx={{
-                backgroundColor: quickFilter === filter ? "background.button" : "transparent",
-                color: quickFilter === filter ? "background.paper" : "text.primary",
-                borderColor: quickFilter === filter ? "background.button" : "text.primary",
+                minWidth: { xs: 80, sm: 100 },
+                fontSize: { xs: "0.75rem", sm: "0.875rem" },
+                backgroundColor:
+                  quickFilter === filter ? "primary.main" : "background.default",
+                color: quickFilter === filter ? "primary.contrastText" : "text.primary",
+                borderColor: quickFilter === filter ? "primary.main" : "text.primary",
+                borderRadius: theme.shape.borderRadiusSmall,
+                "&:hover": {
+                  backgroundColor:
+                    quickFilter === filter ? "primary.dark" : "background.hover",
+                },
               }}
-              aria-label={`Filter ${filter} boards`}
+              aria-label={`Show ${filter} boards`}
             >
               {filter.charAt(0).toUpperCase() + filter.slice(1)}
             </Button>
           ))}
+          <Button
+            variant="outlined"
+            onClick={onReset}
+            sx={{
+              minWidth: { xs: 80, sm: 100 },
+              fontSize: { xs: "0.75rem", sm: "0.875rem" },
+              backgroundColor: "background.default",
+              color: "text.primary",
+              borderColor: "text.primary",
+              borderRadius: theme.shape.borderRadiusSmall,
+              "&:hover": {
+                backgroundColor: "background.hover",
+              },
+            }}
+            aria-label="Reset filters"
+          >
+            Reset
+          </Button>
         </Box>
         <TextField
           variant="outlined"
-          placeholder="Search"
+          placeholder="Search boards..."
           value={localSearch}
           onChange={handleSearchChange}
           onKeyPress={handleKeyPress}
-          sx={inputStylesWhite}
-          inputProps={{ "aria-label": "Search boards by name" }}
+          sx={{
+            ...inputStylesWhite,
+            maxWidth: { xs: "100%", sm: 300 },
+            width: { xs: "100%", sm: "auto" },
+          }}
+          inputProps={{ "aria-label": "Search boards by name or tags" }}
         />
       </Box>
     </motion.div>
   );
 };
 
-export default BoardsFilters;
+BoardsFilters.propTypes = {
+  quickFilter: PropTypes.string.isRequired,
+  setQuickFilter: PropTypes.func.isRequired,
+  searchQuery: PropTypes.string.isRequired,
+  setSearchQuery: PropTypes.func.isRequired,
+  onReset: PropTypes.func.isRequired,
+};
+
+export default React.memo(BoardsFilters);
