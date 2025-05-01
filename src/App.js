@@ -1,27 +1,25 @@
-// src/App.jsx
-import React, { lazy, Suspense, useCallback, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import './index.css';
-import { ThemeProvider } from '@mui/material';
-import theme from './Theme';
-import LoadingSpinner from './components/Layout/LoadingSpinner';
-import useAuth from './hooks/useAuth';
-import { NotificationProvider, useNotification } from './context/NotificationContext';
+import React, { lazy, Suspense, useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { ThemeProvider } from "@mui/material";
+import theme from "./Theme";
+import LoadingSpinner from "./components/Layout/LoadingSpinner";
+import useAuth from "./hooks/useAuth";
+import { NotificationProvider, useNotification } from "./context/NotificationContext";
 
-// Lazy load pages to improve performance
-const ProfilePage = lazy(() => import('./pages/ProfilePage'));
-const HomePage = lazy(() => import('./pages/HomePage'));
-const BoardsPage = lazy(() => import('./pages/BoardsPage'));
-const GatesPage = lazy(() => import('./pages/GatesPage'));
-const GatePage = lazy(() => import('./pages/GatePage'));
-const ClassesPage = lazy(() => import('./pages/ClassesPage'));
-const ClassPage = lazy(() => import('./pages/ClassPage'));
-const BoardPage = lazy(() => import('./pages/BoardPage'));
-const FriendsPage = lazy(() => import('./pages/FriendsPage'));
-const MessagesPage = lazy(() => import('./pages/MessagesPage'));
-const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
-const LoginForm = lazy(() => import('./components/Forms/LoginForm/LoginForm'));
-const ResetPasswordForm = lazy(() => import('./components/Forms/ResetPasswordForm/ResetPasswordForm'));
+// Lazy load pages
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const HomePage = lazy(() => import("./pages/HomePage"));
+const BoardsPage = lazy(() => import("./pages/BoardsPage"));
+const GatesPage = lazy(() => import("./pages/GatesPage"));
+const GatePage = lazy(() => import("./pages/GatePage"));
+const ClassesPage = lazy(() => import("./pages/ClassesPage"));
+const ClassPage = lazy(() => import("./pages/ClassPage"));
+const BoardPage = lazy(() => import("./pages/BoardPage"));
+const FriendsPage = lazy(() => import("./pages/FriendsPage"));
+const MessagesPage = lazy(() => import("./pages/MessagesPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
+const LoginForm = lazy(() => import("./components/Forms/LoginForm/LoginForm"));
+const ResetPasswordForm = lazy(() => import("./components/Forms/ResetPasswordForm/ResetPasswordForm"));
 
 const PrivateRoute = ({ element, isAuthenticated }) => {
   return isAuthenticated ? element : <Navigate to="/login" replace />;
@@ -33,18 +31,18 @@ const AppContent = () => {
   const { showNotification } = useNotification();
 
   useEffect(() => {
-    if (!isAuthenticated && window.location.pathname !== '/login' && window.location.pathname !== '/reset-password' && !loading) {
-      showNotification('Please log in to continue.', 'error');
-      navigate('/login', { replace: true });
+    if (!isAuthenticated && !["/login", "/reset-password"].includes(window.location.pathname) && !loading) {
+      showNotification("Please log in to continue.", "error");
+      navigate("/login", { replace: true });
     }
   }, [isAuthenticated, loading, navigate, showNotification]);
 
   useEffect(() => {
     if (error) {
-      showNotification(`Authentication Error: ${error}`, 'error');
+      showNotification(`Authentication Error: ${error}`, "error");
       setTimeout(() => {
-        handleLogout('Please log in again.');
-      }, 2000); // Даємо час побачити сповіщення перед редиректом
+        handleLogout("Please log in again.");
+      }, 2000);
     }
   }, [error, showNotification, handleLogout]);
 
@@ -54,16 +52,10 @@ const AppContent = () => {
   return (
     <Suspense fallback={<LoadingSpinner />}>
       <Routes>
-        <Route path="/reset-password" element={<ResetPasswordForm theme={theme} onLogin={handleLogin} />} />
+        <Route path="/reset-password" element={<ResetPasswordForm theme={theme}  onLogin={handleLogin}  />} />
         <Route
           path="/login"
-          element={
-            isAuthenticated ? (
-              <Navigate to="/home" replace />
-            ) : (
-              <LoginForm theme={theme} onLogin={handleLogin} />
-            )
-          }
+          element={isAuthenticated ? <Navigate to="/home" replace /> : <LoginForm theme={theme}  onLogin={handleLogin}/>}
         />
         <Route
           path="/home"
@@ -115,11 +107,11 @@ const AppContent = () => {
 function App() {
   return (
     <ThemeProvider theme={theme}>
-        <Router>
-          <NotificationProvider>
-            <AppContent />
-          </NotificationProvider>
-        </Router>
+      <Router>
+        <NotificationProvider>
+          <AppContent />
+        </NotificationProvider>
+      </Router>
     </ThemeProvider>
   );
 }
