@@ -116,17 +116,21 @@ const LeftDrawer = ({ onLogout }) => {
   return (
     <Drawer
       variant="permanent"
-      PaperProps={{
-        sx: {
-          boxShadow: "none",
-          borderRight: "none",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
+      sx={{
+        width: 72,
+        flexShrink: 0,
+        '& .MuiDrawer-paper': {
           width: 72,
-          backgroundColor: "rgba(255, 255, 255, 0.1)",
+          boxSizing: 'border-box',
+          borderRight: "none",
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          height: '100vh',
+          backgroundColor: "rgba(255, 255, 255, 0)",
           backdropFilter: "blur(10px)",
           borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
+          zIndex: theme.zIndex.drawer
         },
       }}
       role="navigation"

@@ -153,3 +153,5 @@ export const selectStyles = {
     fontSize: { xs: "0.875rem", sm: "1rem" },
   },
 };
+
+export const chipStyles = { fontSize: { xs: "0.75rem", md: "0.875rem" }, padding: 1, border: "none" };

@@ -261,7 +261,7 @@ const DashboardPage = memo(() => {
         {isOwnProfile && (
           <Box sx={{ mb: 3, display: "flex", justifyContent: "flex-end" }}>
             <Button
-              variant="outlined"
+              variant="contained"
               startIcon={<BarChartIcon />}
               onClick={handleOpenStatsDialog}
               sx={{
@@ -291,7 +291,7 @@ const DashboardPage = memo(() => {
             ))}
           </Box>
         ) : ownedBoards.length === 0 ? (
-          <Box sx={{ textAlign: "center", py: 4, backgroundColor: "background.paper", borderRadius: 2, boxShadow: 1 }}>
+          <Box sx={{ textAlign: "center", py: 4, backgroundColor: "background.paper", borderRadius: 2, boxShadow: "none" }}>
             <Typography color="text.secondary" sx={{ mb: 2, fontSize: "1.1rem" }}>
               {isOwnProfile ? "You haven't created any boards yet." : "No boards owned by this user."}
             </Typography>
@@ -354,12 +354,12 @@ const DashboardPage = memo(() => {
                 ))}
               </Box>
             ) : favoriteBoards.length === 0 ? (
-              <Box sx={{ textAlign: "center", py: 4, backgroundColor: "background.paper", borderRadius: 2, boxShadow: 1 }}>
+              <Box sx={{ textAlign: "center", py: 4, backgroundColor: "background.paper", borderRadius: 2, boxShadow: "none" }}>
                 <Typography color="text.secondary" sx={{ mb: 2, fontSize: "1.1rem" }}>
                   Boards are your personal spaces to organize posts, ideas, and collaborations. Favorite boards to keep them here!
                 </Typography>
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   onClick={() => navigate("/boards")}
                   sx={{
                     ...cancelButtonStyle,
@@ -416,12 +416,12 @@ const DashboardPage = memo(() => {
                 ))}
               </Box>
             ) : favoriteClasses.length === 0 ? (
-              <Box sx={{ textAlign: "center", py: 4, backgroundColor: "background.paper", borderRadius: 2, boxShadow: 1 }}>
+              <Box sx={{ textAlign: "center", py: 4, backgroundColor: "background.paper", borderRadius: 2, boxShadow: "none" }}>
                 <Typography color="text.secondary" sx={{ mb: 2, fontSize: "1.1rem" }}>
                   Classes are learning hubs where you can join discussions, share knowledge, and grow. Favorite classes to access them quickly!
                 </Typography>
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   onClick={() => navigate("/classes")}
                   sx={{
                     ...cancelButtonStyle,
@@ -478,12 +478,12 @@ const DashboardPage = memo(() => {
                 ))}
               </Box>
             ) : favoriteGates.length === 0 ? (
-              <Box sx={{ textAlign: "center", py: 4, backgroundColor: "background.paper", borderRadius: 2, boxShadow: 1 }}>
+              <Box sx={{ textAlign: "center", py: 4, backgroundColor: "background.paper", borderRadius: 2, boxShadow: "none" }}>
                 <Typography color="text.secondary" sx={{ mb: 2, fontSize: "1.1rem" }}>
                   Gates are community portals for exclusive content and events. Favorite gates to stay connected!
                 </Typography>
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   onClick={() => navigate("/gates")}
                   sx={{
                     ...cancelButtonStyle,

@@ -92,5 +92,5 @@ export const toggleStyles = {
 export const containerStyles = {
   maxWidth: 1500,
   margin: "0 auto",
-  p: { xs: 1, sm: 2 },
+  p: 0,
 };

@@ -21,6 +21,7 @@ import {
   Visibility,
 } from "@mui/icons-material";
 import PropTypes from "prop-types";
+import { chipStyles } from "../../styles/BaseStyles";
 
 const BoardCard = ({
   board,
@@ -204,7 +205,7 @@ const BoardCard = ({
             icon={<People />}
             size="small"
             variant="outlined"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+            sx={ chipStyles }
             aria-label={`Board type: ${typeLabel}`}
           />
           {isPublic ? (
@@ -213,7 +214,7 @@ const BoardCard = ({
               icon={<Visibility />}
               size="small"
               variant="outlined"
-              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              sx={ chipStyles }
               aria-label={`Views: ${board.stats?.view_count || 0}`}
             />
           ) : (
@@ -222,7 +223,7 @@ const BoardCard = ({
               icon={<People />}
               size="small"
               variant="outlined"
-              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              sx={ chipStyles }
               aria-label={`Members: ${board.members?.length || 0}`}
             />
           )}
@@ -231,7 +232,7 @@ const BoardCard = ({
             icon={<Forum />}
             size="small"
             variant="outlined"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+            sx={ chipStyles }
             aria-label={`Tweets: ${board.stats?.tweet_count || 0}`}
           />
         </Box>
@@ -244,7 +245,7 @@ const BoardCard = ({
               label={`Gate: ${board.gateName}`}
               size="small"
               variant="outlined"
-              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              sx={ chipStyles }
               aria-label={`Gate: ${board.gateName}`}
             />
           )}
@@ -253,7 +254,7 @@ const BoardCard = ({
               label={`Class: ${board.className}`}
               size="small"
               variant="outlined"
-              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              sx={ chipStyles }
               aria-label={`Class: ${board.className}`}
             />
           )}
@@ -261,7 +262,7 @@ const BoardCard = ({
             label={`Owner: ${ownerUsername}`}
             size="small"
             variant="outlined"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+            sx={ chipStyles }
             aria-label={`Owner: ${ownerUsername}`}
           />
           {(board.stats?.favorite_count || 0) > 0 && (
@@ -270,7 +271,7 @@ const BoardCard = ({
               icon={<Star />}
               size="small"
               variant="outlined"
-              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              sx={ chipStyles }
               aria-label={`Favorites: ${board.stats.favorite_count}`}
             />
           )}
@@ -279,7 +280,7 @@ const BoardCard = ({
               label={`Tags: ${board.tags.join(", ")}`}
               size="small"
               variant="outlined"
-              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              sx={ chipStyles }
               aria-label={`Tags: ${board.tags.join(", ")}`}
             />
           )}
@@ -288,7 +289,7 @@ const BoardCard = ({
               label="Has Parent"
               size="small"
               variant="outlined"
-              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              sx={ chipStyles }
               aria-label="Board has parent"
             />
           )}
@@ -297,7 +298,7 @@ const BoardCard = ({
               label={`Children: ${board.child_board_ids.length}`}
               size="small"
               variant="outlined"
-              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+              sx={ chipStyles }
               aria-label={`Children: ${board.child_board_ids.length}`}
             />
           )}
@@ -316,7 +317,7 @@ const BoardCard = ({
           {getVisibilityIcon()}
           <Typography
             variant="caption"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" }, color: isPublic ? "success.main" : "error.main" }}
           >
             {isPublic ? "Public" : "Private"}
           </Typography>
@@ -325,7 +326,7 @@ const BoardCard = ({
           <Forum fontSize="small" />
           <Typography
             variant="caption"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
+            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" }}}
           >
             {board.stats?.tweet_count || 0}
           </Typography>
