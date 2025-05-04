@@ -1,6 +1,21 @@
-import React, { useMemo, useRef, memo, useState, useEffect, useCallback } from "react";
+import React, { useMemo, useRef, useState, useEffect, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, IconButton, Tooltip, Typography, Button } from "@mui/material";
+import {
+  Box,
+  IconButton,
+  Tooltip,
+  Typography,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+} from "@mui/material";
 import { AnimatePresence, motion } from "framer-motion";
 import PropTypes from "prop-types";
 import { RestartAlt, Add, ArrowBack, Remove } from "@mui/icons-material";
@@ -9,32 +24,47 @@ import LoadingSpinner from "../../Layout/LoadingSpinner";
 import DraggableTweet from "../Tweet/Tweet";
 import TweetContent from "../Tweet/TweetContent";
 import TweetPopup from "../Tweet/TweetPopup";
+import { useTweets } from "../../../hooks/useTweets";
+import { useBoards } from "../../../hooks/useBoards";
+import { useNotification } from "../../../context/NotificationContext";
 
 const MemoizedDraggableTweet = memo(DraggableTweet);
 
 const Board = ({
-  tweets,
+  boardId,
   boardTitle,
-  onCreateTweet,
-  onUpdateTweet,
-  onDeleteTweet,
-  onLikeTweet,
-  onReplyTweet,
-  onEditTweet,
-  onMoveTweet,
-  onChangeTweetType,
+  token,
   currentUser,
-  loading,
-  error,
-  onRetryFetch,
+  userRole,
+  onPointsUpdate,
+  onLogout,
+  navigate,
 }) => {
-  const navigate = useNavigate();
+  const { showNotification } = useNotification();
   const boardMainRef = useRef(null);
   const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0 });
   const [tweetDraft, setTweetDraft] = useState("");
   const [replyTweet, setReplyTweet] = useState(null);
   const [highlightedParentId, setHighlightedParentId] = useState(null);
-  const lastValidTweets = useRef(tweets);
+  const [editTweetModal, setEditTweetModal] = useState(null);
+  const [availableBoards, setAvailableBoards] = useState([]);
+  const [selectedBoardId, setSelectedBoardId] = useState("");
+  const [newStatus, setNewStatus] = useState("");
+
+  const {
+    tweets,
+    loading,
+    error,
+    fetchTweets,
+    createNewTweet,
+    updateExistingTweet,
+    toggleLikeTweet,
+    deleteExistingTweet,
+    moveTweet,
+  } = useTweets(token, boardId, currentUser, onLogout, navigate);
+
+  const { fetchBoardsList } = useBoards(token, onLogout, navigate);
+
   const {
     scale,
     offset,
@@ -51,9 +81,25 @@ const Board = ({
   } = useBoardInteraction(boardMainRef);
 
   useEffect(() => {
+    const controller = new AbortController();
+    fetchTweets({}, controller.signal).catch(err => {
+      if (err.name !== "AbortError") {
+        showNotification("Failed to load tweets", "error");
+      }
+    });
+    return () => controller.abort();
+  }, [fetchTweets, showNotification]);
+
+  useEffect(() => {
+    if (!loading && boardMainRef.current) {
+      centerBoard();
+    }
+  }, [loading, centerBoard]);
+
+  useEffect(() => {
     if (tweets?.length > 0) {
       const tweetIds = tweets.map((t) => t?.tweet_id);
-      const emptyIds = tweetIds.filter((id) => id === '');
+      const emptyIds = tweetIds.filter((id) => !id);
       if (emptyIds.length > 0) {
         console.warn("Empty tweet_id values detected:", emptyIds, "Tweets:", tweets);
       }
@@ -61,25 +107,23 @@ const Board = ({
       if (uniqueIds.size !== tweetIds.length - emptyIds.length) {
         console.warn("Duplicate tweet IDs detected:", tweetIds);
       }
-      lastValidTweets.current = tweets;
     }
   }, [tweets]);
 
-  // Center board when loading completes
-  useEffect(() => {
-    if (!loading && boardMainRef.current) {
-      centerBoard();
-    }
-  }, [loading, centerBoard]);
-
   const handlePopupSubmit = useCallback(
-    (text, x, y) => {
-      onCreateTweet(text, x, y, replyTweet?.tweet_id);
-      setTweetDraft("");
-      setTweetPopup({ visible: false });
-      setReplyTweet(null);
+    async (text, x, y) => {
+      try {
+        await createNewTweet(text, x, y, replyTweet?.tweet_id);
+        await onPointsUpdate();
+        showNotification("Tweet created successfully!", "success");
+        setTweetDraft("");
+        setTweetPopup({ visible: false });
+        setReplyTweet(null);
+      } catch (err) {
+        showNotification(err.message || "Failed to create tweet", "error");
+      }
     },
-    [onCreateTweet, replyTweet]
+    [createNewTweet, onPointsUpdate, replyTweet, showNotification]
   );
 
   const handleReply = useCallback(
@@ -96,7 +140,6 @@ const Board = ({
     [scale]
   );
 
-  // Throttle popup triggers
   const throttlePopup = useCallback(
     (fn) => {
       let lastCall = 0;
@@ -129,6 +172,47 @@ const Board = ({
     [handleTouchEnd, throttlePopup]
   );
 
+  const loadAvailableBoards = useCallback(async () => {
+    try {
+      const data = await fetchBoardsList();
+      setAvailableBoards(data?.boards.filter(b => b.board_id) || []);
+    } catch (err) {
+      showNotification("Failed to load boards", "error");
+    }
+  }, [fetchBoardsList, showNotification]);
+
+  const handleEditTweet = useCallback(
+    async (tweet) => {
+      await loadAvailableBoards();
+      setSelectedBoardId(tweet.board_id || boardId);
+      setNewStatus(tweet.status || "approved");
+      setEditTweetModal({ ...tweet });
+    },
+    [loadAvailableBoards, boardId]
+  );
+
+  const handleSaveEditedTweet = useCallback(
+    async () => {
+      if (!editTweetModal) return;
+      try {
+        await updateExistingTweet(editTweetModal.tweet_id, {
+          content: editTweetModal.content,
+          status: newStatus,
+          position: editTweetModal.position,
+        });
+        if (editTweetModal.board_id !== selectedBoardId) {
+          await moveTweet(editTweetModal.tweet_id, selectedBoardId);
+        }
+        setEditTweetModal(null);
+        await fetchTweets();
+        showNotification("Tweet updated successfully!", "success");
+      } catch (err) {
+        showNotification("Failed to save tweet", "error");
+      }
+    },
+    [editTweetModal, updateExistingTweet, moveTweet, fetchTweets, newStatus, selectedBoardId, showNotification]
+  );
+
   const titleFontSize = useMemo(() => {
     const baseSize = Math.min(16, 100 / (boardTitle.length || 1));
     return `${baseSize}vw`;
@@ -137,10 +221,10 @@ const Board = ({
   const validTweets = useMemo(() => {
     if (!Array.isArray(tweets)) {
       console.warn("Tweets is not an array:", tweets);
-      return lastValidTweets.current || [];
+      return [];
     }
     const seenIds = new Set();
-    return tweets.filter((tweet, index) => {
+    const filteredTweets = tweets.filter((tweet, index) => {
       if (
         !tweet?.tweet_id ||
         tweet.tweet_id === '' ||
@@ -153,30 +237,38 @@ const Board = ({
       seenIds.add(tweet.tweet_id);
       return true;
     });
+    console.log("Valid tweets after filtering:", filteredTweets);
+    return filteredTweets;
   }, [tweets]);
 
   const renderedTweets = useMemo(() => {
     if (validTweets.length === 0) return null;
-    return validTweets.map((tweet, index) => {
+    return validTweets.map((tweet) => {
       const replyCount = validTweets.filter((t) => t.parent_tweet_id === tweet.tweet_id).length;
       const parentTweet = validTweets.find((t) => t.tweet_id === tweet.parent_tweet_id);
       return (
         <MemoizedDraggableTweet
-          key={tweet.tweet_id || `fallback-${index}`} // Fallback key
+          key={tweet.tweet_id}
           tweet={tweet}
-          onStop={(e, data) => onUpdateTweet(tweet.tweet_id, { position: { x: data.x, y: data.y } })}
+          onStop={(e, data) => updateExistingTweet(tweet.tweet_id, { position: { x: data.x, y: data.y } })}
           currentUser={currentUser}
         >
           <TweetContent
             tweet={tweet}
             currentUser={currentUser}
-            onLike={onLikeTweet}
-            onDelete={onDeleteTweet}
+            onLike={toggleLikeTweet}
+            onDelete={deleteExistingTweet}
             onReply={handleReply}
             onReplyHover={setHighlightedParentId}
-            onEdit={onEditTweet}
-            onMove={onMoveTweet}
-            onChangeType={onChangeTweetType}
+            onEdit={handleEditTweet}
+            onMove={(tweet) => {
+              setSelectedBoardId(tweet.board_id || boardId);
+              setEditTweetModal({ ...tweet });
+            }}
+            onChangeType={(tweet) => {
+              setNewStatus(tweet.status || "approved");
+              setEditTweetModal({ ...tweet });
+            }}
             isParentHighlighted={tweet.tweet_id === highlightedParentId || tweet.parent_tweet_id === highlightedParentId}
             replyCount={replyCount}
             parentTweetText={parentTweet?.content?.value || null}
@@ -187,13 +279,12 @@ const Board = ({
   }, [
     validTweets,
     currentUser,
-    onUpdateTweet,
-    onLikeTweet,
-    onDeleteTweet,
+    updateExistingTweet,
+    toggleLikeTweet,
+    deleteExistingTweet,
     handleReply,
-    onEditTweet,
-    onMoveTweet,
-    onChangeTweetType,
+    handleEditTweet,
+    boardId,
     highlightedParentId,
   ]);
 
@@ -203,15 +294,13 @@ const Board = ({
         <Typography color="error" sx={{ mb: 2 }}>
           {error}
         </Typography>
-        {onRetryFetch && (
-          <Button
-            variant="contained"
-            onClick={onRetryFetch}
-            aria-label="Retry fetching board data"
-          >
-            Retry
-          </Button>
-        )}
+        <Button
+          variant="contained"
+          onClick={() => fetchTweets()}
+          aria-label="Retry fetching board data"
+        >
+          Retry
+        </Button>
       </Box>
     );
   }
@@ -379,40 +468,85 @@ const Board = ({
             </Box>
           </Box>
         </Box>
+
+        {editTweetModal && (
+          <Dialog open onClose={() => setEditTweetModal(null)} maxWidth="sm" fullWidth>
+            <DialogTitle>Edit Tweet</DialogTitle>
+            <DialogContent>
+              <TextField
+                multiline
+                fullWidth
+                label="Tweet Content"
+                value={editTweetModal.content?.value || ""}
+                onChange={(e) =>
+                  setEditTweetModal((prev) => ({
+                    ...prev,
+                    content: { ...prev.content, value: e.target.value },
+                  }))
+                }
+                sx={{ mt: 2 }}
+                aria-label="Tweet content"
+              />
+              <FormControl fullWidth sx={{ mt: 2 }}>
+                <InputLabel>Tweet Type</InputLabel>
+                <Select
+                  value={newStatus}
+                  label="Tweet Type"
+                  onChange={(e) => setNewStatus(e.target.value)}
+                  aria-label="Tweet type"
+                >
+                  <MenuItem value="approved">Approved</MenuItem>
+                  <MenuItem value="pinned">Pinned</MenuItem>
+                  <MenuItem value="reminder">Reminder</MenuItem>
+                  <MenuItem value="announcement">Announcement</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl fullWidth sx={{ mt: 2 }}>
+                <InputLabel>Move to Board</InputLabel>
+                <Select
+                  value={selectedBoardId}
+                  label="Move to Board"
+                  onChange={(e) => setSelectedBoardId(e.target.value)}
+                  aria-label="Move to board"
+                >
+                  {availableBoards.filter(b => b.board_id).map((b) => (
+                    <MenuItem key={b.board_id} value={b.board_id}>
+                      {b.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setEditTweetModal(null)} aria-label="Cancel edit tweet">
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveEditedTweet}
+                variant="contained"
+                aria-label="Save edited tweet"
+              >
+                Save
+              </Button>
+            </DialogActions>
+          </Dialog>
+        )}
       </motion.div>
     </AnimatePresence>
   );
 };
 
 Board.propTypes = {
-  tweets: PropTypes.arrayOf(
-    PropTypes.shape({
-      tweet_id: PropTypes.string.isRequired,
-      content: PropTypes.shape({
-        value: PropTypes.string,
-      }),
-      position: PropTypes.shape({
-        x: PropTypes.number,
-        y: PropTypes.number,
-      }),
-      parent_tweet_id: PropTypes.string,
-    })
-  ).isRequired,
+  boardId: PropTypes.string.isRequired,
   boardTitle: PropTypes.string.isRequired,
-  onCreateTweet: PropTypes.func.isRequired,
-  onUpdateTweet: PropTypes.func.isRequired,
-  onDeleteTweet: PropTypes.func.isRequired,
-  onLikeTweet: PropTypes.func.isRequired,
-  onReplyTweet: PropTypes.func.isRequired,
-  onEditTweet: PropTypes.func.isRequired,
-  onMoveTweet: PropTypes.func.isRequired,
-  onChangeTweetType: PropTypes.func.isRequired,
+  token: PropTypes.string.isRequired,
   currentUser: PropTypes.shape({
     anonymous_id: PropTypes.string,
   }).isRequired,
-  loading: PropTypes.bool.isRequired,
-  error: PropTypes.string,
-  onRetryFetch: PropTypes.func,
+  userRole: PropTypes.string.isRequired,
+  onPointsUpdate: PropTypes.func.isRequired,
+  onLogout: PropTypes.func.isRequired,
+  navigate: PropTypes.func.isRequired,
 };
 
 export default memo(Board);

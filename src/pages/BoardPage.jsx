@@ -15,11 +15,6 @@ import {
   useTheme,
   Button,
   Badge,
-  List,
-  ListItem,
-  FormControl,
-  InputLabel,
-  Select,
 } from "@mui/material";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -40,7 +35,6 @@ import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import Board from "../components/social-features/Board/Board";
 import useAuth from "../hooks/useAuth";
 import { useBoards } from "../hooks/useBoards";
-import { useTweets } from "../hooks/useTweets";
 import usePoints from "../hooks/usePoints";
 import { useGates } from "../hooks/useGates";
 import { useClasses } from "../hooks/useClasses";
@@ -48,12 +42,10 @@ import BoardFormDialog from "../components/Dialogs/BoardFormDialog";
 import MemberFormDialog from "../components/Dialogs/MemberFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
 import { useNotification } from "../context/NotificationContext";
-import { ProfileAvatar } from "../utils/avatarUtils";
 import { actionButtonStyles, cancelButtonStyle } from "../styles/BaseStyles";
 import AnimatedPoints from "../components/AnimatedPoints/AnimatedPoints";
 import PointsDeductionAnimation from "../components/PointsDeductionAnimation/PointsDeductionAnimation";
 
-// Simple debounce utility
 const debounce = (func, wait) => {
   let timeout;
   return (...args) => {
@@ -73,57 +65,30 @@ const BoardPage = memo(() => {
     members,
     fetchBoard,
     fetchBoardMembersList,
-    fetchBoardsList,
-    addMemberToBoard,
-    removeMemberFromBoard,
-    updateMemberRole,
     updateExistingBoard,
     toggleFavoriteBoard,
     deleteExistingBoard,
+    addMemberToBoard,
+    removeMemberFromBoard,
+    updateMemberRole,
     loading: boardsLoading,
     error: boardError,
   } = useBoards(token, handleLogout, navigate);
-  const {
-    tweets,
-    fetchTweets,
-    createNewTweet,
-    updateExistingTweet,
-    toggleLikeTweet,
-    deleteExistingTweet,
-    moveTweet,
-    error: tweetsError,
-    loading: tweetsLoading,
-  } = useTweets(token, board_id, authData, handleLogout, navigate);
   const { pointsData, getPoints } = usePoints(token, handleLogout, navigate);
-  const { gates, fetchGatesList, loading: gatesLoading, error: gatesError } = useGates(
-    token,
-    handleLogout,
-    navigate
-  );
-  const { classes, fetchClassesList, loading: classesLoading, error: classesError } = useClasses(
-    token,
-    handleLogout,
-    navigate
-  );
+  const { gates, fetchGatesList, loading: gatesLoading, error: gatesError } = useGates(token, handleLogout, navigate);
+  const { classes, fetchClassesList, loading: classesLoading, error: classesError } = useClasses(token, handleLogout, navigate);
 
-  // State
   const [isFullyLoaded, setIsFullyLoaded] = useState(false);
   const [editingBoard, setEditingBoard] = useState(null);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
-  const [onlineMembersDialogOpen, setOnlineMembersDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [inviteLink, setInviteLink] = useState("");
-  const [editTweetModal, setEditTweetModal] = useState(null);
-  const [availableBoards, setAvailableBoards] = useState([]);
-  const [selectedBoardId, setSelectedBoardId] = useState("");
-  const [newStatus, setNewStatus] = useState("");
   const [prevPoints, setPrevPoints] = useState(pointsData?.total_points || 0);
   const [pointsSpent, setPointsSpent] = useState(0);
 
-  // Derived state
   const userRole = useMemo(() => {
     if (!isAuthenticated || !boardItem) return "viewer";
     if (boardItem.creator_id === authData?.anonymous_id) return "owner";
@@ -139,7 +104,6 @@ const BoardPage = memo(() => {
     return boardItem?.visibility ?? (boardItem?.is_public ? "public" : "private");
   }, [boardItem?.visibility, boardItem?.is_public]);
 
-  // Data loading with debouncing and sequential fetching
   const loadData = useCallback(
     async (signal) => {
       if (!isAuthenticated || !token) {
@@ -149,21 +113,15 @@ const BoardPage = memo(() => {
       }
       setIsFullyLoaded(false);
       try {
-        // Step 1: Fetch board first to stabilize userRole
         const boardData = await fetchBoard(board_id, signal);
         if (!boardData) throw new Error("Board not found.");
 
-        // Step 2: Fetch other data in parallel
-        await Promise.all([
-          fetchTweets({ signal }),
-          getPoints(signal),
-        ]);
+        await getPoints(signal);
 
         if (boardData.is_public === false && userRole === "viewer") {
           throw new Error("Access denied to private board.");
         }
 
-        // Step 3: Fetch conditional data
         const promises = [];
         if (userRole !== "viewer") {
           promises.push(fetchBoardMembersList(board_id, signal));
@@ -178,10 +136,7 @@ const BoardPage = memo(() => {
         await Promise.all(promises);
         setIsFullyLoaded(true);
       } catch (err) {
-        if (err.name === "AbortError") {
-          console.log("API request aborted:", err.message); // Log for debugging
-          return;
-        }
+        if (err.name === "AbortError") return;
         const message = err.message.includes("Access denied")
           ? "You do not have access to this private board."
           : err.message.includes("not found")
@@ -191,40 +146,22 @@ const BoardPage = memo(() => {
         setIsFullyLoaded(true);
       }
     },
-    [
-      isAuthenticated,
-      token,
-      board_id,
-      fetchBoard,
-      fetchBoardMembersList,
-      fetchTweets,
-      getPoints,
-      fetchGatesList,
-      fetchClassesList,
-      showNotification,
-      userRole, // Stable after sequential fetch
-    ]
+    [isAuthenticated, token, board_id, fetchBoard, fetchBoardMembersList, getPoints, fetchGatesList, fetchClassesList, showNotification, userRole]
   );
 
-  // Debounced loadData to prevent rapid re-renders
   const debouncedLoadData = useMemo(() => debounce(loadData, 300), [loadData]);
 
   useEffect(() => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => setIsFullyLoaded(true), 10000);
     debouncedLoadData(controller.signal);
-    return () => {
-      controller.abort();
-      clearTimeout(timeout);
-    };
+    return () => controller.abort();
   }, [debouncedLoadData]);
 
   useEffect(() => {
     if (boardError) showNotification(boardError, "error");
-    if (tweetsError) showNotification(tweetsError, "error");
     if (gatesError) showNotification(gatesError, "error");
     if (classesError) showNotification(classesError, "error");
-  }, [boardError, tweetsError, gatesError, classesError, showNotification]);
+  }, [boardError, gatesError, classesError, showNotification]);
 
   useEffect(() => {
     if (pointsData?.total_points !== undefined && pointsData.total_points < prevPoints) {
@@ -234,7 +171,6 @@ const BoardPage = memo(() => {
     setPrevPoints(pointsData?.total_points ?? 0);
   }, [pointsData?.total_points, prevPoints]);
 
-  // Handlers
   const validateBoardData = useCallback(
     (data) => {
       if (!data?.name?.trim()) return "Board name is required";
@@ -332,10 +268,6 @@ const BoardPage = memo(() => {
     setMembersDialogOpen(true);
   }, [userRole]);
 
-  const handleViewOnlineMembers = useCallback(() => {
-    setOnlineMembersDialogOpen(true);
-  }, []);
-
   const handleShare = useCallback(() => {
     const boardUrl = `${window.location.origin}/board/${board_id}`;
     setInviteLink(boardUrl);
@@ -362,118 +294,6 @@ const BoardPage = memo(() => {
     }
   }, [board_id, deleteExistingBoard, navigate, showNotification]);
 
-  const loadAvailableBoards = useCallback(async () => {
-    try {
-      const data = await fetchBoardsList();
-      setAvailableBoards(data?.boards.filter(b => b.board_id) || []);
-    } catch (err) {
-      showNotification("Failed to load boards", "error");
-    }
-  }, [fetchBoardsList, showNotification]);
-
-  const handleCreateTweet = useCallback(
-    async (text, x, y, parentTweetId) => {
-      try {
-        await createNewTweet(text, x, y, parentTweetId);
-        await Promise.all([getPoints(), fetchTweets()]);
-        showNotification("Tweet created successfully!", "success");
-      } catch (err) {
-        showNotification(err.message || "Failed to create tweet", "error");
-      }
-    },
-    [createNewTweet, getPoints, fetchTweets, showNotification]
-  );
-
-  const handleUpdateTweet = useCallback(
-    async (id, updates) => {
-      try {
-        await updateExistingTweet(id, updates);
-        await getPoints();
-        showNotification("Tweet updated successfully!", "success");
-      } catch (err) {
-        showNotification("Failed to update tweet", "error");
-      }
-    },
-    [updateExistingTweet, getPoints, showNotification]
-  );
-
-  const handleToggleLikeTweet = useCallback(
-    async (id, isLiked) => {
-      try {
-        await toggleLikeTweet(id, isLiked);
-        await getPoints();
-        showNotification(`Tweet ${isLiked ? "unliked" : "liked"} successfully!`, "success");
-      } catch (err) {
-        showNotification("Failed to toggle like", "error");
-      }
-    },
-    [toggleLikeTweet, getPoints, showNotification]
-  );
-
-  const handleDeleteTweet = useCallback(
-    async (id) => {
-      try {
-        await deleteExistingTweet(id);
-        await getPoints();
-        showNotification("Tweet deleted successfully!", "success");
-      } catch (err) {
-        showNotification("Failed to delete tweet", "error");
-      }
-    },
-    [deleteExistingTweet, getPoints, showNotification]
-  );
-
-  const handleClearBoard = useCallback(async () => {
-    if (userRole !== "owner" && userRole !== "admin") {
-      showNotification("You do not have permission to clear this board.", "error");
-      return;
-    }
-    try {
-      const deletePromises = tweets.map((tweet) => deleteExistingTweet(tweet.tweet_id));
-      await Promise.all(deletePromises);
-      await fetchTweets();
-      setClearDialogOpen(false);
-      showNotification("Board cleared successfully!", "success");
-    } catch (err) {
-      showNotification("Failed to clear board", "error");
-    }
-  }, [tweets, deleteExistingTweet, fetchTweets, showNotification, userRole]);
-
-  const handleEditTweet = useCallback(
-    async (tweet) => {
-      await loadAvailableBoards();
-      setSelectedBoardId(tweet.board_id || board_id);
-      setNewStatus(tweet.status || "approved");
-      setEditTweetModal({ ...tweet });
-    },
-    [loadAvailableBoards, board_id]
-  );
-
-  const handleSaveEditedTweet = useCallback(
-    async () => {
-      if (!editTweetModal) return;
-      try {
-        await updateExistingTweet(editTweetModal.tweet_id, {
-          content: editTweetModal.content,
-          status: newStatus,
-          position: editTweetModal.position,
-        });
-        if (editTweetModal.board_id !== selectedBoardId) {
-          await moveTweet(editTweetModal.tweet_id, selectedBoardId);
-        }
-        setEditTweetModal(null);
-        await fetchTweets();
-        showNotification("Tweet updated successfully!", "success");
-      } catch (err) {
-        showNotification("Failed to save tweet", "error");
-      }
-    },
-    [editTweetModal, updateExistingTweet, moveTweet, fetchTweets, newStatus, selectedBoardId, showNotification]
-  );
-
-  const handleMenuOpen = useCallback((event) => setAnchorEl(event.currentTarget), []);
-  const handleMenuClose = useCallback(() => setAnchorEl(null), []);
-
   const handleCopyLink = useCallback(async () => {
     if (!inviteLink) {
       showNotification("Invalid share link", "error");
@@ -489,7 +309,9 @@ const BoardPage = memo(() => {
     }
   }, [inviteLink, showNotification]);
 
-  // Render
+  const handleMenuOpen = useCallback((event) => setAnchorEl(event.currentTarget), []);
+  const handleMenuClose = useCallback(() => setAnchorEl(null), []);
+
   if (authLoading || boardsLoading || !isFullyLoaded) {
     return <LoadingSpinner />;
   }
@@ -511,7 +333,6 @@ const BoardPage = memo(() => {
 
   return (
     <Box sx={{ position: "relative", width: "100%", height: "100vh" }}>
-      {/* Action Buttons */}
       <Box
         sx={{
           position: "absolute",
@@ -671,7 +492,6 @@ const BoardPage = memo(() => {
         </Menu>
       </Box>
 
-      {/* Points Display */}
       <Box
         sx={{
           position: "absolute",
@@ -693,32 +513,17 @@ const BoardPage = memo(() => {
         {pointsSpent > 0 && <PointsDeductionAnimation pointsSpent={pointsSpent} />}
       </Box>
 
-      {/* Board Content */}
       <Board
-        tweets={tweets}
+        boardId={board_id}
         boardTitle={boardItem.name}
-        onCreateTweet={handleCreateTweet}
-        onUpdateTweet={handleUpdateTweet}
-        onDeleteTweet={handleDeleteTweet}
-        onLikeTweet={handleToggleLikeTweet}
-        onReplyTweet={handleEditTweet}
-        onEditTweet={handleEditTweet}
-        onMoveTweet={(tweet) => {
-          setSelectedBoardId(tweet.board_id || board_id);
-          setEditTweetModal({ ...tweet });
-        }}
-        onChangeTweetType={(tweet) => {
-          setNewStatus(tweet.status || "approved");
-          setEditTweetModal({ ...tweet });
-        }}
+        token={token}
         currentUser={authData}
-        loading={tweetsLoading}
-        error={tweetsError}
-        onRetryFetch={() => fetchTweets()}
         userRole={userRole}
+        onPointsUpdate={getPoints}
+        onLogout={handleLogout}
+        navigate={navigate}
       />
 
-      {/* Edit Board Dialog */}
       {editingBoard && (
         <BoardFormDialog
           open={true}
@@ -735,7 +540,6 @@ const BoardPage = memo(() => {
         />
       )}
 
-      {/* Manage Members Dialog */}
       <MemberFormDialog
         open={membersDialogOpen}
         title="Manage Board Members"
@@ -753,7 +557,6 @@ const BoardPage = memo(() => {
         updateMemberRole={updateMemberRole}
       />
 
-      {/* Share Board Dialog */}
       <Dialog
         open={shareDialogOpen}
         onClose={() => setShareDialogOpen(false)}
@@ -792,80 +595,14 @@ const BoardPage = memo(() => {
         </DialogActions>
       </Dialog>
 
-      {/* Edit Tweet Dialog */}
-      {editTweetModal && (
-        <Dialog open onClose={() => setEditTweetModal(null)} maxWidth="sm" fullWidth>
-          <DialogTitle>Edit Tweet</DialogTitle>
-          <DialogContent>
-            <TextField
-              multiline
-              fullWidth
-              label="Tweet Content"
-              value={editTweetModal.content?.value || ""}
-              onChange={(e) =>
-                setEditTweetModal((prev) => ({
-                  ...prev,
-                  content: { ...prev.content, value: e.target.value },
-                }))
-              }
-              sx={{ mt: 2 }}
-              aria-label="Tweet content"
-            />
-            <FormControl fullWidth sx={{ mt: 2 }}>
-              <InputLabel>Tweet Type</InputLabel>
-              <Select
-                value={newStatus}
-                label="Tweet Type"
-                onChange={(e) => setNewStatus(e.target.value)}
-                aria-label="Tweet type"
-              >
-                <MenuItem value="approved">Approved</MenuItem>
-                <MenuItem value="pinned">Pinned</MenuItem>
-                <MenuItem value="reminder">Reminder</MenuItem>
-                <MenuItem value="announcement">Announcement</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl fullWidth sx={{ mt: 2 }}>
-              <InputLabel>Move to Board</InputLabel>
-              <Select
-                value={selectedBoardId}
-                label="Move to Board"
-                onChange={(e) => setSelectedBoardId(e.target.value)}
-                aria-label="Move to board"
-              >
-                {availableBoards.filter(b => b.board_id).map((b) => (
-                  <MenuItem key={b.board_id} value={b.board_id}>
-                    {b.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setEditTweetModal(null)} aria-label="Cancel edit tweet">
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveEditedTweet}
-              variant="contained"
-              aria-label="Save edited tweet"
-            >
-              Save
-            </Button>
-          </DialogActions>
-        </Dialog>
-      )}
-
-      {/* Clear Board Confirmation Dialog */}
       <DeleteConfirmationDialog
         open={clearDialogOpen}
         onClose={() => setClearDialogOpen(false)}
-        onConfirm={handleClearBoard}
+        onConfirm={() => setClearDialogOpen(false)} // Handled by Board.jsx
         message="Are you sure you want to delete all tweets on this board? This action cannot be undone."
-        disabled={tweetsLoading}
+        disabled={boardsLoading}
       />
 
-      {/* Delete Board Confirmation Dialog */}
       <DeleteConfirmationDialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
