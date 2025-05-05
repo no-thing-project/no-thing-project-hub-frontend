@@ -541,8 +541,30 @@ export const useGates = (token, onLogout, navigate) => {
     if (!token) {
       gateListCache.clear();
       resetState();
+      return;
     }
-  }, [token, resetState]);
+
+    const controller = new AbortController();
+    let timeoutId;
+
+    const fetchData = async () => {
+      try {
+        await fetchGatesList({}, controller.signal);
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          console.error("Initial fetch gates error:", err);
+        }
+      }
+    };
+
+    // Debounce fetch to prevent multiple rapid calls
+    timeoutId = setTimeout(fetchData, 100);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
+  }, [token, fetchGatesList, resetState]);
 
   return useMemo(
     () => ({

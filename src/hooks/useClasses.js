@@ -36,6 +36,7 @@ const ERROR_MESSAGES = {
 // Constants for cache
 const MAX_CACHE_SIZE = 10;
 const CACHE_VERSION = "v1";
+const CACHE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
 
 // Cache for class lists and items
 const classListCache = new Map();
@@ -123,6 +124,15 @@ export const useClasses = (token, onLogout, navigate) => {
   }, []);
 
   /**
+   * Check if cache entry is expired
+   * @param {object} cacheEntry - Cache entry with timestamp
+   * @returns {boolean} True if expired
+   */
+  const isCacheExpired = useCallback((cacheEntry) => {
+    return Date.now() - cacheEntry.timestamp > CACHE_EXPIRY_MS;
+  }, []);
+
+  /**
    * Fetch list of classes with caching
    * @param {object} [filters={}] - Query filters
    * @param {AbortSignal} [signal] - Abort signal for request cancellation
@@ -136,7 +146,7 @@ export const useClasses = (token, onLogout, navigate) => {
       }
 
       const cacheKey = `${CACHE_VERSION}:${JSON.stringify(filters)}`;
-      if (classListCache.has(cacheKey)) {
+      if (classListCache.has(cacheKey) && !isCacheExpired(classListCache.get(cacheKey))) {
         const cachedData = classListCache.get(cacheKey);
         ReactDOM.unstable_batchedUpdates(() => {
           setClasses(cachedData.classes || []);
@@ -175,7 +185,7 @@ export const useClasses = (token, onLogout, navigate) => {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, handleAuthError, isCacheExpired]
   );
 
   /**
@@ -187,13 +197,13 @@ export const useClasses = (token, onLogout, navigate) => {
    */
   const fetchClassesByGate = useCallback(
     async (gateId, filters = {}, signal) => {
-      if (!token || !gateId) {
+      if (!token || !gateId?.trim()) {
         setError(token ? ERROR_MESSAGES.GATE_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
 
       const cacheKey = `${CACHE_VERSION}:gate:${gateId}:${JSON.stringify(filters)}`;
-      if (classListCache.has(cacheKey)) {
+      if (classListCache.has(cacheKey) && !isCacheExpired(classListCache.get(cacheKey))) {
         const cachedData = classListCache.get(cacheKey);
         ReactDOM.unstable_batchedUpdates(() => {
           setClasses(cachedData.classes || []);
@@ -232,7 +242,7 @@ export const useClasses = (token, onLogout, navigate) => {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, handleAuthError, isCacheExpired]
   );
 
   /**
@@ -243,13 +253,13 @@ export const useClasses = (token, onLogout, navigate) => {
    */
   const fetchClass = useCallback(
     async (classId, signal) => {
-      if (!token || !classId) {
+      if (!token || !classId?.trim()) {
         setError(token ? ERROR_MESSAGES.CLASS_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
 
       const cacheKey = `${CACHE_VERSION}:${classId}`;
-      if (classItemCache.has(cacheKey)) {
+      if (classItemCache.has(cacheKey) && !isCacheExpired(classItemCache.get(cacheKey))) {
         const cachedData = classItemCache.get(cacheKey);
         ReactDOM.unstable_batchedUpdates(() => {
           setClassItem(cachedData);
@@ -264,8 +274,12 @@ export const useClasses = (token, onLogout, navigate) => {
       setError(null);
 
       try {
-        const data = await fetchClassById(classId, token, signal);
-        if (!data) throw new Error("No class data received");
+        const [classData, membersData] = await Promise.all([
+          fetchClassById(classId, token, signal),
+          fetchClassMembers(classId, token, signal),
+        ]);
+        if (!classData) throw new Error("No class data received");
+        const data = { ...classData, members: membersData?.members || [] };
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setClassItem(data);
@@ -290,7 +304,7 @@ export const useClasses = (token, onLogout, navigate) => {
         setLoading(false);
       }
     },
-    [token, handleAuthError, normalizeMembers]
+    [token, handleAuthError, normalizeMembers, isCacheExpired]
   );
 
   /**
@@ -305,7 +319,7 @@ export const useClasses = (token, onLogout, navigate) => {
         setError(token ? ERROR_MESSAGES.CLASS_NAME_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
-      if (classData.is_public && !classData.gate_id) {
+      if (classData.is_public && !classData.gate_id?.trim()) {
         setError(ERROR_MESSAGES.GATE_ID_MISSING);
         return null;
       }
@@ -316,32 +330,29 @@ export const useClasses = (token, onLogout, navigate) => {
       try {
         let newClass;
         if (classData.is_public && classData.gate_id) {
-          newClass = await createClassInGate(classData.gate_id, classData, token);
+          const { gate_id, ...cleanedClassData } = classData;
+          newClass = await createClassInGate(gate_id, cleanedClassData, token);
         } else {
           newClass = await createClass(
             {
               ...classData,
-              is_public: classData.is_public ?? false,
-              visibility: classData.visibility || (classData.is_public ? "public" : "private"),
-              gate_id: classData.is_public ? classData.gate_id : undefined,
+              visibility: classData.visibility || "private",
               settings: {
-                max_boards: classData.settings?.max_boards || 100,
-                max_members: classData.settings?.max_members || 50,
+                max_members: classData.settings?.max_members || 100,
                 board_creation_cost: classData.settings?.board_creation_cost || 50,
-                tweet_cost: classData.settings?.tweet_cost || 1,
-                allow_invites: classData.settings?.allow_invites ?? true,
-                require_approval: classData.settings?.require_approval ?? false,
                 ai_moderation_enabled: classData.settings?.ai_moderation_enabled ?? true,
                 auto_archive_after: classData.settings?.auto_archive_after || 30,
+                ...classData.settings,
               },
             },
             token
           );
         }
         if (!newClass) throw new Error("Failed to create class");
+        const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setClasses((prev) => [...prev, newClass]);
-          setLastUpdated(Date.now());
+          setLastUpdated(timestamp);
         });
         classListCache.clear();
         classItemCache.clear();
@@ -363,13 +374,13 @@ export const useClasses = (token, onLogout, navigate) => {
   /**
    * Update an existing class
    * @param {string} classId - Class ID
-   * @param {object} classData - Data to update
+   * @param {object} classData - Updated class data
    * @param {number} [retryCount=0] - Retry count
    * @returns {Promise<object|null>} Updated class or null if error
    */
   const updateExistingClass = useCallback(
     async (classId, classData, retryCount = 0) => {
-      if (!token || !classId || !classData?.name?.trim()) {
+      if (!token || !classId?.trim() || !classData?.name?.trim()) {
         setError(
           !token
             ? ERROR_MESSAGES.AUTH_REQUIRED
@@ -379,24 +390,13 @@ export const useClasses = (token, onLogout, navigate) => {
         );
         return null;
       }
-      if (classData.is_public && !classData.gate_id) {
-        setError(ERROR_MESSAGES.GATE_ID_MISSING);
-        return null;
-      }
 
       setLoading(true);
       setError(null);
 
       try {
         const { class_id, ...updateData } = classData;
-        const updatedClass = await updateClass(
-          classId,
-          {
-            ...updateData,
-            gate_id: classData.is_public ? classData.gate_id : undefined,
-          },
-          token
-        );
+        const updatedClass = await updateClass(classId, updateData, token);
         if (!updatedClass) throw new Error("Failed to update class");
         const cacheKey = `${CACHE_VERSION}:${classId}`;
         ReactDOM.unstable_batchedUpdates(() => {
@@ -438,7 +438,7 @@ export const useClasses = (token, onLogout, navigate) => {
    */
   const updateClassStatusById = useCallback(
     async (classId, statusData, retryCount = 0) => {
-      if (!token || !classId || !statusData) {
+      if (!token || !classId?.trim() || !statusData) {
         setError(
           !token
             ? ERROR_MESSAGES.AUTH_REQUIRED
@@ -487,14 +487,14 @@ export const useClasses = (token, onLogout, navigate) => {
   );
 
   /**
-   * Delete a class
+   * Delete an existing class
    * @param {string} classId - Class ID
    * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<boolean|null>} True if successful, null if error
+   * @returns {Promise<boolean|null>} True if deleted, null if error
    */
   const deleteExistingClass = useCallback(
     async (classId, retryCount = 0) => {
-      if (!token || !classId) {
+      if (!token || !classId?.trim()) {
         setError(token ? ERROR_MESSAGES.CLASS_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
@@ -543,8 +543,8 @@ export const useClasses = (token, onLogout, navigate) => {
    * @returns {Promise<object|null>} Updated class or null if error
    */
   const addMemberToClass = useCallback(
-    async (classId, { username, role = "member" }, retryCount = 0) => {
-      if (!token || !classId || !username?.trim()) {
+    async (classId, { username, role = "viewer" }, retryCount = 0) => {
+      if (!token || !classId?.trim() || !username?.trim()) {
         setError(
           !token
             ? ERROR_MESSAGES.AUTH_REQUIRED
@@ -559,26 +559,18 @@ export const useClasses = (token, onLogout, navigate) => {
       setError(null);
 
       try {
-        const classItem = await addClassMember(classId, { username, role }, token);
-        if (!classItem) throw new Error("Failed to add member");
+        const updatedClass = await addClassMember(classId, { username, role }, token);
+        if (!updatedClass) throw new Error("Failed to add member");
         const cacheKey = `${CACHE_VERSION}:${classId}`;
         ReactDOM.unstable_batchedUpdates(() => {
-          setMembers(normalizeMembers(classItem.members));
-          setClassItem((prev) => (prev?.class_id === classId ? classItem : prev));
-          setClasses((prev) => prev.map((c) => (c.class_id === classId ? classItem : c)));
+          setMembers(normalizeMembers(updatedClass.members));
+          setClassItem((prev) => (prev?.class_id === classId ? updatedClass : prev));
+          setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
           setLastUpdated(Date.now());
         });
-        classListCache.forEach((value, key) => {
-          if (value.classes.some((c) => c.class_id === classId)) {
-            classListCache.set(key, {
-              ...value,
-              classes: value.classes.map((c) => (c.class_id === classId ? classItem : c)),
-              timestamp: Date.now(),
-            });
-          }
-        });
-        classItemCache.set(cacheKey, { ...classItem, timestamp: Date.now() });
-        return classItem;
+        classListCache.clear();
+        classItemCache.set(cacheKey, { ...updatedClass, timestamp: Date.now() });
+        return updatedClass;
       } catch (err) {
         if (err.status === 429 && retryCount < 3) {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
@@ -602,7 +594,7 @@ export const useClasses = (token, onLogout, navigate) => {
    */
   const removeMemberFromClass = useCallback(
     async (classId, username, retryCount = 0) => {
-      if (!token || !classId || !username) {
+      if (!token || !classId?.trim() || !username?.trim()) {
         setError(
           !token
             ? ERROR_MESSAGES.AUTH_REQUIRED
@@ -617,26 +609,18 @@ export const useClasses = (token, onLogout, navigate) => {
       setError(null);
 
       try {
-        const classItem = await removeClassMember(classId, username, token);
-        if (!classItem) throw new Error("Failed to remove member");
+        const updatedClass = await removeClassMember(classId, username, token);
+        if (!updatedClass) throw new Error("Failed to remove member");
         const cacheKey = `${CACHE_VERSION}:${classId}`;
         ReactDOM.unstable_batchedUpdates(() => {
-          setMembers(normalizeMembers(classItem.members));
-          setClassItem((prev) => (prev?.class_id === classId ? classItem : prev));
-          setClasses((prev) => prev.map((c) => (c.class_id === classId ? classItem : c)));
+          setMembers(normalizeMembers(updatedClass.members));
+          setClassItem((prev) => (prev?.class_id === classId ? updatedClass : prev));
+          setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
           setLastUpdated(Date.now());
         });
-        classListCache.forEach((value, key) => {
-          if (value.classes.some((c) => c.class_id === classId)) {
-            classListCache.set(key, {
-              ...value,
-              classes: value.classes.map((c) => (c.class_id === classId ? classItem : c)),
-              timestamp: Date.now(),
-            });
-          }
-        });
-        classItemCache.set(cacheKey, { ...classItem, timestamp: Date.now() });
-        return classItem;
+        classListCache.clear();
+        classItemCache.set(cacheKey, { ...updatedClass, timestamp: Date.now() });
+        return updatedClass;
       } catch (err) {
         if (err.status === 429 && retryCount < 3) {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
@@ -661,7 +645,7 @@ export const useClasses = (token, onLogout, navigate) => {
    */
   const updateMemberRole = useCallback(
     async (classId, username, role, retryCount = 0) => {
-      if (!token || !classId || !username || !role) {
+      if (!token || !classId?.trim() || !username?.trim() || !role?.trim()) {
         setError(
           !token
             ? ERROR_MESSAGES.AUTH_REQUIRED
@@ -678,26 +662,18 @@ export const useClasses = (token, onLogout, navigate) => {
       setError(null);
 
       try {
-        const classItem = await updateClassMember(classId, username, { role }, token);
-        if (!classItem) throw new Error("Failed to update member role");
+        const updatedClass = await updateClassMember(classId, username, { role }, token);
+        if (!updatedClass) throw new Error("Failed to update member role");
         const cacheKey = `${CACHE_VERSION}:${classId}`;
         ReactDOM.unstable_batchedUpdates(() => {
-          setMembers(normalizeMembers(classItem.members));
-          setClassItem((prev) => (prev?.class_id === classId ? classItem : prev));
-          setClasses((prev) => prev.map((c) => (c.class_id === classId ? classItem : c)));
+          setMembers(normalizeMembers(updatedClass.members));
+          setClassItem((prev) => (prev?.class_id === classId ? updatedClass : prev));
+          setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
           setLastUpdated(Date.now());
         });
-        classListCache.forEach((value, key) => {
-          if (value.classes.some((c) => c.class_id === classId)) {
-            classListCache.set(key, {
-              ...value,
-              classes: value.classes.map((c) => (c.class_id === classId ? classItem : c)),
-              timestamp: Date.now(),
-            });
-          }
-        });
-        classItemCache.set(cacheKey, { ...classItem, timestamp: Date.now() });
-        return classItem;
+        classListCache.clear();
+        classItemCache.set(cacheKey, { ...updatedClass, timestamp: Date.now() });
+        return updatedClass;
       } catch (err) {
         if (err.status === 429 && retryCount < 3) {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
@@ -720,7 +696,7 @@ export const useClasses = (token, onLogout, navigate) => {
    */
   const fetchClassMembersList = useCallback(
     async (classId, signal) => {
-      if (!token || !classId) {
+      if (!token || !classId?.trim()) {
         setError(token ? ERROR_MESSAGES.CLASS_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
@@ -758,7 +734,7 @@ export const useClasses = (token, onLogout, navigate) => {
    */
   const toggleFavoriteClass = useCallback(
     async (classId, isFavorited, retryCount = 0) => {
-      if (!token || !classId) {
+      if (!token || !classId?.trim()) {
         setError(token ? ERROR_MESSAGES.CLASS_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
@@ -808,8 +784,30 @@ export const useClasses = (token, onLogout, navigate) => {
       classListCache.clear();
       classItemCache.clear();
       resetState();
+      return;
     }
-  }, [token, resetState]);
+
+    const controller = new AbortController();
+    let timeoutId;
+
+    const fetchData = async () => {
+      try {
+        await fetchClassesList({}, controller.signal);
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          console.error("Initial fetch classes error:", err);
+        }
+      }
+    };
+
+    // Debounce fetch to prevent multiple rapid calls
+    timeoutId = setTimeout(fetchData, 100);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
+  }, [token, fetchClassesList, resetState]);
 
   return useMemo(
     () => ({
@@ -860,3 +858,5 @@ export const useClasses = (token, onLogout, navigate) => {
     ]
   );
 };
+
+export default useClasses;

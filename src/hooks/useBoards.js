@@ -994,8 +994,30 @@ export const useBoards = (token, onLogout, navigate) => {
       boardListCache.clear();
       boardItemCache.clear();
       resetState();
+      return;
     }
-  }, [token, resetState]);
+
+    const controller = new AbortController();
+    let timeoutId;
+
+    const fetchData = async () => {
+      try {
+        await fetchBoardsList({}, controller.signal);
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          console.error("Initial fetch boards error:", err);
+        }
+      }
+    };
+
+    // Debounce fetch to prevent multiple rapid calls
+    timeoutId = setTimeout(fetchData, 100);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
+  }, [token, fetchBoardsList, resetState]);
 
   return useMemo(
     () => ({
