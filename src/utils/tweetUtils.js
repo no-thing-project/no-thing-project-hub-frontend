@@ -1,39 +1,77 @@
+/**
+ * @module normalizeTweet
+ * @description Utility function to normalize tweet data for consistent frontend usage.
+ */
+
+/**
+ * Normalizes tweet data for frontend consistency.
+ * @param {Object} tweet
+ * @param {Object} currentUser
+ * @returns {Object}
+ */
 export const normalizeTweet = (tweet, currentUser) => {
-  // Validate that tweet is an object
-  if (!tweet || typeof tweet !== "object") {
-    console.warn("Invalid tweet input for normalization:", tweet);
+  if (!tweet || typeof tweet !== 'object') {
+    console.warn('Invalid tweet input:', tweet);
     return {
-      tweet_id: "",
-      content: { type: "text", value: "" },
-      user: {
-        anonymous_id: currentUser?.anonymous_id || "",
-        username: "",
-      },
+      tweet_id: '',
+      content: { type: 'text', value: '', metadata: { files: [], hashtags: [], mentions: [] } },
+      user: { anonymous_id: currentUser?.anonymous_id || '', username: currentUser?.username || '' },
+      position: { x: 0, y: 0 },
+      parent_tweet_id: null,
+      child_tweet_ids: [],
+      is_anonymous: false,
       liked_by: [],
       likedByUser: false,
-      likes: 0,
-      x: 0,
-      y: 0,
+      stats: { likes: 0, like_count: 0, view_count: 0 },
+      created_at: new Date().toISOString(),
       timestamp: new Date().toISOString(),
-      status: "approved",
+      status: 'approved',
+      scheduled_at: null,
+      reminder: null,
+      is_pinned: false,
+      shared: [],
       editable_until: new Date(Date.now() + 15 * 60 * 1000),
     };
   }
 
+  const content = tweet.content || { type: 'text', value: '', metadata: {} };
+  const metadata = {
+    files: content.metadata?.files || [],
+    hashtags: content.metadata?.hashtags || [],
+    mentions: content.metadata?.mentions || [],
+    style: content.metadata?.style || {},
+    poll_options: content.metadata?.poll_options || [],
+    event_details: content.metadata?.event_details || {},
+    quote_ref: content.metadata?.quote_ref || null,
+    embed_data: content.metadata?.embed_data || null,
+  };
+
   return {
-    ...tweet,
-    user: tweet.user || {
-      anonymous_id: tweet.anonymous_id || currentUser?.anonymous_id || "",
-      username: tweet.username || (tweet.is_anonymous ? "Anonymous" : ""),
+    tweet_id: tweet.tweet_id || '',
+    content: { type: content.type || 'text', value: content.value || '', metadata },
+    user: {
+      anonymous_id: tweet.anonymous_id || currentUser?.anonymous_id || '',
+      username: tweet.is_anonymous ? 'Anonymous' : tweet.username || currentUser?.username || '',
     },
-    content: tweet.content || { type: "text", value: "" },
+    position: { x: tweet.position?.x || 0, y: tweet.position?.y || 0 },
+    parent_tweet_id: tweet.parent_tweet_id || null,
+    child_tweet_ids: tweet.child_tweet_ids || [],
+    children: tweet.children || [],
+    is_anonymous: tweet.is_anonymous || false,
     liked_by: tweet.liked_by || [],
-    likedByUser: (tweet.liked_by || []).some((u) => u.user_id === currentUser?.anonymous_id),
-    likes: tweet.stats?.like_count !== undefined ? tweet.stats.like_count : (tweet.liked_by || []).length,
-    x: tweet.position?.x || 0,
-    y: tweet.position?.y || 0,
-    timestamp: tweet.timestamp || new Date().toISOString(),
-    status: tweet.status || "approved",
-    editable_until: tweet.editable_until || new Date(Date.now() + 15 * 60 * 1000), // 15 minutes edit window
+    likedByUser: (tweet.liked_by || []).some(u => u.anonymous_id === currentUser?.anonymous_id) || false,
+    stats: {
+      likes: tweet.stats?.like_count ?? (tweet.liked_by || []).length,
+      like_count: tweet.stats?.like_count ?? (tweet.liked_by || []).length,
+      view_count: tweet.stats?.view_count ?? 0,
+    },
+    created_at: tweet.created_at || new Date().toISOString(),
+    timestamp: tweet.timestamp || tweet.created_at || new Date().toISOString(),
+    status: tweet.status || 'approved',
+    scheduled_at: tweet.scheduled_at || null,
+    reminder: tweet.reminder || null,
+    is_pinned: tweet.is_pinned || false,
+    shared: tweet.shared || [],
+    editable_until: tweet.editable_until || new Date(Date.now() + 15 * 60 * 1000),
   };
 };

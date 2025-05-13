@@ -1,13 +1,12 @@
-/**
- * @module tweetsApi
- * @description API client for tweet-related operations with caching and enhanced error handling.
- */
-import api from "./apiClient";
-import { handleApiError } from "./apiClient";
+import api from './apiClient';
+import { handleApiError } from './apiClient';
+import { uuidSchema, contentSchema, positionSchema, reminderSchema, validatePayload } from '../constants/validations';
+import Joi from 'joi';
 
-// Simple in-memory cache with TTL
-const cache = new Map();
+// Cache configuration
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_VERSION = 'v1';
+const cache = new Map();
 
 /**
  * Clears expired cache entries.
@@ -25,85 +24,48 @@ const clearExpiredCache = () => {
  * @param {Object} params
  * @returns {string}
  */
-const getCacheKey = (endpoint, params) =>
-  `${endpoint}:${JSON.stringify(params)}`;
+const getCacheKey = (endpoint, params) => `${CACHE_VERSION}:${endpoint}:${JSON.stringify(params)}`;
 
 /**
- * Fetches all tweets for a board with caching.
- * @param {string} boardId - UUID of the board.
- * @param {string} token - Authentication token.
- * @param {Object} [options] - Query options.
- * @param {string} [options.status="approved"] - Tweet status filter.
- * @param {number} [options.page=1] - Page number.
- * @param {number} [options.limit=20] - Items per page.
- * @param {string} [options.sort="created_at:desc"] - Sort order.
- * @param {boolean} [options.pinned_only=false] - Filter pinned tweets.
- * @param {string} [options.hashtag] - Hashtag filter.
- * @param {string} [options.mention] - Mention filter.
- * @param {AbortSignal} [signal] - Abort signal for request cancellation.
- * @returns {Promise<{ tweets: Array, board: Object, pagination: Object }>}
+ * Invalidates cache entries by prefix.
+ * @param {string} prefix
  */
-export const fetchTweetsApi = async (
-  boardId,
-  token,
-  options = {
-    status: "approved",
-    page: 1,
-    limit: 20,
-    sort: "created_at:desc",
-    pinned_only: false,
-  },
-  signal
-) => {
-  if (!boardId) throw new Error("Board ID is required");
-  const cacheKey = getCacheKey(`tweets:${boardId}`, options);
-  clearExpiredCache();
-
-  const cached = cache.get(cacheKey);
-  if (cached && cached.expiry > Date.now()) {
-    return cached.data;
-  }
-
-  try {
-    const { status, page, limit, sort, pinned_only, hashtag, mention } = options;
-    const response = await api.get(`/api/v1/tweets/${boardId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      params: { status, page, limit, sort, pinned_only, hashtag, mention },
-      signal,
-    });
-    const data = response.data.content || { tweets: [], board: null, pagination: {} };
-    cache.set(cacheKey, { data, expiry: Date.now() + CACHE_TTL });
-    return data;
-  } catch (err) {
-    return handleApiError(err, { tweets: [], board: null, pagination: {} });
+const invalidateCacheByPrefix = (prefix) => {
+  for (const key of cache.keys()) {
+    if (key.startsWith(`${CACHE_VERSION}:${prefix}`)) cache.delete(key);
   }
 };
 
 /**
- * Fetches a single tweet by ID with caching.
- * @param {string} boardId - UUID of the board.
- * @param {string} tweetId - UUID of the tweet.
- * @param {string} token - Authentication token.
- * @param {AbortSignal} [signal] - Abort signal for request cancellation.
+ * Generic API request handler with caching.
+ * @param {string} method
+ * @param {string} endpoint
+ * @param {string} token
+ * @param {Object} [options]
  * @returns {Promise<Object>}
  */
-export const fetchTweetById = async (boardId, tweetId, token, signal) => {
-  if (!boardId || !tweetId) throw new Error("Board ID and Tweet ID are required");
-  const cacheKey = getCacheKey(`tweet:${boardId}:${tweetId}`, {});
+const apiRequest = async (method, endpoint, token, { payload, params, signal, useCache = false, invalidatePrefixes = [] } = {}) => {
+  const cacheKey = useCache ? getCacheKey(endpoint, params || {}) : null;
   clearExpiredCache();
 
-  const cached = cache.get(cacheKey);
-  if (cached && cached.expiry > Date.now()) {
-    return cached.data;
+  if (useCache && cache.has(cacheKey)) {
+    const cached = cache.get(cacheKey);
+    if (cached.expiry > Date.now()) return cached.data;
   }
 
   try {
-    const response = await api.get(`/api/v1/tweets/${boardId}/${tweetId}`, {
+    const config = {
       headers: { Authorization: `Bearer ${token}` },
+      params,
       signal,
-    });
+    };
+    const response = await api[method](endpoint, payload, config);
     const data = response.data.content || response.data;
-    cache.set(cacheKey, { data, expiry: Date.now() + CACHE_TTL });
+
+    if (useCache) {
+      cache.set(cacheKey, { data, expiry: Date.now() + CACHE_TTL });
+    }
+    invalidatePrefixes.forEach(prefix => invalidateCacheByPrefix(prefix));
     return data;
   } catch (err) {
     return handleApiError(err, {});
@@ -111,334 +73,270 @@ export const fetchTweetById = async (boardId, tweetId, token, signal) => {
 };
 
 /**
- * Creates a tweet with optional file uploads.
- * @param {string} boardId - UUID of the board.
- * @param {Object|string} content - Tweet content (string or object with type, value, metadata).
- * @param {number} x - X position.
- * @param {number} y - Y position.
- * @param {string|null} [parentTweetId=null] - Parent tweet UUID.
- * @param {boolean} [isAnonymous=false] - Whether the tweet is anonymous.
- * @param {string} [status="approved"] - Tweet status.
- * @param {string|null} [scheduledAt=null] - Scheduled publish time (ISO string).
- * @param {Object} [access] - Access control settings.
- * @param {Array<File>} [files=[]] - Files to upload.
- * @param {string} token - Authentication token.
- * @returns {Promise<Object>}
+ * Fetches all tweets for a board.
+ * @param {string} boardId - UUID of the board
+ * @param {string} token - Authorization token
+ * @param {Object} [options] - Query parameters (status, page, limit, sort, pinned_only, hashtag, mention)
+ * @param {AbortSignal} [signal] - Abort signal for request cancellation
+ * @returns {Promise<Object>} - Tweets, board info, and pagination
  */
-export const createTweetApi = async (
+export const fetchTweetsApi = (boardId, token, options = {}, signal) => {
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  return apiRequest('get', `/api/v1/tweets/${boardId}`, token, {
+    params: options,
+    signal,
+    useCache: true,
+  });
+};
+
+/**
+ * Fetches a single tweet by ID.
+ * @param {string} boardId - UUID of the board
+ * @param {string} tweetId - UUID of the tweet
+ * @param {string} token - Authorization token
+ * @param {AbortSignal} [signal] - Abort signal for request cancellation
+ * @returns {Promise<Object>} - Tweet details
+ */
+export const fetchTweetById = (boardId, tweetId, token, signal) => {
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+  return apiRequest('get', `/api/v1/tweets/${boardId}/${tweetId}`, token, { signal, useCache: true });
+};
+
+/**
+ * Creates a new tweet.
+ * @param {string} boardId - UUID of the board
+ * @param {Object} content - Tweet content (type, value, metadata)
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ * @param {string|null} parentTweetId - UUID of parent tweet (optional)
+ * @param {boolean} isAnonymous - Whether the tweet is anonymous
+ * @param {string} [status] - Tweet status (pending/approved)
+ * @param {string|null} [scheduledAt] - ISO date for scheduling
+ * @param {Object|null} [reminder] - Reminder settings
+ * @param {Object[]} [files] - Array of file metadata from mediaApi
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} - Created tweet
+ */
+export const createTweetApi = (
   boardId,
   content,
   x,
   y,
-  parentTweetId = null,
-  isAnonymous = false,
-  status = "approved",
-  scheduledAt = null,
-  access,
-  files = [],
+  parentTweetId,
+  isAnonymous,
+  status,
+  scheduledAt,
+  reminder,
+  files,
   token
 ) => {
-  if (!boardId) throw new Error("Board ID is required");
-  if (!content || (typeof content === "string" && content.trim() === "")) {
-    throw new Error("Content is required");
-  }
-  if (typeof x !== "number" || isNaN(x) || typeof y !== "number" || isNaN(y)) {
-    throw new Error("Valid position (x, y) is required");
-  }
-  try {
-    const payload = {
-      content: typeof content === "string" ? { type: "text", value: content } : content,
-      position: { x, y },
-      parent_tweet_id: parentTweetId || null,
-      is_anonymous: isAnonymous,
-      status,
-      scheduled_at: scheduledAt || null,
-      access,
-      hashtags: content?.metadata?.hashtags || [],
-      mentions: content?.metadata?.mentions || [],
-    };
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(contentSchema, content, 'Invalid content');
+  validatePayload(positionSchema, { x, y }, 'Invalid position');
+  if (parentTweetId) validatePayload(uuidSchema, parentTweetId, 'Invalid parentTweetId');
+  if (reminder) validatePayload(reminderSchema, reminder, 'Invalid reminder');
 
-    const formData = new FormData();
-    formData.append("data", JSON.stringify(payload));
-    files.forEach((file, index) => {
-      formData.append(`files[${index}]`, file);
-    });
+  const payload = {
+    content,
+    position: { x, y },
+    is_anonymous: isAnonymous,
+    status,
+    scheduled_at: scheduledAt || null,
+  };
+  if (parentTweetId) payload.parent_tweet_id = parentTweetId;
+  if (reminder) payload.reminder = reminder;
 
-    const response = await api.post(`/api/v1/tweets/${boardId}`, formData, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": files.length ? "multipart/form-data" : "application/json",
-      },
-    });
-    cache.clear(); // Invalidate cache on create
-    return response.data.content || response.data;
-  } catch (err) {
-    return handleApiError(err, {});
-  }
+  return apiRequest('post', `/api/v1/tweets/${boardId}`, token, {
+    payload,
+    invalidatePrefixes: [`tweets:${boardId}`],
+  });
 };
 
 /**
- * Updates a tweet with optional file uploads.
- * @param {string} boardId - UUID of the board.
- * @param {string} tweetId - UUID of the tweet.
- * @param {Object} updates - Fields to update.
- * @param {Object|string} [updates.content] - Updated content.
- * @param {Object} [updates.position] - Updated position.
- * @param {string} [updates.status] - Updated status.
- * @param {string|null} [updates.scheduled_at] - Updated schedule time.
- * @param {Object} [updates.access] - Updated access settings.
- * @param {Array<string>} [updates.hashtags] - Updated hashtags.
- * @param {Array<string>} [updates.mentions] - Updated mentions.
- * @param {Object} [updates.reminder] - Updated reminder settings.
- * @param {Array<File>} [files=[]] - Files to upload.
- * @param {string} token - Authentication token.
- * @returns {Promise<Object>}
+ * Updates an existing tweet.
+ * @param {string} boardId - UUID of the board
+ * @param {string} tweetId - UUID of the tweet
+ * @param {Object} updates - Fields to update (content, position, status, scheduled_at, reminder)
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} - Updated tweet
  */
-export const updateTweetApi = async (boardId, tweetId, updates, files = [], token) => {
-  if (!boardId || !tweetId) throw new Error("Board ID and Tweet ID are required");
-  try {
-    const { content, position, status, scheduled_at, access, hashtags, mentions, reminder } = updates;
-    const payload = {};
-    if (content) payload.content = content === "string" ? { type: "text", value: content } : content;
-    if (position) payload.position = position;
-    if (status) payload.status = status;
-    if (scheduled_at !== undefined) payload.scheduled_at = scheduled_at;
-    if (access) payload.access = access;
-    if (hashtags) payload.hashtags = hashtags;
-    if (mentions) payload.mentions = mentions;
-    if (reminder) payload.reminder = reminder;
+export const updateTweetApi = (boardId, tweetId, updates, token) => {
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+  validatePayload(
+    Joi.object({
+      content: contentSchema.optional(),
+      position: positionSchema.optional(),
+      status: Joi.string().valid('pending', 'approved').optional(),
+      scheduled_at: Joi.date().iso().min('now').allow(null).optional(),
+      reminder: reminderSchema.optional(),
+    }).min(0),
+    updates,
+    'Invalid updates'
+  );
 
-    const formData = new FormData();
-    formData.append("data", JSON.stringify(payload));
-    files.forEach((file, index) => {
-      formData.append(`files[${index}]`, file);
-    });
-
-    const response = await api.put(`/api/v1/tweets/${boardId}/${tweetId}`, formData, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": files.length ? "multipart/form-data" : "application/json",
-      },
-    });
-    cache.clear(); // Invalidate cache on update
-    return response.data.content || response.data;
-  } catch (err) {
-    return handleApiError(err, {});
-  }
+  return apiRequest('put', `/api/v1/tweets/${boardId}/${tweetId}`, token, {
+    payload: updates,
+    invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`, `comments:${boardId}:${tweetId}`],
+  });
 };
 
 /**
- * Toggles like status for a tweet.
- * @param {string} tweetId - UUID of the tweet.
- * @param {boolean} isLiked - Current like status.
- * @param {string} token - Authentication token.
- * @returns {Promise<Object>}
+ * Toggles like/dislike for a tweet.
+ * @param {string} tweetId - UUID of the tweet
+ * @param {boolean} isLiked - Current like state
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} - Updated tweet
  */
-export const toggleLikeApi = async (tweetId, isLiked, token) => {
-  if (!tweetId) throw new Error("Tweet ID is required");
-  try {
-    const endpoint = isLiked ? "dislike" : "like";
-    const response = await api.post(`/api/v1/tweets/${tweetId}/${endpoint}`, {}, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    cache.clear(); // Invalidate cache on like/dislike
-    return response.data.content || response.data;
-  } catch (err) {
-    return handleApiError(err, {});
-  }
+export const toggleLikeApi = (tweetId, isLiked, token) => {
+  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+  const endpoint = isLiked ? 'dislike' : 'like';
+  return apiRequest('post', `/api/v1/tweets/${tweetId}/${endpoint}`, token, {
+    invalidatePrefixes: [`tweet:${tweetId}`],
+  });
 };
 
 /**
  * Deletes a tweet.
- * @param {string} boardId - UUID of the board.
- * @param {string} tweetId - UUID of the tweet.
- * @param {string} token - Authentication token.
- * @returns {Promise<Object>}
+ * @param {string} boardId - UUID of the board
+ * @param {string} tweetId - UUID of the tweet
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} - Deletion confirmation
  */
-export const deleteTweetApi = async (boardId, tweetId, token) => {
-  if (!boardId || !tweetId) throw new Error("Board ID and Tweet ID are required");
-  try {
-    const response = await api.delete(`/api/v1/tweets/${boardId}/${tweetId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    cache.clear(); // Invalidate cache on delete
-    return response.data.content || response.data;
-  } catch (err) {
-    return handleApiError(err, {});
-  }
+export const deleteTweetApi = (boardId, tweetId, token) => {
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+  return apiRequest('delete', `/api/v1/tweets/${boardId}/${tweetId}`, token, {
+    invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`, `comments:${boardId}:${tweetId}`],
+  });
 };
 
 /**
- * Fetches comments for a tweet with caching.
- * @param {string} boardId - UUID of the board.
- * @param {string} tweetId - UUID of the tweet.
- * @param {string} token - Authentication token.
- * @param {Object} [options] - Query options.
- * @param {number} [options.page=1] - Page number.
- * @param {number} [options.limit=20] - Items per page.
- * @param {string} [options.sort="created_at:desc"] - Sort order.
- * @param {AbortSignal} [signal] - Abort signal for request cancellation.
- * @returns {Promise<{ comments: Array, pagination: Object }>}
+ * Fetches comments for a tweet.
+ * @param {string} boardId - UUID of the board
+ * @param {string} tweetId - UUID of the tweet
+ * @param {string} token - Authorization token
+ * @param {Object} [options] - Query parameters (page, limit, sort)
+ * @param {AbortSignal} [signal] - Abort signal for request cancellation
+ * @returns {Promise<Object>} - Comments and pagination
  */
-export const getTweetCommentsApi = async (
-  boardId,
-  tweetId,
-  token,
-  options = { page: 1, limit: 20, sort: "created_at:desc" },
-  signal
-) => {
-  if (!boardId || !tweetId) throw new Error("Board ID and Tweet ID are required");
-  const cacheKey = getCacheKey(`comments:${boardId}:${tweetId}`, options);
-  clearExpiredCache();
-
-  const cached = cache.get(cacheKey);
-  if (cached && cached.expiry > Date.now()) {
-    return cached.data;
-  }
-
-  try {
-    const { page, limit, sort } = options;
-    const response = await api.get(`/api/v1/tweets/${boardId}/${tweetId}/comments`, {
-      headers: { Authorization: `Bearer ${token}` },
-      params: { page, limit, sort },
-      signal,
-    });
-    const data = response.data.content || { comments: [], pagination: {} };
-    cache.set(cacheKey, { data, expiry: Date.now() + CACHE_TTL });
-    return data;
-  } catch (err) {
-    return handleApiError(err, { comments: [], pagination: {} });
-  }
+export const getTweetCommentsApi = (boardId, tweetId, token, options = {}, signal) => {
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+  return apiRequest('get', `/api/v1/tweets/${boardId}/${tweetId}/comments`, token, {
+    params: options,
+    signal,
+    useCache: true,
+  });
 };
 
 /**
- * Updates tweet status.
- * @param {string} boardId - UUID of the board.
- * @param {string} tweetId - UUID of the tweet.
- * @param {string} status - New status.
- * @param {string} token - Authentication token.
- * @returns {Promise<Object>}
+ * Updates the status of a tweet.
+ * @param {string} boardId - UUID of the board
+ * @param {string} tweetId - UUID of the tweet
+ * @param {string} status - New status (pending/approved)
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} - Updated tweet
  */
-export const updateTweetStatusApi = async (boardId, tweetId, status, token) => {
-  if (!boardId || !tweetId) throw new Error("Board ID and Tweet ID are required");
-  try {
-    const payload = { status };
-    const response = await api.put(`/api/v1/tweets/${boardId}/${tweetId}/status`, payload, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    cache.clear(); // Invalidate cache on status update
-    return response.data.content || response.data;
-  } catch (err) {
-    return handleApiError(err, {});
-  }
+export const updateTweetStatusApi = (boardId, tweetId, status, token) => {
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+  validatePayload(
+    Joi.string().valid('pending', 'approved', 'rejected', 'announcement', 'reminder', 'pinned', 'archived').required(),
+    status,
+    'Invalid status'
+  );
+
+  return apiRequest('put', `/api/v1/tweets/${boardId}/${tweetId}/status`, token, {
+    payload: { status },
+    invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`],
+  });
 };
 
 /**
  * Moves a tweet to another board.
- * @param {string} tweetId - UUID of the tweet.
- * @param {string} targetBoardId - UUID of the target board.
- * @param {string} token - Authentication token.
- * @returns {Promise<Object>}
+ * @param {string} tweetId - UUID of the tweet
+ * @param {string} targetBoardId - UUID of the target board
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} - Updated tweet
  */
-export const moveTweetApi = async (tweetId, targetBoardId, token) => {
-  if (!tweetId || !targetBoardId) throw new Error("Tweet ID and Target Board ID are required");
-  try {
-    const payload = { targetBoardId };
-    const response = await api.post(`/api/v1/tweets/${tweetId}/move`, payload, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    cache.clear(); // Invalidate cache on move
-    return response.data.content || response.data;
-  } catch (err) {
-    return handleApiError(err, {});
-  }
+export const moveTweetApi = (tweetId, targetBoardId, token) => {
+  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+  validatePayload(uuidSchema, targetBoardId, 'Invalid targetBoardId');
+
+  return apiRequest('post', `/api/v1/tweets/${tweetId}/move`, token, {
+    payload: { targetBoardId },
+    invalidatePrefixes: ['tweets:', 'tweet:'],
+  });
 };
 
 /**
  * Pins a tweet.
- * @param {string} boardId - UUID of the board.
- * @param {string} tweetId - UUID of the tweet.
- * @param {string} token - Authentication token.
- * @returns {Promise<Object>}
+ * @param {string} boardId - UUID of the board
+ * @param {string} tweetId - UUID of the tweet
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} - Updated tweet
  */
-export const pinTweetApi = async (boardId, tweetId, token) => {
-  if (!boardId || !tweetId) throw new Error("Board ID and Tweet ID are required");
-  try {
-    const response = await api.post(`/api/v1/tweets/${boardId}/${tweetId}/pin`, {}, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    cache.clear(); // Invalidate cache on pin
-    return response.data.content || response.data;
-  } catch (err) {
-    return handleApiError(err, {});
-  }
+export const pinTweetApi = (boardId, tweetId, token) => {
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+
+  return apiRequest('post', `/api/v1/tweets/${boardId}/${tweetId}/pin`, token, {
+    invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`],
+  });
 };
 
 /**
  * Unpins a tweet.
- * @param {string} boardId - UUID of the board.
- * @param {string} tweetId - UUID of the tweet.
- * @param {string} token - Authentication token.
- * @returns {Promise<Object>}
+ * @param {string} boardId - UUID of the board
+ * @param {string} tweetId - UUID of the tweet
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} - Updated tweet
  */
-export const unpinTweetApi = async (boardId, tweetId, token) => {
-  if (!boardId || !tweetId) throw new Error("Board ID and Tweet ID are required");
-  try {
-    const response = await api.post(`/api/v1/tweets/${boardId}/${tweetId}/unpin`, {}, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    cache.clear(); // Invalidate cache on unpin
-    return response.data.content || response.data;
-  } catch (err) {
-    return handleApiError(err, {});
-  }
+export const unpinTweetApi = (boardId, tweetId, token) => {
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+
+  return apiRequest('post', `/api/v1/tweets/${boardId}/${tweetId}/unpin`, token, {
+    invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`],
+  });
 };
 
 /**
  * Sets a reminder for a tweet.
- * @param {string} boardId - UUID of the board.
- * @param {string} tweetId - UUID of the tweet.
- * @param {Object} reminder - Reminder settings.
- * @param {string} reminder.schedule - ISO date string.
- * @param {string} [reminder.recurrence="none"] - Recurrence type.
- * @param {string} token - Authentication token.
- * @returns {Promise<Object>}
+ * @param {string} boardId - UUID of the board
+ * @param {string} tweetId - UUID of the tweet
+ * @param {Object} reminder - Reminder settings (schedule, recurrence)
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} - Updated tweet
  */
-export const setReminderApi = async (boardId, tweetId, reminder, token) => {
-  if (!boardId || !tweetId) throw new Error("Board ID and Tweet ID are required");
-  try {
-    const payload = {
-      schedule: reminder.schedule,
-      recurrence: reminder.recurrence || "none",
-    };
-    const response = await api.put(`/api/v1/tweets/${boardId}/${tweetId}/reminder`, payload, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    cache.clear(); // Invalidate cache on reminder set
-    return response.data.content || response.data;
-  } catch (err) {
-    return handleApiError(err, {});
-  }
+export const setReminderApi = (boardId, tweetId, reminder, token) => {
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+  validatePayload(reminderSchema, reminder, 'Invalid reminder');
+
+  return apiRequest('put', `/api/v1/tweets/${boardId}/${tweetId}/reminder`, token, {
+    payload: reminder,
+    invalidatePrefixes: [`tweet:${boardId}:${tweetId}`],
+  });
 };
 
 /**
- * Shares a tweet.
- * @param {string} boardId - UUID of the board.
- * @param {string} tweetId - UUID of the tweet.
- * @param {string} sharedTo - Share destination (e.g., "board:UUID" or "external:platform").
- * @param {string} token - Authentication token.
- * @returns {Promise<Object>}
+ * Shares a tweet to a destination.
+ * @param {string} boardId - UUID of the board
+ * @param {string} tweetId - UUID of the tweet
+ * @param {string} sharedTo - Destination (e.g., user ID or platform)
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} - Updated tweet
  */
-export const shareTweetApi = async (boardId, tweetId, sharedTo, token) => {
-  if (!boardId || !tweetId || !sharedTo) throw new Error("Board ID, Tweet ID, and Shared To are required");
-  try {
-    const payload = { shared_to: sharedTo };
-    const response = await api.post(`/api/v1/tweets/${boardId}/${tweetId}/share`, payload, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    cache.clear(); // Invalidate cache on share
-    return response.data.content || response.data;
-  } catch (err) {
-    return handleApiError(err, {});
-  }
+export const shareTweetApi = (boardId, tweetId, sharedTo, token) => {
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+  validatePayload(Joi.string().required(), sharedTo, 'Invalid sharedTo');
+
+  return apiRequest('post', `/api/v1/tweets/${boardId}/${tweetId}/share`, token, {
+    payload: { shared_to: sharedTo },
+    invalidatePrefixes: [`tweet:${boardId}:${tweetId}`],
+  });
 };
