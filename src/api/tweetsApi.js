@@ -184,7 +184,7 @@ export const updateTweetApi = (boardId, tweetId, updates, token) => {
       status: Joi.string().valid('pending', 'approved').optional(),
       scheduled_at: Joi.date().iso().min('now').allow(null).optional(),
       reminder: reminderSchema.optional(),
-    }).min(0),
+    }).min(1),
     updates,
     'Invalid updates'
   );

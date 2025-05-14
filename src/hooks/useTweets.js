@@ -294,8 +294,13 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
 
   const updateExistingTweet = useCallback(
     async (tweetId, updates, files = [], onProgress) => {
-      if (!boardId || !tweetId) {
-        setError('Board ID and Tweet ID are required');
+      // Validate inputs
+      if (!boardId) {
+        setError('Board ID is required');
+        return null;
+      }
+      if (!tweetId) {
+        setError('Tweet ID is required');
         return null;
       }
       const currentTweet = tweets.find(t => t.tweet_id === tweetId);
@@ -303,75 +308,114 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         setError('Tweet not found');
         return null;
       }
-
-      const optimisticUpdates = {
+      if (!updates || Object.keys(updates).length === 0) {
+        setError('At least one update field is required');
+        return null;
+      }
+      if (updates.content && !updates.content.value && !files.length) {
+        setError('Content must have text or files');
+        return null;
+      }
+      if (updates.position && (isNaN(updates.position.x) || isNaN(updates.position.y))) {
+        setError('Valid position is required');
+        return null;
+      }
+  
+      // Construct optimistic content object
+      const contentObj = updates.content
+        ? {
+            type: files.length
+              ? files[0].type.split('/')[0]
+              : (updates.content.type || currentTweet.content.type || 'text'),
+            value: typeof updates.content === 'string' ? updates.content : (updates.content.value || ''),
+            metadata: {
+              files: currentTweet.content.metadata.files || [],
+              hashtags: updates.content.metadata?.hashtags || currentTweet.content.metadata.hashtags || [],
+              mentions: updates.content.metadata?.mentions || currentTweet.content.metadata.mentions || [],
+              ...(updates.content.metadata?.style && { style: updates.content.metadata.style }),
+              ...(updates.content.metadata?.poll_options && { poll_options: updates.content.metadata.poll_options }),
+              ...(updates.content.metadata?.event_details && { event_details: updates.content.metadata.event_details }),
+              ...(updates.content.metadata?.quote_ref && { quote_ref: updates.content.metadata.quote_ref }),
+              ...(updates.content.metadata?.embed_data && { embed_data: updates.content.metadata.embed_data }),
+            },
+          }
+        : currentTweet.content;
+  
+      // Create optimistic tweet
+      const optimisticTweet = {
+        ...currentTweet,
         ...updates,
-        content: updates.content
-          ? typeof updates.content === 'string'
-            ? { type: 'text', value: updates.content, metadata: currentTweet.content.metadata }
-            : {
-                ...updates.content,
-                metadata: {
-                  ...updates.content.metadata,
-                  files: files.length
-                    ? files.map(f => ({
-                        fileKey: `temp-${f.name}`,
-                        url: URL.createObjectURL(f),
-                        contentType: f.type,
-                        size: f.size,
-                      }))
-                    : currentTweet.content.metadata.files,
-                },
-              }
-          : currentTweet.content,
+        content: contentObj,
+        position: updates.position || currentTweet.position,
+        status: updates.status || currentTweet.status,
+        scheduled_at: updates.scheduled_at !== undefined ? updates.scheduled_at : currentTweet.scheduled_at,
+        reminder: updates.reminder || currentTweet.reminder,
+        updated_at: new Date().toISOString(),
       };
-
-      setTweets(prev =>
-        prev.map(t =>
-          t.tweet_id === tweetId
-            ? {
-                ...t,
-                ...optimisticUpdates,
-                content: { ...optimisticUpdates.content, metadata: { ...optimisticUpdates.content.metadata } },
-              }
-            : t
-        )
-      );
-
+  
+      // Optimistic update
+      setTweets(prev => {
+        const normalizedOptimistic = normalizeTweet(optimisticTweet, currentUser);
+        return prev.map(t => (t.tweet_id === tweetId ? normalizedOptimistic : t));
+      });
+  
       try {
+        // Upload files if present
         const uploadedFiles = files.length ? await uploadFiles(files, token, onProgress) : [];
+  
+        // Construct final updates
         const finalUpdates = {
           ...updates,
           content: updates.content
             ? {
-                ...updates.content,
+                ...contentObj,
+                type: uploadedFiles.length
+                  ? uploadedFiles[0].contentType.split('/')[0]
+                  : contentObj.type,
                 metadata: {
-                  ...updates.content.metadata,
-                  files: [...(currentTweet.content.metadata.files || []), ...uploadedFiles],
+                  ...contentObj.metadata,
+                  files: uploadedFiles.length
+                    ? uploadedFiles // Replace files with uploaded ones
+                    : contentObj.metadata.files,
                 },
               }
             : undefined,
+          position: updates.position ? { x: updates.position.x, y: updates.position.y } : undefined,
+          status: updates.status,
+          scheduled_at: updates.scheduled_at !== undefined ? updates.scheduled_at : undefined,
+          reminder: updates.reminder ? { ...updates.reminder, enabled: !!updates.reminder.schedule } : undefined,
         };
+  
+        // Remove undefined fields to satisfy updateTweetBodySchema
+        Object.keys(finalUpdates).forEach(key => finalUpdates[key] === undefined && delete finalUpdates[key]);
+  
+        // Call updateTweetApi
         const updatedTweet = await updateTweetApi(boardId, tweetId, finalUpdates, token);
-        const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
-
+  
+        // Normalize and validate response
+        const normalizedTweet = normalizeTweet(
+          { ...updatedTweet, position: updatedTweet.position || currentTweet.position },
+          currentUser
+        );
+  
         if (!normalizedTweet.tweet_id) {
           throw new Error('Failed to update tweet: Invalid tweet ID');
         }
-
+  
+        // Update state with normalized tweet
         setTweets(prev => prev.map(t => (t.tweet_id === tweetId ? normalizedTweet : t)));
         lastValidTweets.current = tweets;
         setTweet(normalizedTweet);
         return normalizedTweet;
       } catch (err) {
+        // Rollback optimistic update
+        setTweets(prev => prev.map(t => (t.tweet_id === tweetId ? normalizeTweet(currentTweet, currentUser) : t)));
         handleAuthError(err);
-        setTweets(prev =>
-          prev.map(t => (t.tweet_id === tweetId ? normalizeTweet(currentTweet, currentUser) : t))
-        );
+        setError(err.message || 'Failed to update tweet');
         throw err;
       }
     },
-    [boardId, token, currentUser, handleAuthError, tweets]
+    [boardId, token, currentUser, handleAuthError, tweets, setTweet]
   );
 
   const toggleLikeTweet = useCallback(
