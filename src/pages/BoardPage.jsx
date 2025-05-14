@@ -46,14 +46,6 @@ import { actionButtonStyles, cancelButtonStyle } from "../styles/BaseStyles";
 import AnimatedPoints from "../components/AnimatedPoints/AnimatedPoints";
 import PointsDeductionAnimation from "../components/PointsDeductionAnimation/PointsDeductionAnimation";
 
-const debounce = (func, wait) => {
-  let timeout;
-  return (...args) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-};
-
 const BoardPage = memo(() => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
@@ -89,20 +81,28 @@ const BoardPage = memo(() => {
   const [prevPoints, setPrevPoints] = useState(pointsData?.total_points || 0);
   const [pointsSpent, setPointsSpent] = useState(0);
 
-  const userRole = useMemo(() => {
-    if (!isAuthenticated || !boardItem) return "viewer";
-    if (boardItem.creator_id === authData?.anonymous_id) return "owner";
-    if (boardItem.is_public) return "viewer";
-    return members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || "viewer";
-  }, [isAuthenticated, authData?.anonymous_id, boardItem, members]);
+  const debounce = useMemo(
+    () => (func, wait) => {
+      let timeout;
+      return (...args) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func(...args), wait);
+      };
+    },
+    []
+  );
 
-  const isFavorited = useMemo(() => {
-    return boardItem?.favorited_by?.some((user) => user.anonymous_id === authData?.anonymous_id) ?? false;
-  }, [boardItem?.favorited_by, authData?.anonymous_id]);
+  const userRole = boardItem
+    ? boardItem.creator_id === authData?.anonymous_id
+      ? "owner"
+      : boardItem.is_public
+      ? "viewer"
+      : members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || "viewer"
+    : "viewer";
 
-  const boardVisibility = useMemo(() => {
-    return boardItem?.visibility ?? (boardItem?.is_public ? "public" : "private");
-  }, [boardItem?.visibility, boardItem?.is_public]);
+  const isFavorited = boardItem?.favorited_by?.some((user) => user.anonymous_id === authData?.anonymous_id) ?? false;
+
+  const boardVisibility = boardItem?.visibility ?? (boardItem?.is_public ? "public" : "private");
 
   const loadData = useCallback(
     async (signal) => {
@@ -143,30 +143,36 @@ const BoardPage = memo(() => {
           ? "Board not found."
           : `Failed to load board data: ${err.message}`;
         showNotification(message, "error");
+        setTimeout(() => navigate("/boards"), 2000); // Delay navigation to show notification
         setIsFullyLoaded(true);
       }
     },
-    [isAuthenticated, token, board_id, fetchBoard, fetchBoardMembersList, getPoints, fetchGatesList, fetchClassesList, showNotification, userRole]
+    [isAuthenticated, token, board_id, fetchBoard, fetchBoardMembersList, getPoints, fetchGatesList, fetchClassesList, showNotification, userRole, navigate]
   );
 
-  const debouncedLoadData = useMemo(() => debounce(loadData, 300), [loadData]);
+  const debouncedLoadData = useMemo(() => debounce(loadData, 300), [debounce, loadData]);
 
   useEffect(() => {
     const controller = new AbortController();
     debouncedLoadData(controller.signal);
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      setPointsSpent(0); // Reset points on unmount
+    };
   }, [debouncedLoadData]);
 
   useEffect(() => {
-    if (boardError) showNotification(boardError, "error");
-    if (gatesError) showNotification(gatesError, "error");
-    if (classesError) showNotification(classesError, "error");
+    const errors = [boardError, gatesError, classesError].filter(Boolean);
+    if (errors.length) {
+      errors.forEach((err) => showNotification(err, "error"));
+    }
   }, [boardError, gatesError, classesError, showNotification]);
 
   useEffect(() => {
     if (pointsData?.total_points !== undefined && pointsData.total_points < prevPoints) {
       setPointsSpent(prevPoints - pointsData.total_points);
-      setTimeout(() => setPointsSpent(0), 700);
+      const timeout = setTimeout(() => setPointsSpent(0), 700);
+      return () => clearTimeout(timeout); // Clear timeout on unmount
     }
     setPrevPoints(pointsData?.total_points ?? 0);
   }, [pointsData?.total_points, prevPoints]);
@@ -312,23 +318,23 @@ const BoardPage = memo(() => {
   const handleMenuOpen = useCallback((event) => setAnchorEl(event.currentTarget), []);
   const handleMenuClose = useCallback(() => setAnchorEl(null), []);
 
+  const childBoardMenuItems = useMemo(() => {
+    const uniqueChildIds = [...new Set(boardItem?.child_board_ids?.filter(id => id) || [])];
+    return uniqueChildIds.map((childId) => (
+      <MenuItem
+        key={childId}
+        onClick={() => {
+          navigate(`/board/${childId}`);
+          handleMenuClose();
+        }}
+      >
+        Go to Child Board {childId.slice(0, 8)}
+      </MenuItem>
+    ));
+  }, [boardItem?.child_board_ids, navigate, handleMenuClose]);
+
   if (authLoading || boardsLoading || !isFullyLoaded) {
     return <LoadingSpinner />;
-  }
-
-  if (!isAuthenticated) {
-    showNotification("Please log in to view boards.", "error");
-    navigate("/login");
-    return null;
-  }
-
-  if (!boardItem || (boardItem.is_public === false && userRole === "viewer")) {
-    showNotification(
-      boardItem ? "You do not have access to this private board." : "Board not found.",
-      "error"
-    );
-    navigate("/boards");
-    return null;
   }
 
   return (
@@ -353,7 +359,7 @@ const BoardPage = memo(() => {
             exit={{ opacity: 0, scale: 0.8 }}
             transition={{ duration: 0.2 }}
           >
-            <Tooltip title="Board Visibility">
+            <Tooltip title={`Board visibility: ${boardVisibility}`}>
               <IconButton aria-label={`Board visibility: ${boardVisibility}`}>
                 {boardVisibility === "public" ? <Public /> : <Lock />}
               </IconButton>
@@ -452,22 +458,24 @@ const BoardPage = memo(() => {
             </motion.div>
           )}
 
-          {boardItem.child_board_ids?.length > 0 && (
+          {childBoardMenuItems.length > 0 && (
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               transition={{ duration: 0.2 }}
             >
-              <IconButton
-                aria-controls="board-menu"
-                aria-haspopup="true"
-                onClick={handleMenuOpen}
-                sx={{ bgcolor: "background.paper", "&:hover": { bgcolor: "action.hover" } }}
-                aria-label="Open child boards menu"
-              >
-                <MoreVert />
-              </IconButton>
+              <Tooltip title="Child Boards">
+                <IconButton
+                  aria-controls="board-menu"
+                  aria-haspopup="true"
+                  onClick={handleMenuOpen}
+                  sx={{ bgcolor: "background.paper", "&:hover": { bgcolor: "action.hover" } }}
+                  aria-label="Open child boards menu"
+                >
+                  <MoreVert />
+                </IconButton>
+              </Tooltip>
             </motion.div>
           )}
         </AnimatePresence>
@@ -478,17 +486,7 @@ const BoardPage = memo(() => {
           onClose={handleMenuClose}
           sx={{ "& .MuiMenu-paper": { borderRadius: theme.shape.borderRadiusMedium } }}
         >
-          {boardItem.child_board_ids?.filter(childId => childId).map((childId) => (
-            <MenuItem
-              key={childId}
-              onClick={() => {
-                navigate(`/board/${childId}`);
-                handleMenuClose();
-              }}
-            >
-              Go to Child Board {childId.slice(0, 8)}
-            </MenuItem>
-          ))}
+          {childBoardMenuItems}
         </Menu>
       </Box>
 

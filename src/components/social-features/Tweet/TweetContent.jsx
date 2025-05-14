@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Paper,
   Typography,
@@ -21,6 +21,7 @@ const TweetContent = React.memo(
   ({
     tweet,
     currentUser,
+    userRole,
     onLike,
     onDelete,
     onReply,
@@ -49,45 +50,47 @@ const TweetContent = React.memo(
       }
     }, [tweet.stats?.likes]);
 
-    const handleMouseEnter = () => {
+    const handleMouseEnter = useCallback(() => {
       setHovered(true);
       if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
         onReplyHover(tweet.parent_tweet_id || tweet.tweet_id);
       }
-    };
+    }, [onReplyHover, tweet.parent_tweet_id, tweet.tweet_id, tweet.child_tweet_ids]);
 
-    const handleMouseLeave = () => {
+    const handleMouseLeave = useCallback(() => {
       setHovered(false);
       if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
         onReplyHover(null);
       }
-    };
+    }, [onReplyHover, tweet.parent_tweet_id, tweet.child_tweet_ids]);
 
-    const handleMenuOpen = event => {
+    const handleMenuOpen = useCallback(event => {
       event.stopPropagation();
       setAnchorEl(event.currentTarget);
-    };
+    }, []);
 
-    const handleMenuClose = () => setAnchorEl(null);
+    const handleMenuClose = useCallback(() => setAnchorEl(null), []);
 
-    const handleOpenModal = event => {
+    const handleOpenModal = useCallback(event => {
       event.stopPropagation();
       setOpenModal(true);
-    };
+    }, []);
 
-    const handleCloseModal = () => setOpenModal(false);
+    const handleCloseModal = useCallback(() => setOpenModal(false), []);
 
-    // Allow editing if bypassOwnership is true, IDs match, or usernames match (fallback)
-    const canEdit =
-      bypassOwnership ||
+    // Allow editing if user is moderator, administrator, tweet owner, or bypassOwnership is true
+    const canEdit = bypassOwnership || (
+      ['moderator', 'administrator'].includes(userRole) ||
       (tweet?.anonymous_id || tweet.user_id) === currentUser?.anonymous_id ||
-      (tweet.username && currentUser.username && tweet.username === currentUser.username);
+      (tweet.username && currentUser.username && tweet.username === currentUser.username)
+    );
 
-    // Debug log to check menu visibility
+    // Debug log for menu visibility
     useEffect(() => {
       console.log('TweetContent Debug:', {
         tweetId: tweet.tweet_id,
         canEdit,
+        userRole,
         tweetAnonymousId: tweet.anonymous_id,
         tweetUserId: tweet.user_id,
         tweetUsername: tweet.username,
@@ -106,9 +109,10 @@ const TweetContent = React.memo(
       currentUser.username,
       canEdit,
       bypassOwnership,
+      userRole,
     ]);
 
-    const renderContent = content => {
+    const renderContent = useCallback((content) => {
       const files = content.metadata?.files || [];
 
       switch (content.type) {
@@ -237,7 +241,7 @@ const TweetContent = React.memo(
         default:
           return <Typography color="error">Unsupported content type</Typography>;
       }
-    };
+    }, [handleOpenModal]);
 
     return (
       <>
@@ -343,17 +347,19 @@ const TweetContent = React.memo(
               >
                 {tweet.stats?.likes || 0}
               </Typography>
-              <IconButton
-                size="small"
-                onClick={e => {
-                  e.stopPropagation();
-                  onReply(tweet);
-                }}
-                sx={{ ml: 1 }}
-                aria-label="Reply to tweet"
-              >
-                <ChatBubbleOutlineIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-              </IconButton>
+              {canEdit && ( // Show reply button only for authorized users
+                <IconButton
+                  size="small"
+                  onClick={e => {
+                    e.stopPropagation();
+                    onReply(tweet);
+                  }}
+                  sx={{ ml: 1 }}
+                  aria-label="Reply to tweet"
+                >
+                  <ChatBubbleOutlineIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                </IconButton>
+              )}
               {replyCount > 0 && (
                 <Typography variant="caption" sx={{ marginLeft: 0.5, color: 'text.secondary' }}>
                   {replyCount}
@@ -533,6 +539,7 @@ TweetContent.propTypes = {
     anonymous_id: PropTypes.string,
     username: PropTypes.string,
   }).isRequired,
+  userRole: PropTypes.string.isRequired,
   onLike: PropTypes.func.isRequired,
   onDelete: PropTypes.func.isRequired,
   onReply: PropTypes.func.isRequired,

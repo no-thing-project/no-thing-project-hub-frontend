@@ -1,9 +1,9 @@
-import React, { useRef, memo, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import Draggable from 'react-draggable';
 import debounce from 'lodash.debounce';
 
-const DraggableTweet = ({ tweet, onStop, children, currentUser, bypassOwnership = false }) => {
+const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypassOwnership = false }) => {
   const nodeRef = useRef(null);
   const [localPosition, setLocalPosition] = useState({
     x: tweet.position?.x || 0,
@@ -16,35 +16,31 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, bypassOwnership 
     y: tweet.position?.y || 0,
   });
 
+  // Update position only when tweet.position changes and not dragging
   useEffect(() => {
     if (!dragging && !justDroppedRef.current) {
-      if (
-        localPosition.x !== (tweet.position?.x || 0) ||
-        localPosition.y !== (tweet.position?.y || 0)
-      ) {
-        setLocalPosition({
-          x: tweet.position?.x || 0,
-          y: tweet.position?.y || 0,
-        });
-        previousPosition.current = {
-          x: tweet.position?.x || 0,
-          y: tweet.position?.y || 0,
-        };
+      const newX = tweet.position?.x || 0;
+      const newY = tweet.position?.y || 0;
+      if (localPosition.x !== newX || localPosition.y !== newY) {
+        setLocalPosition({ x: newX, y: newY });
+        previousPosition.current = { x: newX, y: newY };
       }
     }
   }, [tweet.position?.x, tweet.position?.y, dragging]);
 
-  // Allow dragging if bypassOwnership is true, IDs match, or usernames match (fallback)
-  const isDraggable =
-    bypassOwnership ||
+  // Allow dragging if user is moderator, administrator, tweet owner, or bypassOwnership is true
+  const isDraggable = bypassOwnership || (
+    ['moderator', 'administrator'].includes(userRole) ||
     (tweet?.anonymous_id || tweet.user_id) === currentUser.anonymous_id ||
-    (tweet.username && currentUser.username && tweet.username === currentUser.username);
+    (tweet.username && currentUser.username && tweet.username === currentUser.username)
+  );
 
-  // Debug log to check draggability
+  // Debug log for draggability
   useEffect(() => {
     console.log('DraggableTweet Debug:', {
       tweetId: tweet.tweet_id,
       isDraggable,
+      userRole,
       tweetAnonymousId: tweet.anonymous_id,
       tweetUserId: tweet.user_id,
       tweetUsername: tweet.username,
@@ -65,9 +61,11 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, bypassOwnership 
     isDraggable,
     bypassOwnership,
     tweet.position,
+    userRole,
   ]);
 
-  const debouncedOnStop = useRef(
+  // Debounced onStop handler
+  const debouncedOnStop = useCallback(
     debounce((e, data) => {
       if (
         data.x !== previousPosition.current.x ||
@@ -76,8 +74,16 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, bypassOwnership 
         previousPosition.current = { x: data.x, y: data.y };
         onStop && onStop(e, data);
       }
-    }, 150)
-  ).current;
+    }, 150),
+    [onStop]
+  );
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      debouncedOnStop.cancel();
+    };
+  }, [debouncedOnStop]);
 
   return (
     <Draggable
@@ -140,7 +146,8 @@ DraggableTweet.propTypes = {
     anonymous_id: PropTypes.string,
     username: PropTypes.string,
   }).isRequired,
+  userRole: PropTypes.string.isRequired,
   bypassOwnership: PropTypes.bool,
 };
 
-export default memo(DraggableTweet);
+export default React.memo(DraggableTweet);

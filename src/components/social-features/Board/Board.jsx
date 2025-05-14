@@ -126,7 +126,7 @@ const Board = ({
           null,
           files,
           onProgress,
-          currentUser.anonymous_id // Pass creator's ID
+          currentUser.anonymous_id
         );
         await onPointsUpdate();
         showNotification('Tweet created successfully!', 'success');
@@ -278,11 +278,12 @@ const Board = ({
           tweet={tweet}
           onStop={(e, data) => updateExistingTweet(tweet.tweet_id, { position: { x: data.x, y: data.y } })}
           currentUser={currentUser}
-          bypassOwnership={true} // Temporary workaround
+          userRole={userRole}
         >
           <TweetContent
             tweet={tweet}
             currentUser={currentUser}
+            userRole={userRole}
             onLike={toggleLikeTweet}
             onDelete={deleteExistingTweet}
             onReply={handleReply}
@@ -300,7 +301,6 @@ const Board = ({
             isParentHighlighted={tweet.tweet_id === highlightedParentId || tweet.parent_tweet_id === highlightedParentId}
             replyCount={replyCount}
             parentTweetText={parentTweet?.content?.value || null}
-            bypassOwnership={true} // Temporary workaround
           />
         </MemoizedDraggableTweet>
       );
@@ -308,6 +308,7 @@ const Board = ({
   }, [
     validTweets,
     currentUser,
+    userRole,
     updateExistingTweet,
     toggleLikeTweet,
     deleteExistingTweet,
