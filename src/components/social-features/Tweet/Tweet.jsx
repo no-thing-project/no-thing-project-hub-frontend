@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo, memo } from 'react';
 import PropTypes from 'prop-types';
 import Draggable from 'react-draggable';
-import debounce from 'lodash.debounce';
+import debounce from 'lodash/debounce';
 
 const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypassOwnership = false }) => {
   const nodeRef = useRef(null);
@@ -13,7 +13,7 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
   });
   const [dragging, setDragging] = useState(false);
 
-  // Sync local position with tweet.position when not dragging or just dropped
+  // Sync local position with tweet.position when not dragging
   useEffect(() => {
     if (!dragging && !justDroppedRef.current) {
       const newX = tweet.position?.x ?? 0;
@@ -27,18 +27,19 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
 
   // Determine if the tweet is draggable
   const isDraggable = useMemo(() => {
-    if (tweet.is_pinned) return false;
+    if (!tweet || tweet.is_pinned) return false;
     if (bypassOwnership || ['moderator', 'administrator'].includes(userRole)) return true;
-    const isOwner =
+    return (
       tweet.anonymous_id === currentUser?.anonymous_id ||
       tweet.user_id === currentUser?.anonymous_id ||
-      (tweet.username && currentUser?.username && tweet.username === currentUser.username);
-    return isOwner;
+      (tweet.username && currentUser?.username && tweet.username === currentUser.username)
+    );
   }, [
-    tweet.is_pinned,
-    tweet.anonymous_id,
-    tweet.user_id,
-    tweet.username,
+    tweet,
+    tweet?.is_pinned,
+    tweet?.anonymous_id,
+    tweet?.user_id,
+    tweet?.username,
     bypassOwnership,
     userRole,
     currentUser?.anonymous_id,
@@ -67,28 +68,44 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
   // Cleanup debounce on unmount
   useEffect(() => () => debouncedOnStop.cancel(), [debouncedOnStop]);
 
+  const handleStart = useCallback(() => {
+    if (!isDraggable) return false;
+    setDragging(true);
+    return true;
+  }, [isDraggable]);
+
+  const handleDrag = useCallback((_, data) => {
+    setLocalPosition({ x: data.x, y: data.y });
+  }, []);
+
+  const handleStop = useCallback(
+    (e, data) => {
+      if (!isDraggable) return;
+      setDragging(false);
+      justDroppedRef.current = true;
+
+      // Ignore menu clicks
+      if (e.target.closest('.tweet-menu')) return;
+
+      setTimeout(() => (justDroppedRef.current = false), 100);
+      debouncedOnStop(e, data);
+    },
+    [isDraggable, debouncedOnStop]
+  );
+
+  if (!tweet || !tweet.tweet_id) {
+    console.warn('Invalid tweet in DraggableTweet:', tweet);
+    return null;
+  }
+
   return (
     <Draggable
       nodeRef={nodeRef}
       position={localPosition}
       disabled={!isDraggable}
-      onStart={() => {
-        if (!isDraggable) return false;
-        setDragging(true);
-        return true;
-      }}
-      onDrag={(_, data) => setLocalPosition({ x: data.x, y: data.y })}
-      onStop={(e, data) => {
-        if (!isDraggable) return;
-        setDragging(false);
-        justDroppedRef.current = true;
-
-        // Ignore menu clicks
-        if (e.target.closest('.tweet-menu')) return;
-
-        setTimeout(() => (justDroppedRef.current = false), 100);
-        debouncedOnStop(e, data);
-      }}
+      onStart={handleStart}
+      onDrag={handleDrag}
+      onStop={handleStop}
     >
       <div
         ref={nodeRef}
@@ -132,6 +149,11 @@ DraggableTweet.propTypes = {
   }).isRequired,
   userRole: PropTypes.string.isRequired,
   bypassOwnership: PropTypes.bool,
+};
+
+DraggableTweet.defaultProps = {
+  bypassOwnership: false,
+  onStop: () => {},
 };
 
 export default memo(DraggableTweet);

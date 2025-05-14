@@ -42,6 +42,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   }, []);
 
   const validateFile = useCallback(file => {
+    if (!file) return false;
     if (!SUPPORTED_MIME_TYPES.includes(file.type)) {
       setError(`Unsupported file type: ${file.type}`);
       return false;

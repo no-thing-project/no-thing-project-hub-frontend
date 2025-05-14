@@ -84,7 +84,9 @@ const Board = ({
     handleTouchEnd,
   } = useBoardInteraction(boardMainRef);
 
-  // Preload parent tweets
+  const isFetching = useRef(false);
+
+  // Fetch tweets and preload parent tweets
   useEffect(() => {
     const controller = new AbortController();
     const preloadParents = async () => {
@@ -96,7 +98,9 @@ const Board = ({
         const parents = await Promise.all(parentPromises);
         const parentMap = parentIds.reduce((acc, id, index) => {
           const parent = parents[index];
-          acc[id] = parent?.content?.value || 'Parent tweet not found';
+          if (parent?.content?.value) {
+            acc[id] = parent.content.value;
+          }
           return acc;
         }, {});
         setPreloadParentTweets(prev => ({ ...prev, ...parentMap }));
@@ -107,18 +111,32 @@ const Board = ({
       }
     };
 
-    if (tweets.length) {
-      preloadParents();
-    }
-    fetchTweets({}, controller.signal).catch(err => {
-      if (err.name !== 'AbortError') {
-        showNotification('Failed to load tweets', 'error');
+    const loadTweets = async () => {
+      if (isFetching.current) return;
+      isFetching.current = true;
+      try {
+        await fetchTweets({}, controller.signal);
+        if (tweets.length) {
+          await preloadParents();
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          showNotification('Failed to load tweets', 'error');
+        }
+      } finally {
+        isFetching.current = false;
       }
-    });
+    };
 
-    return () => controller.abort();
-  }, [fetchTweets, fetchTweet, tweets, showNotification]);
+    loadTweets();
 
+    return () => {
+      controller.abort();
+      isFetching.current = false;
+    };
+  }, [fetchTweets, fetchTweet, showNotification, boardId]);
+
+  // Center board after loading
   useEffect(() => {
     if (!loading && boardMainRef.current) {
       centerBoard();
@@ -245,13 +263,12 @@ const Board = ({
           await moveTweet(editTweetModal.tweet_id, selectedBoardId);
         }
         setEditTweetModal(null);
-        await fetchTweets();
         showNotification('Tweet updated successfully!', 'success');
       } catch (err) {
         showNotification('Failed to save tweet', 'error');
       }
     },
-    [editTweetModal, updateExistingTweet, moveTweet, fetchTweets, newStatus, selectedBoardId, showNotification]
+    [editTweetModal, updateExistingTweet, moveTweet, newStatus, selectedBoardId, showNotification]
   );
 
   const getRelatedTweetIds = useCallback(
@@ -274,6 +291,7 @@ const Board = ({
     return `${baseSize}vw`;
   }, [boardTitle]);
 
+  // Filter valid tweets with strict validation
   const validTweets = useMemo(() => {
     if (!Array.isArray(tweets)) {
       console.warn('Tweets is not an array:', tweets);
@@ -281,8 +299,32 @@ const Board = ({
     }
     const seenIds = new Set();
     return tweets.filter(tweet => {
-      if (!tweet?.tweet_id || !tweet?.position || seenIds.has(tweet.tweet_id)) {
+      if (
+        !tweet ||
+        !tweet.tweet_id ||
+        typeof tweet.tweet_id !== 'string' ||
+        tweet.tweet_id.trim() === '' ||
+        seenIds.has(tweet.tweet_id)
+      ) {
         console.warn('Invalid or duplicate tweet:', tweet);
+        return false;
+      }
+      if (
+        !tweet.position ||
+        typeof tweet.position.x !== 'number' ||
+        typeof tweet.position.y !== 'number'
+      ) {
+        console.warn('Invalid tweet position:', tweet);
+        return false;
+      }
+      if (
+        !tweet.content ||
+        typeof tweet.content !== 'object' ||
+        !tweet.content.type ||
+        tweet.content.value === undefined ||
+        !tweet.content.metadata
+      ) {
+        console.warn('Invalid tweet content:', tweet);
         return false;
       }
       seenIds.add(tweet.tweet_id);
@@ -537,20 +579,13 @@ const Board = ({
                   aria-label="Tweet content"
                   minRows={3}
                   inputProps={{ maxLength: MAX_TWEET_LENGTH }}
+                  error={(editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH}
+                  helperText={
+                    (editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH
+                      ? `Content exceeds ${MAX_TWEET_LENGTH} characters`
+                      : `${editTweetModal.content?.value?.length || 0}/${MAX_TWEET_LENGTH}`
+                  }
                 />
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: 'block',
-                    mt: 1,
-                    color:
-                      (editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH
-                        ? 'error.main'
-                        : 'text.secondary',
-                  }}
-                >
-                  {(editTweetModal.content?.value?.length || 0)}/{MAX_TWEET_LENGTH}
-                </Typography>
                 <FormControl fullWidth sx={{ mt: 2 }}>
                   <InputLabel>Tweet Status</InputLabel>
                   <Select
@@ -568,21 +603,23 @@ const Board = ({
                     <MenuItem value="archived">Archived</MenuItem>
                   </Select>
                 </FormControl>
-                <FormControl fullWidth sx={{ mt: 2 }}>
-                  <InputLabel>Move to Board</InputLabel>
-                  <Select
-                    value={selectedBoardId}
-                    label="Move to Board"
-                    onChange={e => setSelectedBoardId(e.target.value)}
-                    aria-label="Move to board"
-                  >
-                    {(editTweetModal.availableBoards || availableBoards).map(b => (
-                      <MenuItem key={b.board_id} value={b.board_id}>
-                        {b.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                {(editTweetModal.availableBoards || availableBoards).length > 0 && (
+                  <FormControl fullWidth sx={{ mt: 2 }}>
+                    <InputLabel>Move to Board</InputLabel>
+                    <Select
+                      value={selectedBoardId}
+                      label="Move to Board"
+                      onChange={e => setSelectedBoardId(e.target.value)}
+                      aria-label="Move to board"
+                    >
+                      {(editTweetModal.availableBoards || availableBoards).map(b => (
+                        <MenuItem key={b.board_id} value={b.board_id}>
+                          {b.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )}
               </DialogContent>
               <DialogActions>
                 <Button onClick={() => setEditTweetModal(null)} aria-label="Cancel edit tweet">
@@ -594,7 +631,7 @@ const Board = ({
                   aria-label="Save edited tweet"
                   disabled={
                     !editTweetModal.content?.value?.trim() ||
-                    editTweetModal.content?.value?.length > MAX_TWEET_LENGTH
+                    (editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH
                   }
                 >
                   Save

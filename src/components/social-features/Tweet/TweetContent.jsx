@@ -166,6 +166,7 @@ const TweetContent = ({
 
   const renderContent = useMemo(() => {
     const files = tweet.content?.metadata?.files || [];
+    const hasText = !!tweet.content?.value;
     const imageFiles = files.filter(f => f.contentType?.startsWith('image') || f.url?.match(/\.(jpg|jpeg|png|gif)$/i));
     const videoFiles = files.filter(f => f.contentType?.startsWith('video') || f.url?.match(/\.(mp4|webm)$/i));
     const audioFiles = files.filter(f => f.contentType?.startsWith('audio') || f.url?.match(/\.(mp3|wav|webm)$/i));
@@ -176,8 +177,6 @@ const TweetContent = ({
         !f.contentType?.startsWith('audio') &&
         !f.url?.match(/\.(jpg|jpeg|png|gif|mp4|webm|mp3|wav)$/i)
     );
-
-    const hasText = !!tweet.content?.value;
     const hasMedia = imageFiles.length || videoFiles.length || audioFiles.length || otherFiles.length;
 
     const renderImages = () => {
@@ -359,7 +358,9 @@ const TweetContent = ({
         role="article"
         aria-labelledby={`tweet-title-${tweet.tweet_id}`}
       >
-        <Typography sx={TweetContentStyles.tweetTitle}>Tweet by {tweetAuthor}</Typography>
+        <Typography sx={TweetContentStyles.tweetTitle} id={`tweet-title-${tweet.tweet_id}`}>
+          Tweet by {tweetAuthor}
+        </Typography>
         {tweet.is_pinned && (
           <Box sx={TweetContentStyles.pinnedIconContainer}>
             <PushPinIcon sx={TweetContentStyles.pinnedIcon} />
@@ -533,27 +534,27 @@ const TweetContent = ({
         aria-labelledby="edit-tweet-dialog-title"
       >
         <DialogTitle id="edit-tweet-dialog-title">Edit Tweet</DialogTitle>
-        <DialogContent sx={TweetContentStyles.editDialogContent}>
+        <DialogContent>
           <TextField
             multiline
             fullWidth
             label="Tweet Content"
             value={editForm.content}
             onChange={e => setEditForm(prev => ({ ...prev, content: e.target.value }))}
-            sx={TweetContentStyles.editTextField}
+            sx={{ mt: 2 }}
             aria-label="Tweet content"
             minRows={3}
             inputProps={{ maxLength: MAX_TWEET_LENGTH }}
-            variant="outlined"
-            autoFocus
+            error={editForm.content.length > MAX_TWEET_LENGTH}
+            helperText={
+              editForm.content.length > MAX_TWEET_LENGTH
+                ? `Content exceeds ${MAX_TWEET_LENGTH} characters`
+                : `${editForm.content.length}/${MAX_TWEET_LENGTH}`
+            }
           />
-          <Typography variant="caption" sx={TweetContentStyles.editCharCount(editForm.content.length)}>
-            {editForm.content.length}/{MAX_TWEET_LENGTH}
-          </Typography>
-          <FormControl fullWidth sx={TweetContentStyles.editFormControl}>
-            <InputLabel id="tweet-status-label">Tweet Status</InputLabel>
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel>Tweet Status</InputLabel>
             <Select
-              labelId="tweet-status-label"
               value={editForm.status}
               label="Tweet Status"
               onChange={e => setEditForm(prev => ({ ...prev, status: e.target.value }))}
@@ -568,29 +569,23 @@ const TweetContent = ({
               <MenuItem value="archived">Archived</MenuItem>
             </Select>
           </FormControl>
-          <FormControl fullWidth sx={TweetContentStyles.editFormControl}>
-            <InputLabel id="move-to-board-label">Move to Board</InputLabel>
-            <Select
-              labelId="move-to-board-label"
-              value={editForm.boardId}
-              label="Move to Board"
-              onChange={e => setEditForm(prev => ({ ...prev, boardId: e.target.value }))}
-              aria-label="Move to board"
-              disabled={availableBoards.length === 0}
-            >
-              {availableBoards.length > 0 ? (
-                availableBoards.map(b => (
+          {availableBoards.length > 0 && (
+            <FormControl fullWidth sx={{ mt: 2 }}>
+              <InputLabel>Move to Board</InputLabel>
+              <Select
+                value={editForm.boardId}
+                label="Move to Board"
+                onChange={e => setEditForm(prev => ({ ...prev, boardId: e.target.value }))}
+                aria-label="Move to board"
+              >
+                {availableBoards.map(b => (
                   <MenuItem key={b.board_id} value={b.board_id}>
                     {b.name}
                   </MenuItem>
-                ))
-              ) : (
-                <MenuItem value="" disabled>
-                  No boards available
-                </MenuItem>
-              )}
-            </Select>
-          </FormControl>
+                ))}
+              </Select>
+            </FormControl>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseEditModal} aria-label="Cancel edit tweet">
@@ -600,13 +595,7 @@ const TweetContent = ({
             onClick={handleEditSubmit}
             variant="contained"
             aria-label="Save edited tweet"
-            disabled={
-              !editForm.content.trim() ||
-              editForm.content.length > MAX_TWEET_LENGTH ||
-              (editForm.content === (tweet.content?.value || '') &&
-                editForm.status === (tweet.status || 'approved') &&
-                editForm.boardId === (tweet.board_id || boardId || ''))
-            }
+            disabled={!editForm.content.trim() || editForm.content.length > MAX_TWEET_LENGTH}
           >
             Save
           </Button>
@@ -625,23 +614,30 @@ TweetContent.propTypes = {
       metadata: PropTypes.shape({
         files: PropTypes.arrayOf(
           PropTypes.shape({
-            url: PropTypes.string.isRequired,
-            fileKey: PropTypes.string.isRequired,
-            contentType: PropTypes.string.isRequired,
-            size: PropTypes.number.isRequired,
+            fileKey: PropTypes.string,
+            url: PropTypes.string,
+            contentType: PropTypes.string,
             duration: PropTypes.number,
           })
         ),
+        hashtags: PropTypes.arrayOf(PropTypes.string),
+        mentions: PropTypes.arrayOf(PropTypes.string),
       }),
+    }).isRequired,
+    position: PropTypes.shape({
+      x: PropTypes.number,
+      y: PropTypes.number,
     }),
+    parent_tweet_id: PropTypes.string,
+    child_tweet_ids: PropTypes.arrayOf(PropTypes.string),
+    is_anonymous: PropTypes.bool,
+    anonymous_id: PropTypes.string,
+    user_id: PropTypes.string,
     username: PropTypes.string,
     user: PropTypes.shape({
       username: PropTypes.string,
     }),
-    anonymous_id: PropTypes.string,
-    user_id: PropTypes.string,
-    parent_tweet_id: PropTypes.string,
-    child_tweet_ids: PropTypes.arrayOf(PropTypes.string),
+    created_at: PropTypes.string,
     liked_by: PropTypes.arrayOf(
       PropTypes.shape({
         anonymous_id: PropTypes.string,
@@ -654,6 +650,11 @@ TweetContent.propTypes = {
       view_count: PropTypes.number,
     }),
     status: PropTypes.string,
+    scheduled_at: PropTypes.string,
+    reminder: PropTypes.shape({
+      schedule: PropTypes.string,
+      enabled: PropTypes.bool,
+    }),
     is_pinned: PropTypes.bool,
     board_id: PropTypes.string,
   }).isRequired,
@@ -679,7 +680,7 @@ TweetContent.propTypes = {
       name: PropTypes.string.isRequired,
     })
   ),
-  boardId: PropTypes.string.isRequired,
+  boardId: PropTypes.string,
 };
 
 TweetContent.defaultProps = {
@@ -689,6 +690,7 @@ TweetContent.defaultProps = {
   bypassOwnership: false,
   relatedTweetIds: [],
   availableBoards: [],
+  boardId: '',
 };
 
 export default memo(TweetContent);

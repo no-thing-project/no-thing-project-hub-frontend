@@ -196,7 +196,7 @@ export const createTweetApi = (
   return apiRequest('post', `/api/v1/tweets/${boardId}`, token, {
     payload,
     invalidatePrefixes: [`tweets:${boardId}`],
-  }).then(response => response.data.content); // Extract tweet from backend response
+  })
 };
 
 /**
@@ -251,9 +251,6 @@ export const updateTweetStatusApi = (boardId, tweetId, status, token) => {
   return apiRequest('put', `/api/v1/tweets/${boardId}/${tweetId}/status`, token, {
     payload: { status },
     invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`, `comments:${boardId}:${tweetId}`],
-  }).then(response => {
-    console.log(`Updated status for tweet ${tweetId} to ${status}`);
-    return response; // apiRequest extracts response.data.content
   });
 };
 
