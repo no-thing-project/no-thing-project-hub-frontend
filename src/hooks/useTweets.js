@@ -136,6 +136,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       files = [],
       onProgress
     ) => {
+      // Validate inputs
       if (!boardId) {
         setError('Board ID is required');
         return null;
@@ -144,26 +145,23 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         setError('Valid position is required');
         return null;
       }
-      if (!content.value && !files.length) {
+      if (!content?.value && !files.length) {
         setError('Tweet must have text or files');
         return null;
       }
-
+  
+      // Construct content object
       const contentObj = {
-        type: content.type || 'text',
+        type: files.length ? files[0].type.split('/')[0] : (content.type || 'text'),
         value: content.value || '',
         metadata: {
           files: [],
-          hashtags: content.metadata?.hashtags || [],
-          mentions: content.metadata?.mentions || [],
-          style: content.metadata?.style || {},
-          poll_options: content.metadata?.poll_options || [],
-          event_details: content.metadata?.event_details || {},
-          quote_ref: content.metadata?.quote_ref || null,
-          embed_data: content.metadata?.embed_data || null,
+          ...(content.metadata?.hashtags?.length && { hashtags: content.metadata.hashtags }),
+          ...(content.metadata?.mentions?.length && { mentions: content.metadata.mentions }),
         },
       };
-
+  
+      // Create optimistic tweet
       const optimisticTweet = {
         tweet_id: `temp-${Date.now()}`,
         content: contentObj,
@@ -178,32 +176,37 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         stats: { likes: 0, like_count: 0, view_count: 0 },
         status,
         scheduled_at: scheduledAt,
-        reminder: reminder && reminder.schedule ? reminder : null,
+        reminder: reminder?.schedule ? reminder : null,
         is_pinned: false,
-        shared: [],
       };
-
-      setTweets(prev =>
-        parentTweetId
-          ? prev.map(t =>
-              t.tweet_id === parentTweetId
-                ? {
-                    ...t,
-                    children: [...(t.children || []), normalizeTweet(optimisticTweet, currentUser)],
-                    child_tweet_ids: [...(t.child_tweet_ids || []), optimisticTweet.tweet_id],
-                  }
-                : t
-            )
-          : [normalizeTweet(optimisticTweet, currentUser), ...prev]
-      );
-
+  
+      // Optimistic update
+      setTweets(prev => {
+        const normalizedOptimistic = normalizeTweet(optimisticTweet, currentUser);
+        if (parentTweetId) {
+          return prev.map(t =>
+            t.tweet_id === parentTweetId
+              ? {
+                  ...t,
+                  child_tweet_ids: [...(t.child_tweet_ids || []), optimisticTweet.tweet_id],
+                  children: [...(t.children || []), normalizedOptimistic],
+                }
+              : t
+          );
+        }
+        return [normalizedOptimistic, ...prev];
+      });
+  
       try {
+        // Upload files if present
         const uploadedFiles = files.length
           ? await uploadFiles(files, token, onProgress)
           : [];
+  
+        // Final content with uploaded files
         const finalContent = {
           ...contentObj,
-          type: files.length
+          type: uploadedFiles.length
             ? uploadedFiles[0].contentType.split('/')[0]
             : contentObj.type,
           metadata: {
@@ -211,8 +214,8 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
             files: uploadedFiles,
           },
         };
-        const finalReminder = reminder && reminder.schedule ? reminder : null;
-
+  
+        // Create tweet via API
         const createdTweet = await createTweetApi(
           boardId,
           finalContent,
@@ -220,62 +223,73 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           y,
           parentTweetId,
           isAnonymous,
+          currentUser.anonymous_id,
           status,
           scheduledAt,
-          finalReminder,
+          reminder?.schedule ? reminder : null,
           uploadedFiles,
           token
         );
+  
+        // Normalize and validate response
         const normalizedTweet = normalizeTweet(
           { ...createdTweet, position: createdTweet.position || { x, y } },
           currentUser
         );
-
+  
         if (!normalizedTweet.tweet_id) {
-          throw new Error('Failed to create tweet: Invalid tweet ID');
+          throw new Error('Invalid tweet ID from server');
         }
-
-        setTweets(prev =>
-          parentTweetId
-            ? prev.map(t =>
-                t.tweet_id === parentTweetId
-                  ? {
-                      ...t,
-                      children: [
-                        ...(t.children || []).filter(c => c.tweet_id !== optimisticTweet.tweet_id),
-                        normalizedTweet,
-                      ],
-                      child_tweet_ids: [
-                        ...(t.child_tweet_ids || []).filter(id => id !== optimisticTweet.tweet_id),
-                        normalizedTweet.tweet_id,
-                      ],
-                    }
-                  : t
-              )
-            : prev.map(t => (t.tweet_id === optimisticTweet.tweet_id ? normalizedTweet : t))
-        );
-
+  
+        // Replace optimistic tweet
+        setTweets(prev => {
+          if (parentTweetId) {
+            return prev.map(t =>
+              t.tweet_id === parentTweetId
+                ? {
+                    ...t,
+                    child_tweet_ids: [
+                      ...(t.child_tweet_ids || []).filter(id => id !== optimisticTweet.tweet_id),
+                      normalizedTweet.tweet_id,
+                    ],
+                    children: [
+                      ...(t.children || []).filter(c => c.tweet_id !== optimisticTweet.tweet_id),
+                      normalizedTweet,
+                    ],
+                  }
+                : t
+            );
+          }
+          return prev.map(t =>
+            t.tweet_id === optimisticTweet.tweet_id ? normalizedTweet : t
+          );
+        });
+  
         lastValidTweets.current = tweets;
         return normalizedTweet;
       } catch (err) {
+        // Rollback optimistic update
+        setTweets(prev => {
+          if (parentTweetId) {
+            return prev.map(t =>
+              t.tweet_id === parentTweetId
+                ? {
+                    ...t,
+                    child_tweet_ids: (t.child_tweet_ids || []).filter(id => id !== optimisticTweet.tweet_id),
+                    children: (t.children || []).filter(c => c.tweet_id !== optimisticTweet.tweet_id),
+                  }
+                : t
+            );
+          }
+          return prev.filter(t => t.tweet_id !== optimisticTweet.tweet_id);
+        });
+  
         handleAuthError(err);
-        setTweets(prev =>
-          parentTweetId
-            ? prev.map(t =>
-                t.tweet_id === parentTweetId
-                  ? {
-                      ...t,
-                      children: (t.children || []).filter(c => c.tweet_id !== optimisticTweet.tweet_id),
-                      child_tweet_ids: (t.child_tweet_ids || []).filter(id => id !== optimisticTweet.tweet_id),
-                    }
-                  : t
-              )
-            : prev.filter(t => t.tweet_id !== optimisticTweet.tweet_id)
-        );
+        setError(err.message || 'Failed to create tweet');
         throw err;
       }
     },
-    [boardId, token, currentUser, handleAuthError, tweets]
+    [boardId, token, currentUser, handleAuthError]
   );
 
   const updateExistingTweet = useCallback(

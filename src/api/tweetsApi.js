@@ -104,19 +104,20 @@ export const fetchTweetById = (boardId, tweetId, token, signal) => {
 };
 
 /**
- * Creates a new tweet.
+ * Creates a new tweet via API.
  * @param {string} boardId - UUID of the board
- * @param {Object} content - Tweet content (type, value, metadata)
- * @param {number} x - X position
- * @param {number} y - Y position
- * @param {string|null} parentTweetId - UUID of parent tweet (optional)
+ * @param {Object} content - Tweet content object
+ * @param {number} x - X coordinate
+ * @param {number} y - Y coordinate
+ * @param {string|null} parentTweetId - UUID of parent tweet, if any
  * @param {boolean} isAnonymous - Whether the tweet is anonymous
- * @param {string} [status] - Tweet status (pending/approved)
- * @param {string|null} [scheduledAt] - ISO date for scheduling
- * @param {Object|null} [reminder] - Reminder settings
- * @param {Object[]} [files] - Array of file metadata from mediaApi
- * @param {string} token - Authorization token
- * @returns {Promise<Object>} - Created tweet
+ * @param {string} anonymousId - UUID of the user creating the tweet
+ * @param {string} status - Tweet status (e.g., 'approved')
+ * @param {string|null} scheduledAt - ISO date for scheduled tweet
+ * @param {Object|null} reminder - Reminder object, if any
+ * @param {Array} files - Array of uploaded file objects
+ * @param {string} token - Authentication token
+ * @returns {Promise<Object>} Created tweet object
  */
 export const createTweetApi = (
   boardId,
@@ -125,22 +126,34 @@ export const createTweetApi = (
   y,
   parentTweetId,
   isAnonymous,
+  anonymousId,
   status,
   scheduledAt,
   reminder,
   files,
   token
 ) => {
+  // Validate inputs
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(contentSchema, content, 'Invalid content');
   validatePayload(positionSchema, { x, y }, 'Invalid position');
+  validatePayload(uuidSchema, anonymousId, 'Invalid anonymousId');
   if (parentTweetId) validatePayload(uuidSchema, parentTweetId, 'Invalid parentTweetId');
   if (reminder) validatePayload(reminderSchema, reminder, 'Invalid reminder');
+  if (files.length) validatePayload(Joi.array().items().max(10), files, 'Invalid files');
 
+  // Construct payload
   const payload = {
-    content,
+    content: {
+      ...content,
+      metadata: {
+        ...content.metadata,
+        files: files || [], // Ensure files are included
+      },
+    },
     position: { x, y },
     is_anonymous: isAnonymous,
+    anonymous_id: anonymousId,
     status,
     scheduled_at: scheduledAt || null,
   };
@@ -150,7 +163,7 @@ export const createTweetApi = (
   return apiRequest('post', `/api/v1/tweets/${boardId}`, token, {
     payload,
     invalidatePrefixes: [`tweets:${boardId}`],
-  });
+  }).then(response => response.data.content); // Extract tweet from backend response
 };
 
 /**

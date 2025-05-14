@@ -15,7 +15,8 @@ export const normalizeTweet = (tweet, currentUser) => {
     return {
       tweet_id: '',
       content: { type: 'text', value: '', metadata: { files: [], hashtags: [], mentions: [] } },
-      user: { anonymous_id: currentUser?.anonymous_id || '', username: currentUser?.username || '' },
+      anonymous_id: currentUser?.anonymous_id || '',
+      username: currentUser?.username || '',
       position: { x: 0, y: 0 },
       parent_tweet_id: null,
       child_tweet_ids: [],
@@ -24,13 +25,10 @@ export const normalizeTweet = (tweet, currentUser) => {
       likedByUser: false,
       stats: { likes: 0, like_count: 0, view_count: 0 },
       created_at: new Date().toISOString(),
-      timestamp: new Date().toISOString(),
       status: 'approved',
       scheduled_at: null,
       reminder: null,
       is_pinned: false,
-      shared: [],
-      editable_until: new Date(Date.now() + 15 * 60 * 1000),
     };
   }
 
@@ -39,20 +37,18 @@ export const normalizeTweet = (tweet, currentUser) => {
     files: content.metadata?.files || [],
     hashtags: content.metadata?.hashtags || [],
     mentions: content.metadata?.mentions || [],
-    style: content.metadata?.style || {},
-    poll_options: content.metadata?.poll_options || [],
-    event_details: content.metadata?.event_details || {},
-    quote_ref: content.metadata?.quote_ref || null,
-    embed_data: content.metadata?.embed_data || null,
+    ...(content.metadata?.style && { style: content.metadata.style }),
+    ...(content.metadata?.poll_options?.length && { poll_options: content.metadata.poll_options }),
+    ...(content.metadata?.event_details && { event_details: content.metadata.event_details }),
+    ...(content.metadata?.quote_ref && { quote_ref: content.metadata.quote_ref }),
+    ...(content.metadata?.embed_data && { embed_data: content.metadata.embed_data }),
   };
 
   return {
     tweet_id: tweet.tweet_id || '',
     content: { type: content.type || 'text', value: content.value || '', metadata },
-    user: {
-      anonymous_id: tweet.anonymous_id || currentUser?.anonymous_id || '',
-      username: tweet.is_anonymous ? 'Anonymous' : tweet.username || currentUser?.username || '',
-    },
+    anonymous_id: tweet.anonymous_id || currentUser?.anonymous_id || '',
+    username: tweet.is_anonymous ? 'Anonymous' : tweet.username || currentUser?.username || '',
     position: { x: tweet.position?.x || 0, y: tweet.position?.y || 0 },
     parent_tweet_id: tweet.parent_tweet_id || null,
     child_tweet_ids: tweet.child_tweet_ids || [],
@@ -66,12 +62,9 @@ export const normalizeTweet = (tweet, currentUser) => {
       view_count: tweet.stats?.view_count ?? 0,
     },
     created_at: tweet.created_at || new Date().toISOString(),
-    timestamp: tweet.timestamp || tweet.created_at || new Date().toISOString(),
     status: tweet.status || 'approved',
     scheduled_at: tweet.scheduled_at || null,
     reminder: tweet.reminder || null,
     is_pinned: tweet.is_pinned || false,
-    shared: tweet.shared || [],
-    editable_until: tweet.editable_until || new Date(Date.now() + 15 * 60 * 1000),
   };
 };
