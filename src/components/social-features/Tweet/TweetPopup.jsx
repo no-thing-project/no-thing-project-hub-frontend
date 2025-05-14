@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef, useEffect, memo, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo, memo } from 'react';
 import PropTypes from 'prop-types';
 import {
   Paper,
@@ -32,10 +32,9 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   const fileUrlsRef = useRef(new Map());
   const dialogRef = useRef(null);
 
+  // Focus dialog on mount and cleanup URLs on unmount
   useEffect(() => {
-    if (dialogRef.current) {
-      dialogRef.current.focus();
-    }
+    dialogRef.current?.focus();
     return () => {
       fileUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
       fileUrlsRef.current.clear();
@@ -148,9 +147,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
       setLoading(true);
       setError(null);
       try {
-        const contentType = files.length
-          ? files[0].type.split('/')[0]
-          : 'text';
+        const contentType = files.length ? files[0].type.split('/')[0] : 'text';
         const content = {
           type: contentType,
           value: draft.trim() || '',
@@ -246,7 +243,10 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         />
         <Typography
           variant="caption"
-          sx={{ alignSelf: 'flex-end', color: draft.length > MAX_TWEET_LENGTH ? 'error.main' : 'text.secondary' }}
+          sx={{
+            alignSelf: 'flex-end',
+            color: draft.length > MAX_TWEET_LENGTH ? 'error.main' : 'text.secondary',
+          }}
         >
           {draft.length}/{MAX_TWEET_LENGTH}
         </Typography>
@@ -257,7 +257,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
                 const fileUrl = fileUrlsRef.current.get(file) || URL.createObjectURL(file);
                 fileUrlsRef.current.set(file, fileUrl);
                 return (
-                  <Grid item xs={6} key={index}>
+                  <Grid item xs={6} key={`file-${index}`}>
                     <Box sx={{ position: 'relative' }}>
                       {file.type.startsWith('image') ? (
                         <img
@@ -371,7 +371,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
           </IconButton>
           <IconButton
             onClick={() => startRecording('voice')}
-            disabled={recording}
+            disabled={!!recording}
             sx={{
               color: recordingType === 'voice' ? 'primary.main' : 'text.secondary',
             }}
@@ -381,7 +381,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
           </IconButton>
           <IconButton
             onClick={() => startRecording('video_message')}
-            disabled={recording}
+            disabled={!!recording}
             sx={{
               color: recordingType === 'video_message' ? 'primary.main' : 'text.secondary',
             }}

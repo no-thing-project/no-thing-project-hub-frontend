@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect, useCallback, memo } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -28,7 +28,7 @@ import { useTweets } from '../../../hooks/useTweets';
 import { useBoards } from '../../../hooks/useBoards';
 import { useNotification } from '../../../context/NotificationContext';
 
-const MemoizedDraggableTweet = memo(DraggableTweet);
+const MAX_TWEET_LENGTH = 280;
 
 const Board = ({
   boardId,
@@ -38,17 +38,18 @@ const Board = ({
   userRole,
   onPointsUpdate,
   onLogout,
-  navigate,
+  availableBoards = [],
 }) => {
+  const navigate = useNavigate();
   const { showNotification } = useNotification();
   const boardMainRef = useRef(null);
   const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0 });
   const [replyTweet, setReplyTweet] = useState(null);
   const [highlightedTweetId, setHighlightedTweetId] = useState(null);
   const [editTweetModal, setEditTweetModal] = useState(null);
-  const [availableBoards, setAvailableBoards] = useState([]);
-  const [selectedBoardId, setSelectedBoardId] = useState('');
   const [newStatus, setNewStatus] = useState('');
+  const [selectedBoardId, setSelectedBoardId] = useState('');
+  const [preloadParentTweets, setPreloadParentTweets] = useState({});
 
   const {
     tweets,
@@ -56,6 +57,7 @@ const Board = ({
     error,
     pinnedTweets,
     fetchTweets,
+    fetchTweet,
     createNewTweet,
     updateExistingTweet,
     toggleLikeTweet,
@@ -82,15 +84,40 @@ const Board = ({
     handleTouchEnd,
   } = useBoardInteraction(boardMainRef);
 
+  // Preload parent tweets
   useEffect(() => {
     const controller = new AbortController();
+    const preloadParents = async () => {
+      const parentIds = [...new Set(tweets.filter(t => t.parent_tweet_id).map(t => t.parent_tweet_id))];
+      if (!parentIds.length) return;
+
+      try {
+        const parentPromises = parentIds.map(id => fetchTweet(id));
+        const parents = await Promise.all(parentPromises);
+        const parentMap = parentIds.reduce((acc, id, index) => {
+          const parent = parents[index];
+          acc[id] = parent?.content?.value || 'Parent tweet not found';
+          return acc;
+        }, {});
+        setPreloadParentTweets(prev => ({ ...prev, ...parentMap }));
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          showNotification('Failed to preload parent tweets', 'error');
+        }
+      }
+    };
+
+    if (tweets.length) {
+      preloadParents();
+    }
     fetchTweets({}, controller.signal).catch(err => {
       if (err.name !== 'AbortError') {
         showNotification('Failed to load tweets', 'error');
       }
     });
+
     return () => controller.abort();
-  }, [fetchTweets, showNotification]);
+  }, [fetchTweets, fetchTweet, tweets, showNotification]);
 
   useEffect(() => {
     if (!loading && boardMainRef.current) {
@@ -111,8 +138,7 @@ const Board = ({
           scheduledAt,
           null,
           files,
-          onProgress,
-          currentUser.anonymous_id
+          onProgress
         );
         await onPointsUpdate();
         showNotification('Tweet created successfully!', 'success');
@@ -124,11 +150,11 @@ const Board = ({
         throw err;
       }
     },
-    [createNewTweet, onPointsUpdate, replyTweet, showNotification, currentUser.anonymous_id]
+    [createNewTweet, onPointsUpdate, replyTweet, showNotification]
   );
 
   const handleReply = useCallback(
-    (tweet) => {
+    tweet => {
       const tweetElement = document.getElementById(`tweet-${tweet.tweet_id}`);
       const parentTweetHeight = tweetElement ? tweetElement.getBoundingClientRect().height : 150;
       setReplyTweet(tweet);
@@ -142,7 +168,7 @@ const Board = ({
   );
 
   const throttlePopup = useCallback(
-    (fn) => {
+    fn => {
       let lastCall = 0;
       return (...args) => {
         const now = Date.now();
@@ -156,12 +182,12 @@ const Board = ({
   );
 
   const handleMouseUpWithPopup = useCallback(
-    (e) => handleMouseUp(e, throttlePopup((x, y) => setTweetPopup({ visible: true, x, y }))),
+    e => handleMouseUp(e, throttlePopup((x, y) => setTweetPopup({ visible: true, x, y }))),
     [handleMouseUp, throttlePopup]
   );
 
   const handleTouchEndWithPopup = useCallback(
-    (e) => handleTouchEnd(e, throttlePopup((x, y) => setTweetPopup({ visible: true, x, y }))),
+    e => handleTouchEnd(e, throttlePopup((x, y) => setTweetPopup({ visible: true, x, y }))),
     [handleTouchEnd, throttlePopup]
   );
 
@@ -176,18 +202,17 @@ const Board = ({
   }, [fetchBoardsList, showNotification]);
 
   const handleEditTweet = useCallback(
-    async (tweet) => {
+    async tweet => {
       const boards = await loadAvailableBoards();
-      setAvailableBoards(boards);
       setSelectedBoardId(tweet.board_id || boardId);
       setNewStatus(tweet.status || 'approved');
-      setEditTweetModal({ ...tweet });
+      setEditTweetModal({ ...tweet, availableBoards: boards });
     },
     [loadAvailableBoards, boardId]
   );
 
   const handlePinToggle = useCallback(
-    async (tweet) => {
+    async tweet => {
       try {
         if (tweet.is_pinned) {
           await unpinTweet(tweet.tweet_id);
@@ -209,9 +234,9 @@ const Board = ({
       try {
         await updateExistingTweet(editTweetModal.tweet_id, {
           content: {
-            type: editTweetModal.content.type,
-            value: editTweetModal.content.value,
-            metadata: editTweetModal.content.metadata,
+            type: editTweetModal.content?.type || 'text',
+            value: editTweetModal.content?.value || '',
+            metadata: editTweetModal.content?.metadata || {},
           },
           status: newStatus,
           position: editTweetModal.position,
@@ -230,26 +255,19 @@ const Board = ({
   );
 
   const getRelatedTweetIds = useCallback(
-    (tweetId) => {
+    tweetId => {
       const relatedIds = new Set([tweetId]);
       const tweet = tweets.find(t => t.tweet_id === tweetId);
       if (tweet) {
         if (tweet.parent_tweet_id) relatedIds.add(tweet.parent_tweet_id);
-        if (tweet.child_tweet_ids) {
-          tweet.child_tweet_ids.forEach(id => relatedIds.add(id));
-        }
+        tweet.child_tweet_ids?.forEach(id => relatedIds.add(id));
       }
       return Array.from(relatedIds);
     },
     [tweets]
   );
 
-  const handleReplyHover = useCallback(
-    (tweetId) => {
-      setHighlightedTweetId(tweetId);
-    },
-    []
-  );
+  const handleReplyHover = useCallback(tweetId => setHighlightedTweetId(tweetId), []);
 
   const titleFontSize = useMemo(() => {
     const baseSize = Math.min(16, 100 / (boardTitle.length || 1));
@@ -258,34 +276,27 @@ const Board = ({
 
   const validTweets = useMemo(() => {
     if (!Array.isArray(tweets)) {
-      console.warn("Tweets is not an array:", tweets);
+      console.warn('Tweets is not an array:', tweets);
       return [];
     }
     const seenIds = new Set();
-    const filteredTweets = tweets.filter((tweet, index) => {
-      if (
-        !tweet?.tweet_id ||
-        tweet.tweet_id === '' ||
-        !tweet?.position ||
-        seenIds.has(tweet.tweet_id)
-      ) {
-        console.warn(`Invalid or duplicate tweet at index ${index}:`, tweet);
+    return tweets.filter(tweet => {
+      if (!tweet?.tweet_id || !tweet?.position || seenIds.has(tweet.tweet_id)) {
+        console.warn('Invalid or duplicate tweet:', tweet);
         return false;
       }
       seenIds.add(tweet.tweet_id);
       return true;
     });
-    return filteredTweets;
   }, [tweets]);
 
   const renderedTweets = useMemo(() => {
-    if (validTweets.length === 0) return null;
-    return validTweets.map((tweet) => {
-      const replyCount = validTweets.filter((t) => t.parent_tweet_id === tweet.tweet_id).length;
-      const parentTweet = validTweets.find((t) => t.tweet_id === tweet.parent_tweet_id);
+    if (!validTweets.length) return null;
+    return validTweets.map(tweet => {
+      const replyCount = validTweets.filter(t => t.parent_tweet_id === tweet.tweet_id).length;
       const relatedTweetIds = highlightedTweetId ? getRelatedTweetIds(highlightedTweetId) : [];
       return (
-        <MemoizedDraggableTweet
+        <DraggableTweet
           key={tweet.tweet_id}
           tweet={tweet}
           onStop={(e, data) => updateExistingTweet(tweet.tweet_id, { position: { x: data.x, y: data.y } })}
@@ -304,11 +315,12 @@ const Board = ({
             onPinToggle={handlePinToggle}
             isParentHighlighted={relatedTweetIds.includes(tweet.tweet_id)}
             replyCount={replyCount}
-            parentTweetText={parentTweet?.content?.value || null}
+            parentTweetText={tweet.parent_tweet_id ? preloadParentTweets[tweet.parent_tweet_id] || null : null}
             relatedTweetIds={relatedTweetIds}
-            availableBoards={availableBoards}
+            availableBoards={editTweetModal?.availableBoards || availableBoards}
+            boardId={boardId}
           />
-        </MemoizedDraggableTweet>
+        </DraggableTweet>
       );
     });
   }, [
@@ -319,16 +331,20 @@ const Board = ({
     toggleLikeTweet,
     deleteExistingTweet,
     handleReply,
+    handleReplyHover,
     handleEditTweet,
     handlePinToggle,
     highlightedTweetId,
     getRelatedTweetIds,
+    preloadParentTweets,
     availableBoards,
+    editTweetModal,
+    boardId,
   ]);
 
   if (error) {
     return (
-      <Box sx={{ p: 2, textAlign: "center" }}>
+      <Box sx={{ p: 2, textAlign: 'center' }}>
         <Typography color="error" sx={{ mb: 2 }}>
           {error}
         </Typography>
@@ -353,37 +369,36 @@ const Board = ({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.4 }}
-        style={{ display: "flex", width: "100%", height: "100%", overflow: "hidden" }}
+        style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}
       >
         <Box
           sx={{
             flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            position: "relative",
-            "@media (max-width: 600px)": { fontSize: "0.8rem" },
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'relative',
+            '@media (max-width: 600px)': { fontSize: '0.8rem' },
           }}
         >
-          <Box sx={{ position: "absolute", top: 16, left: 16, zIndex: 1100 }}>
+          <Box sx={{ position: 'absolute', top: 16, left: 16, zIndex: 1100 }}>
             <Tooltip title="Go back">
               <IconButton
                 onClick={() => navigate(-1)}
                 aria-label="Go back to previous page"
-                sx={{ fontSize: { xs: "1rem", sm: "1.5rem" } }}
+                sx={{ fontSize: { xs: '1rem', sm: '1.5rem' } }}
               >
                 <ArrowBack fontSize="inherit" />
               </IconButton>
             </Tooltip>
           </Box>
-
           <Box
             ref={boardMainRef}
             sx={{
               flex: 1,
-              position: "relative",
-              overflow: "hidden",
-              cursor: dragging ? "grabbing" : "grab",
-              touchAction: "none",
+              position: 'relative',
+              overflow: 'hidden',
+              cursor: dragging ? 'grabbing' : 'grab',
+              touchAction: 'none',
             }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
@@ -397,47 +412,46 @@ const Board = ({
           >
             <Box
               sx={{
-                position: "absolute",
+                position: 'absolute',
                 top: 0,
                 left: 0,
                 width: BOARD_SIZE,
                 height: BOARD_SIZE,
-                backgroundColor: "background.paper",
-                backgroundImage: "radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)",
-                backgroundSize: "20px 20px",
+                backgroundColor: 'background.paper',
+                backgroundImage: 'radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)',
+                backgroundSize: '20px 20px',
                 transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-                transformOrigin: "top left",
+                transformOrigin: 'top left',
               }}
             >
               <Box
                 sx={{
-                  position: "absolute",
-                  top: "50%",
-                  left: "50%",
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
                   transform: `translate(-50%, -50%) scale(${1 / scale})`,
-                  pointerEvents: "none",
-                  maxWidth: "80vw",
-                  textAlign: "center",
+                  pointerEvents: 'none',
+                  maxWidth: '80vw',
+                  textAlign: 'center',
                 }}
               >
                 <Typography
                   variant="h1"
                   sx={{
-                    color: "#eee",
+                    color: '#eee',
                     fontSize: titleFontSize,
                     fontWeight: 700,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    "@media (max-width: 600px)": { fontSize: `calc(${titleFontSize} * 0.8)` },
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    '@media (max-width: 600px)': { fontSize: `calc(${titleFontSize} * 0.8)` },
                   }}
                 >
                   {boardTitle}
                 </Typography>
               </Box>
-
               {validTweets.length === 0 ? (
-                <Box sx={{ position: "absolute", top: "60%", left: "50%", transform: "translate(-50%, -50%)" }}>
+                <Box sx={{ position: 'absolute', top: '60%', left: '50%', transform: 'translate(-50%, -50%)' }}>
                   <Typography variant="body1" color="text.secondary">
                     No tweets yet. Click or tap anywhere to create one!
                   </Typography>
@@ -445,9 +459,8 @@ const Board = ({
               ) : (
                 renderedTweets
               )}
-
               {tweetPopup.visible && (
-                <Box onClick={(e) => e.stopPropagation()}>
+                <Box onClick={e => e.stopPropagation()}>
                   <TweetPopup
                     x={tweetPopup.x}
                     y={tweetPopup.y}
@@ -460,17 +473,16 @@ const Board = ({
                 </Box>
               )}
             </Box>
-
             <Box
               sx={{
-                position: "absolute",
+                position: 'absolute',
                 bottom: 16,
                 right: 16,
                 zIndex: 1100,
-                display: "flex",
-                alignItems: "center",
+                display: 'flex',
+                alignItems: 'center',
                 gap: 1,
-                "@media (max-width: 600px)": { transform: "scale(0.8)" },
+                '@media (max-width: 600px)': { transform: 'scale(0.8)' },
               }}
             >
               <AnimatePresence>
@@ -483,7 +495,7 @@ const Board = ({
                   >
                     <Tooltip title="Reset zoom">
                       <IconButton
-                        onClick={() => handleZoomButton("reset")}
+                        onClick={() => handleZoomButton('reset')}
                         size="small"
                         aria-label="Reset board zoom to 100%"
                       >
@@ -494,85 +506,103 @@ const Board = ({
                 )}
               </AnimatePresence>
               <Tooltip title="Zoom out">
-                <IconButton onClick={() => handleZoomButton("out")} size="small" aria-label="Zoom out board">
+                <IconButton onClick={() => handleZoomButton('out')} size="small" aria-label="Zoom out board">
                   <Remove />
                 </IconButton>
               </Tooltip>
               <Typography variant="body2">{Math.round(scale * 100)}%</Typography>
               <Tooltip title="Zoom in">
-                <IconButton onClick={() => handleZoomButton("in")} size="small" aria-label="Zoom in board">
+                <IconButton onClick={() => handleZoomButton('in')} size="small" aria-label="Zoom in board">
                   <Add />
                 </IconButton>
               </Tooltip>
             </Box>
           </Box>
+          {editTweetModal && (
+            <Dialog open onClose={() => setEditTweetModal(null)} maxWidth="sm" fullWidth>
+              <DialogTitle>Edit Tweet</DialogTitle>
+              <DialogContent>
+                <TextField
+                  multiline
+                  fullWidth
+                  label="Tweet Content"
+                  value={editTweetModal.content?.value || ''}
+                  onChange={e =>
+                    setEditTweetModal(prev => ({
+                      ...prev,
+                      content: { ...prev.content, value: e.target.value },
+                    }))
+                  }
+                  sx={{ mt: 2 }}
+                  aria-label="Tweet content"
+                  minRows={3}
+                  inputProps={{ maxLength: MAX_TWEET_LENGTH }}
+                />
+                <Typography
+                  variant="caption"
+                  sx={{
+                    display: 'block',
+                    mt: 1,
+                    color:
+                      (editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH
+                        ? 'error.main'
+                        : 'text.secondary',
+                  }}
+                >
+                  {(editTweetModal.content?.value?.length || 0)}/{MAX_TWEET_LENGTH}
+                </Typography>
+                <FormControl fullWidth sx={{ mt: 2 }}>
+                  <InputLabel>Tweet Status</InputLabel>
+                  <Select
+                    value={newStatus}
+                    label="Tweet Status"
+                    onChange={e => setNewStatus(e.target.value)}
+                    aria-label="Tweet status"
+                  >
+                    <MenuItem value="pending">Pending</MenuItem>
+                    <MenuItem value="approved">Approved</MenuItem>
+                    <MenuItem value="rejected">Rejected</MenuItem>
+                    <MenuItem value="announcement">Announcement</MenuItem>
+                    <MenuItem value="reminder">Reminder</MenuItem>
+                    <MenuItem value="pinned">Pinned</MenuItem>
+                    <MenuItem value="archived">Archived</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl fullWidth sx={{ mt: 2 }}>
+                  <InputLabel>Move to Board</InputLabel>
+                  <Select
+                    value={selectedBoardId}
+                    label="Move to Board"
+                    onChange={e => setSelectedBoardId(e.target.value)}
+                    aria-label="Move to board"
+                  >
+                    {(editTweetModal.availableBoards || availableBoards).map(b => (
+                      <MenuItem key={b.board_id} value={b.board_id}>
+                        {b.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setEditTweetModal(null)} aria-label="Cancel edit tweet">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveEditedTweet}
+                  variant="contained"
+                  aria-label="Save edited tweet"
+                  disabled={
+                    !editTweetModal.content?.value?.trim() ||
+                    editTweetModal.content?.value?.length > MAX_TWEET_LENGTH
+                  }
+                >
+                  Save
+                </Button>
+              </DialogActions>
+            </Dialog>
+          )}
         </Box>
-
-        {editTweetModal && (
-          <Dialog open onClose={() => setEditTweetModal(null)} maxWidth="sm" fullWidth>
-            <DialogTitle>Edit Tweet</DialogTitle>
-            <DialogContent>
-              <TextField
-                multiline
-                fullWidth
-                label="Tweet Content"
-                value={editTweetModal.content?.value || ""}
-                onChange={(e) =>
-                  setEditTweetModal((prev) => ({
-                    ...prev,
-                    content: { ...prev.content, value: e.target.value },
-                  }))
-                }
-                sx={{ mt: 2 }}
-                aria-label="Tweet content"
-              />
-              <FormControl fullWidth sx={{ mt: 2 }}>
-                <InputLabel>Tweet Status</InputLabel>
-                <Select
-                  value={newStatus}
-                  label="Tweet Status"
-                  onChange={(e) => setNewStatus(e.target.value)}
-                  aria-label="Tweet status"
-                >
-                  <MenuItem value="pending">Pending</MenuItem>
-                  <MenuItem value="approved">Approved</MenuItem>
-                  <MenuItem value="rejected">Rejected</MenuItem>
-                  <MenuItem value="announcement">Announcement</MenuItem>
-                  <MenuItem value="reminder">Reminder</MenuItem>
-                  <MenuItem value="pinned">Pinned</MenuItem>
-                  <MenuItem value="archived">Archived</MenuItem>
-                </Select>
-              </FormControl>
-              <FormControl fullWidth sx={{ mt: 2 }}>
-                <InputLabel>Move to Board</InputLabel>
-                <Select
-                  value={selectedBoardId}
-                  label="Move to Board"
-                  onChange={(e) => setSelectedBoardId(e.target.value)}
-                  aria-label="Move to board"
-                >
-                  {availableBoards.filter(b => b.board_id).map((b) => (
-                    <MenuItem key={b.board_id} value={b.board_id}>
-                      {b.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setEditTweetModal(null)} aria-label="Cancel edit tweet">
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSaveEditedTweet}
-                variant="contained"
-                aria-label="Save edited tweet"
-              >
-                Save
-              </Button>
-            </DialogActions>
-          </Dialog>
-        )}
       </motion.div>
     </AnimatePresence>
   );
@@ -589,13 +619,16 @@ Board.propTypes = {
   userRole: PropTypes.string.isRequired,
   onPointsUpdate: PropTypes.func.isRequired,
   onLogout: PropTypes.func.isRequired,
-  navigate: PropTypes.func.isRequired,
   availableBoards: PropTypes.arrayOf(
     PropTypes.shape({
       board_id: PropTypes.string.isRequired,
       name: PropTypes.string.isRequired,
     })
   ),
+};
+
+Board.defaultProps = {
+  availableBoards: [],
 };
 
 export default memo(Board);
