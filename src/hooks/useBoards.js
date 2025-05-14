@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
-import ReactDOM from "react-dom";
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import {
   fetchBoards,
   fetchBoardsByGateId,
@@ -18,40 +18,30 @@ import {
   favoriteBoard,
   unfavoriteBoard,
   fetchBoardMembers,
-} from "../api/boardsApi";
+} from '../api/boardsApi';
 
-// Constants for error messages
 const ERROR_MESSAGES = {
-  AUTH_REQUIRED: "Authentication required.",
-  BOARD_ID_MISSING: "Board ID is missing.",
-  BOARD_NAME_MISSING: "Board name is missing.",
-  BOARD_NOT_FOUND: "Board not found.",
-  STATUS_DATA_MISSING: "Status data is missing.",
-  USERNAME_MISSING: "Username is missing.",
-  ROLE_MISSING: "Role is missing.",
-  GATE_ID_MISSING: "Gate ID is required.",
-  CLASS_ID_MISSING: "Class ID is required.",
-  PARENT_BOARD_ID_MISSING: "Parent board ID is required.",
-  DATA_MISSING: "Required data is missing.",
-  GENERIC: "An error occurred.",
+  AUTH_REQUIRED: 'Authentication required.',
+  BOARD_ID_MISSING: 'Board ID is missing.',
+  BOARD_NAME_MISSING: 'Board name is missing.',
+  BOARD_NOT_FOUND: 'Board not found.',
+  STATUS_DATA_MISSING: 'Status data is missing.',
+  USERNAME_MISSING: 'Username is missing.',
+  ROLE_MISSING: 'Role is missing.',
+  GATE_ID_MISSING: 'Gate ID is required.',
+  CLASS_ID_MISSING: 'Class ID is required.',
+  PARENT_BOARD_ID_MISSING: 'Parent board ID is required.',
+  DATA_MISSING: 'Required data is missing.',
+  GENERIC: 'An error occurred.',
 };
 
-// Constants for cache
 const MAX_CACHE_SIZE = 10;
-const CACHE_VERSION = "v1";
-const CACHE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+const CACHE_VERSION = 'v1';
+const CACHE_EXPIRY_MS = 30 * 60 * 1000;
 
-// Cache for board lists and items
 const boardListCache = new Map();
 const boardItemCache = new Map();
 
-/**
- * Hook for managing boards and their members
- * @param {string|null} token - Authorization token
- * @param {function} onLogout - Function to handle logout
- * @param {function} navigate - Function for navigation
- * @returns {object} Object with states and methods for board operations
- */
 export const useBoards = (token, onLogout, navigate) => {
   const [boards, setBoards] = useState([]);
   const [boardItem, setBoardItem] = useState(null);
@@ -63,12 +53,6 @@ export const useBoards = (token, onLogout, navigate) => {
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  /**
-   * Handle authentication errors
-   * @param {Error} err - Error object
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {null} Always returns null
-   */
   const handleAuthError = useCallback(
     async (err, retryCount = 0) => {
       const status = err.status || 500;
@@ -76,24 +60,18 @@ export const useBoards = (token, onLogout, navigate) => {
         await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
         return;
       }
-      if (status === 401 || status === 403) {
-        onLogout("Your session has expired. Please log in again.");
-        navigate("/login");
-      }
-      setError(
-        status === 404
-          ? ERROR_MESSAGES.BOARD_NOT_FOUND
-          : err.message || ERROR_MESSAGES.GENERIC
-      );
+      ReactDOM.unstable_batchedUpdates(() => {
+        if (status === 401 || status === 403) {
+          onLogout('Your session has expired. Please log in again.');
+          navigate('/login');
+        }
+        setError(status === 404 ? ERROR_MESSAGES.BOARD_NOT_FOUND : err.message || ERROR_MESSAGES.GENERIC);
+      });
       return null;
     },
     [onLogout, navigate]
   );
 
-  /**
-   * Reset hook state
-   * @param {boolean} [fullReset=true] - Whether to reset all states
-   */
   const resetState = useCallback((fullReset = true) => {
     ReactDOM.unstable_batchedUpdates(() => {
       setBoards([]);
@@ -109,41 +87,28 @@ export const useBoards = (token, onLogout, navigate) => {
     });
   }, []);
 
-  /**
-   * Normalize board members data
-   * @param {Array} members - Array of members
-   * @returns {Array} Normalized array of members
-   */
-  const normalizeMembers = useCallback((members = []) => {
-    return members.map((member) => ({
-      member_id: member.member_id || member.anonymous_id || "",
-      username: member.username || "Unknown",
-      role: member.role || "viewer",
-      joined_at: member.joined_at || null,
-      avatar: member.avatar || null,
-      total_points: member.total_points || 0,
-      anonymous_id: member.anonymous_id || member.member_id || "",
-    }));
-  }, []);
+  const normalizeMembers = useMemo(
+    () =>
+      (members = []) =>
+        members.map((member) => ({
+          member_id: member.member_id || member.anonymous_id || '',
+          username: member.username || 'Unknown',
+          role: member.role || 'viewer',
+          joined_at: member.joined_at || null,
+          avatar: member.avatar || null,
+          total_points: member.total_points || 0,
+          anonymous_id: member.anonymous_id || member.member_id || '',
+        })),
+    []
+  );
 
-  /**
-   * Check if cache entry is expired
-   * @param {object} cacheEntry - Cache entry with timestamp
-   * @returns {boolean} True if expired
-   */
-  const isCacheExpired = useCallback((cacheEntry) => {
-    return Date.now() - cacheEntry.timestamp > CACHE_EXPIRY_MS;
-  }, []);
+  const isCacheExpired = useMemo(
+    () => (cacheEntry) => Date.now() - cacheEntry.timestamp > CACHE_EXPIRY_MS,
+    []
+  );
 
-  /**
-   * Add a member to a board
-   * @param {string} boardId - Board UUID
-   * @param {object} memberData - Member data { username, role }
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated board or null if error
-   */
   const addMemberToBoard = useCallback(
-    async (boardId, { username, role = "viewer" }, retryCount = 0) => {
+    async (boardId, { username, role = 'viewer' }, retryCount = 0) => {
       if (!token || !boardId?.trim() || !username?.trim()) {
         setError(
           !token
@@ -160,7 +125,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
       try {
         const board = await addMember(boardId, { username, role }, token);
-        if (!board) throw new Error("Failed to add member");
+        if (!board) throw new Error('Failed to add member');
         const cacheKey = `${CACHE_VERSION}:${boardId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setMembers(normalizeMembers(board.members));
@@ -176,7 +141,7 @@ export const useBoards = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return addMemberToBoard(boardId, { username, role }, retryCount + 1);
         }
-        console.error("Add member error:", err);
+        console.error('Add member error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -185,13 +150,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError, normalizeMembers]
   );
 
-  /**
-   * Remove a member from a board
-   * @param {string} boardId - Board UUID
-   * @param {string} username - Username
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated board or null if error
-   */
   const removeMemberFromBoard = useCallback(
     async (boardId, username, retryCount = 0) => {
       if (!token || !boardId?.trim() || !username?.trim()) {
@@ -210,7 +168,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
       try {
         const board = await removeMember(boardId, username, token);
-        if (!board) throw new Error("Failed to remove member");
+        if (!board) throw new Error('Failed to remove member');
         const cacheKey = `${CACHE_VERSION}:${boardId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setMembers(normalizeMembers(board.members));
@@ -226,7 +184,7 @@ export const useBoards = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return removeMemberFromBoard(boardId, username, retryCount + 1);
         }
-        console.error("Remove member error:", err);
+        console.error('Remove member error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -235,14 +193,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError, normalizeMembers]
   );
 
-  /**
-   * Update a member's role in a board
-   * @param {string} boardId - Board UUID
-   * @param {string} username - Username
-   * @param {string} role - New role
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated board or null if error
-   */
   const updateMemberRole = useCallback(
     async (boardId, username, role, retryCount = 0) => {
       if (!token || !boardId?.trim() || !username?.trim() || !role?.trim()) {
@@ -263,7 +213,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
       try {
         const board = await updateMember(boardId, username, { role }, token);
-        if (!board) throw new Error("Failed to update member role");
+        if (!board) throw new Error('Failed to update member role');
         const cacheKey = `${CACHE_VERSION}:${boardId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setMembers(normalizeMembers(board.members));
@@ -279,7 +229,7 @@ export const useBoards = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return updateMemberRole(boardId, username, role, retryCount + 1);
         }
-        console.error("Update member role error:", err);
+        console.error('Update member role error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -288,12 +238,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError, normalizeMembers]
   );
 
-  /**
-   * Fetch board members list
-   * @param {string} boardId - Board UUID
-   * @param {AbortSignal} [signal] - Abort signal for request cancellation
-   * @returns {Promise<object|null>} Members data or null if error
-   */
   const fetchBoardMembersList = useCallback(
     async (boardId, signal) => {
       if (!token || !boardId?.trim()) {
@@ -306,15 +250,15 @@ export const useBoards = (token, onLogout, navigate) => {
 
       try {
         const data = await fetchBoardMembers(boardId, token, signal);
-        if (!data) throw new Error("No members data received");
+        if (!data) throw new Error('No members data received');
         ReactDOM.unstable_batchedUpdates(() => {
           setMembers(normalizeMembers(data.members));
           setLastUpdated(Date.now());
         });
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch board members error:", err);
+        if (err.name !== 'AbortError') {
+          console.error('Fetch board members error:', err);
           return handleAuthError(err);
         }
         return null;
@@ -325,12 +269,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError, normalizeMembers]
   );
 
-  /**
-   * Fetch list of boards
-   * @param {object} [filters={}] - Query filters
-   * @param {AbortSignal} [signal] - Abort signal
-   * @returns {Promise<object|null>} Boards data or null if error
-   */
   const fetchBoardsList = useCallback(
     async (filters = {}, signal) => {
       if (!token) {
@@ -356,7 +294,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
       try {
         const data = await fetchBoards(token, filters, signal);
-        if (!data) throw new Error("No data received");
+        if (!data) throw new Error('No data received');
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setBoards(data.boards || []);
@@ -373,8 +311,8 @@ export const useBoards = (token, onLogout, navigate) => {
         boardListCache.set(cacheKey, { ...data, timestamp });
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch boards error:", err);
+        if (err.name !== 'AbortError') {
+          console.error('Fetch boards error:', err);
           return handleAuthError(err);
         }
         return null;
@@ -385,13 +323,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError, isCacheExpired]
   );
 
-  /**
-   * Fetch boards by gate ID
-   * @param {string} gateId - Gate UUID
-   * @param {object} [filters={}] - Query filters
-   * @param {AbortSignal} [signal] - Abort signal
-   * @returns {Promise<object|null>} Boards data or null if error
-   */
   const fetchBoardsByGate = useCallback(
     async (gateId, filters = {}, signal) => {
       if (!token || !gateId?.trim()) {
@@ -417,7 +348,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
       try {
         const data = await fetchBoardsByGateId(gateId, token, filters, signal);
-        if (!data) throw new Error("No data received");
+        if (!data) throw new Error('No data received');
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setBoards(data.boards || []);
@@ -434,8 +365,8 @@ export const useBoards = (token, onLogout, navigate) => {
         boardListCache.set(cacheKey, { ...data, timestamp });
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch boards by gate error:", err);
+        if (err.name !== 'AbortError') {
+          console.error('Fetch boards by gate error:', err);
           return handleAuthError(err);
         }
         return null;
@@ -446,13 +377,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError, isCacheExpired]
   );
 
-  /**
-   * Fetch boards by class ID
-   * @param {string} classId - Class UUID
-   * @param {object} [filters={}] - Query filters
-   * @param {AbortSignal} [signal] - Abort signal
-   * @returns {Promise<object|null>} Boards data or null if error
-   */
   const fetchBoardsByClass = useCallback(
     async (classId, filters = {}, signal) => {
       if (!token || !classId?.trim()) {
@@ -478,7 +402,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
       try {
         const data = await fetchBoardsByClassId(classId, token, filters, signal);
-        if (!data) throw new Error("No data received");
+        if (!data) throw new Error('No data received');
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setBoards(data.boards || []);
@@ -495,8 +419,8 @@ export const useBoards = (token, onLogout, navigate) => {
         boardListCache.set(cacheKey, { ...data, timestamp });
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch boards by class error:", err);
+        if (err.name !== 'AbortError') {
+          console.error('Fetch boards by class error:', err);
           return handleAuthError(err);
         }
         return null;
@@ -507,12 +431,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError, isCacheExpired]
   );
 
-  /**
-   * Fetch a single board by ID
-   * @param {string} boardId - Board UUID
-   * @param {AbortSignal} [signal] - Abort signal
-   * @returns {Promise<object|null>} Board data or null if error
-   */
   const fetchBoard = useCallback(
     async (boardId, signal) => {
       if (!token || !boardId?.trim()) {
@@ -539,7 +457,7 @@ export const useBoards = (token, onLogout, navigate) => {
           fetchBoardById(boardId, token, signal),
           fetchBoardMembers(boardId, token, signal),
         ]);
-        if (!boardData) throw new Error("No board data received");
+        if (!boardData) throw new Error('No board data received');
         const data = { ...boardData, members: membersData?.members || [] };
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
@@ -555,8 +473,8 @@ export const useBoards = (token, onLogout, navigate) => {
         boardItemCache.set(cacheKey, { ...data, timestamp });
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch board error:", err);
+        if (err.name !== 'AbortError') {
+          console.error('Fetch board error:', err);
           return handleAuthError(err);
         }
         return null;
@@ -567,12 +485,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError, normalizeMembers, isCacheExpired]
   );
 
-  /**
-   * Create a new board
-   * @param {object} boardData - Board data
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Created board or null if error
-   */
   const createNewBoard = useCallback(
     async (boardData, retryCount = 0) => {
       if (!token || !boardData?.name?.trim()) {
@@ -587,8 +499,8 @@ export const useBoards = (token, onLogout, navigate) => {
         const newBoard = await createBoard(
           {
             ...boardData,
-            visibility: boardData.visibility || "private",
-            type: boardData.type || "personal",
+            visibility: boardData.visibility || 'private',
+            type: boardData.type || 'personal',
             settings: {
               max_tweets: boardData.settings?.max_tweets || 100,
               max_members: boardData.settings?.max_members || 50,
@@ -603,7 +515,7 @@ export const useBoards = (token, onLogout, navigate) => {
           },
           token
         );
-        if (!newBoard) throw new Error("Failed to create board");
+        if (!newBoard) throw new Error('Failed to create board');
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setBoards((prev) => [...prev, newBoard]);
@@ -617,7 +529,7 @@ export const useBoards = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return createNewBoard(boardData, retryCount + 1);
         }
-        console.error("Create board error:", err);
+        console.error('Create board error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -626,13 +538,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  /**
-   * Create a new board in a gate
-   * @param {string} gateId - Gate UUID
-   * @param {object} boardData - Board data
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Created board or null if error
-   */
   const createNewBoardInGate = useCallback(
     async (gateId, boardData, retryCount = 0) => {
       if (!token || !gateId?.trim() || !boardData?.name?.trim()) {
@@ -651,7 +556,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
       try {
         const newBoard = await createBoardInGate(gateId, boardData, token);
-        if (!newBoard) throw new Error("Failed to create board in gate");
+        if (!newBoard) throw new Error('Failed to create board in gate');
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setBoards((prev) => [...prev, newBoard]);
@@ -665,7 +570,7 @@ export const useBoards = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return createNewBoardInGate(gateId, boardData, retryCount + 1);
         }
-        console.error("Create board in gate error:", err);
+        console.error('Create board in gate error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -674,13 +579,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  /**
-   * Create a new board in a class
-   * @param {string} classId - Class UUID
-   * @param {object} boardData - Board data
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Created board or null if error
-   */
   const createNewBoardInClass = useCallback(
     async (classId, boardData, retryCount = 0) => {
       if (!token || !classId?.trim() || !boardData?.name?.trim()) {
@@ -700,7 +598,7 @@ export const useBoards = (token, onLogout, navigate) => {
       try {
         const { class_id, ...cleanedBoardData } = boardData;
         const newBoard = await createBoardInClass(classId, cleanedBoardData, token);
-        if (!newBoard) throw new Error("Failed to create board in class");
+        if (!newBoard) throw new Error('Failed to create board in class');
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setBoards((prev) => [...prev, newBoard]);
@@ -714,7 +612,7 @@ export const useBoards = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return createNewBoardInClass(classId, boardData, retryCount + 1);
         }
-        console.error("Create board in class error:", err);
+        console.error('Create board in class error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -723,13 +621,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  /**
-   * Create a new board in another board
-   * @param {string} parentBoardId - Parent board UUID
-   * @param {object} boardData - Board data
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Created board or null if error
-   */
   const createNewBoardInBoard = useCallback(
     async (parentBoardId, boardData, retryCount = 0) => {
       if (!token || !parentBoardId?.trim() || !boardData?.name?.trim()) {
@@ -748,7 +639,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
       try {
         const newBoard = await createBoardInBoard(parentBoardId, boardData, token);
-        if (!newBoard) throw new Error("Failed to create board in board");
+        if (!newBoard) throw new Error('Failed to create board in board');
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setBoards((prev) => [...prev, newBoard]);
@@ -762,7 +653,7 @@ export const useBoards = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return createNewBoardInBoard(parentBoardId, boardData, retryCount + 1);
         }
-        console.error("Create board in board error:", err);
+        console.error('Create board in board error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -771,13 +662,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  /**
-   * Update an existing board
-   * @param {string} boardId - Board UUID
-   * @param {object} boardData - Updated board data
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated board or null if error
-   */
   const updateExistingBoard = useCallback(
     async (boardId, boardData, retryCount = 0) => {
       if (!token || !boardId?.trim() || !boardData?.name?.trim()) {
@@ -797,7 +681,7 @@ export const useBoards = (token, onLogout, navigate) => {
       try {
         const { board_id, ...updateData } = boardData;
         const updatedBoard = await updateBoard(boardId, updateData, token);
-        if (!updatedBoard) throw new Error("Failed to update board");
+        if (!updatedBoard) throw new Error('Failed to update board');
         const cacheKey = `${CACHE_VERSION}:${boardId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
@@ -820,7 +704,7 @@ export const useBoards = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return updateExistingBoard(boardId, boardData, retryCount + 1);
         }
-        console.error("Update board error:", err);
+        console.error('Update board error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -829,13 +713,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  /**
-   * Update board status
-   * @param {string} boardId - Board UUID
-   * @param {object} statusData - New status data
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated board or null if error
-   */
   const updateBoardStatusById = useCallback(
     async (boardId, statusData, retryCount = 0) => {
       if (!token || !boardId?.trim() || !statusData) {
@@ -854,7 +731,7 @@ export const useBoards = (token, onLogout, navigate) => {
 
       try {
         const updatedBoard = await updateBoardStatus(boardId, statusData, token);
-        if (!updatedBoard) throw new Error("Failed to update board status");
+        if (!updatedBoard) throw new Error('Failed to update board status');
         const cacheKey = `${CACHE_VERSION}:${boardId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
@@ -877,7 +754,7 @@ export const useBoards = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return updateBoardStatusById(boardId, statusData, retryCount + 1);
         }
-        console.error("Update board status error:", err);
+        console.error('Update board status error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -886,12 +763,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  /**
-   * Delete an existing board
-   * @param {string} boardId - Board UUID
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<boolean|null>} True if deleted, null if error
-   */
   const deleteExistingBoard = useCallback(
     async (boardId, retryCount = 0) => {
       if (!token || !boardId?.trim()) {
@@ -926,7 +797,7 @@ export const useBoards = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return deleteExistingBoard(boardId, retryCount + 1);
         }
-        console.error("Delete board error:", err);
+        console.error('Delete board error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -935,13 +806,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  /**
-   * Toggle favorite status of a board
-   * @param {string} boardId - Board UUID
-   * @param {boolean} isFavorited - Current favorite status
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated board or null if error
-   */
   const toggleFavoriteBoard = useCallback(
     async (boardId, isFavorited, retryCount = 0) => {
       if (!token || !boardId?.trim()) {
@@ -956,7 +820,7 @@ export const useBoards = (token, onLogout, navigate) => {
         const updatedBoard = isFavorited
           ? await unfavoriteBoard(boardId, token)
           : await favoriteBoard(boardId, token);
-        if (!updatedBoard) throw new Error("Failed to toggle favorite status");
+        if (!updatedBoard) throw new Error('Failed to toggle favorite status');
         const cacheKey = `${CACHE_VERSION}:${boardId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
@@ -979,7 +843,7 @@ export const useBoards = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return toggleFavoriteBoard(boardId, isFavorited, retryCount + 1);
         }
-        console.error("Toggle favorite error:", err);
+        console.error('Toggle favorite error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -988,7 +852,6 @@ export const useBoards = (token, onLogout, navigate) => {
     [token, handleAuthError]
   );
 
-  // Clear cache and reset state on token change
   useEffect(() => {
     if (!token) {
       boardListCache.clear();
@@ -1004,13 +867,12 @@ export const useBoards = (token, onLogout, navigate) => {
       try {
         await fetchBoardsList({}, controller.signal);
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Initial fetch boards error:", err);
+        if (err.name !== 'AbortError') {
+          console.error('Initial fetch boards error:', err);
         }
       }
     };
 
-    // Debounce fetch to prevent multiple rapid calls
     timeoutId = setTimeout(fetchData, 100);
 
     return () => {

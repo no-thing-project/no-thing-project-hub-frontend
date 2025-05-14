@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useRef, useEffect } from 'react';
+import React, { useCallback, useState, useRef, useEffect, memo, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import {
   Paper,
@@ -16,6 +16,8 @@ import { PhotoCamera, Mic, VideoCall, Delete } from '@mui/icons-material';
 import { actionButtonStyles, cancelButtonStyle, inputStyles } from '../../../styles/BaseStyles';
 import { SUPPORTED_MIME_TYPES, MAX_FILE_SIZE, MAX_FILES } from '../../../constants/validations';
 
+const MAX_TWEET_LENGTH = 280;
+
 const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   const [draft, setDraft] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
@@ -28,8 +30,12 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   const mediaRecorderRef = useRef(null);
   const fileInputRef = useRef(null);
   const fileUrlsRef = useRef(new Map());
+  const dialogRef = useRef(null);
 
   useEffect(() => {
+    if (dialogRef.current) {
+      dialogRef.current.focus();
+    }
     return () => {
       fileUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
       fileUrlsRef.current.clear();
@@ -131,6 +137,14 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         setError('Please add text or files to submit');
         return;
       }
+      if (draft.length > MAX_TWEET_LENGTH) {
+        setError(`Tweet exceeds ${MAX_TWEET_LENGTH} character limit`);
+        return;
+      }
+      if (scheduledAt && new Date(scheduledAt) < new Date()) {
+        setError('Scheduled time must be in the future');
+        return;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -179,6 +193,11 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
     [handleSubmit]
   );
 
+  const isSubmitDisabled = useMemo(
+    () => loading || (!draft.trim() && !files.length) || draft.length > MAX_TWEET_LENGTH,
+    [loading, draft, files]
+  );
+
   return (
     <Paper
       elevation={5}
@@ -195,13 +214,15 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
       }}
       role="dialog"
       aria-labelledby="tweet-popup-title"
+      tabIndex={-1}
+      ref={dialogRef}
     >
       <Typography id="tweet-popup-title" sx={{ display: 'none' }}>
         Create a new tweet
       </Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {error && (
-          <Alert severity="error" onClose={() => setError(null)}>
+          <Alert severity="error" onClose={() => setError(null)} role="alert">
             {error}
           </Alert>
         )}
@@ -221,12 +242,19 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
             '& .MuiInputBase-root': { borderRadius: '20px', padding: '8px 16px' },
           }}
           aria-label="Tweet message input"
+          inputProps={{ maxLength: MAX_TWEET_LENGTH }}
         />
+        <Typography
+          variant="caption"
+          sx={{ alignSelf: 'flex-end', color: draft.length > MAX_TWEET_LENGTH ? 'error.main' : 'text.secondary' }}
+        >
+          {draft.length}/{MAX_TWEET_LENGTH}
+        </Typography>
         {files.length > 0 && (
           <Box sx={{ mt: 1 }}>
             <Grid container spacing={1}>
               {files.slice(0, 4).map((file, index) => {
-                const fileUrl = URL.createObjectURL(file);
+                const fileUrl = fileUrlsRef.current.get(file) || URL.createObjectURL(file);
                 fileUrlsRef.current.set(file, fileUrl);
                 return (
                   <Grid item xs={6} key={index}>
@@ -241,6 +269,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
                             objectFit: 'cover',
                             borderRadius: 4,
                           }}
+                          onError={() => setError('Failed to load image preview')}
                         />
                       ) : file.type.startsWith('video') ? (
                         <video
@@ -252,12 +281,14 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
                             borderRadius: 4,
                           }}
                           controls
+                          onError={() => setError('Failed to load video preview')}
                         />
                       ) : file.type.startsWith('audio') ? (
                         <audio
                           src={fileUrl}
                           controls
                           style={{ width: '100%', height: '80px' }}
+                          onError={() => setError('Failed to load audio preview')}
                         />
                       ) : (
                         <Box
@@ -389,7 +420,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
             onClick={handleSubmit}
             variant="contained"
             sx={actionButtonStyles}
-            disabled={loading || (!draft.trim() && !files.length)}
+            disabled={isSubmitDisabled}
             aria-label="Submit tweet"
           >
             {loading ? <CircularProgress size={24} /> : 'Add Post'}
@@ -415,4 +446,4 @@ TweetPopup.propTypes = {
   onClose: PropTypes.func.isRequired,
 };
 
-export default TweetPopup;
+export default memo(TweetPopup);

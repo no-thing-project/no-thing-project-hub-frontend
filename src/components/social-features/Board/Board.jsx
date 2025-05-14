@@ -44,7 +44,7 @@ const Board = ({
   const boardMainRef = useRef(null);
   const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0 });
   const [replyTweet, setReplyTweet] = useState(null);
-  const [highlightedParentId, setHighlightedParentId] = useState(null);
+  const [highlightedTweetId, setHighlightedTweetId] = useState(null);
   const [editTweetModal, setEditTweetModal] = useState(null);
   const [availableBoards, setAvailableBoards] = useState([]);
   const [selectedBoardId, setSelectedBoardId] = useState('');
@@ -98,24 +98,10 @@ const Board = ({
     }
   }, [loading, centerBoard]);
 
-  useEffect(() => {
-    if (tweets?.length > 0) {
-      const tweetIds = tweets.map((t) => t?.tweet_id);
-      const emptyIds = tweetIds.filter((id) => !id);
-      if (emptyIds.length > 0) {
-        console.warn("Empty tweet_id values detected:", emptyIds, "Tweets:", tweets);
-      }
-      const uniqueIds = new Set(tweetIds.filter((id) => id));
-      if (uniqueIds.size !== tweetIds.length - emptyIds.length) {
-        console.warn("Duplicate tweet IDs detected:", tweetIds);
-      }
-    }
-  }, [tweets]);
-
   const handlePopupSubmit = useCallback(
     async (content, x, y, scheduledAt, files, onProgress) => {
       try {
-        await createNewTweet(
+        const newTweet = await createNewTweet(
           content,
           x,
           y,
@@ -132,8 +118,10 @@ const Board = ({
         showNotification('Tweet created successfully!', 'success');
         setTweetPopup({ visible: false });
         setReplyTweet(null);
+        return newTweet;
       } catch (err) {
         showNotification(err.message || 'Failed to create tweet', 'error');
+        throw err;
       }
     },
     [createNewTweet, onPointsUpdate, replyTweet, showNotification, currentUser.anonymous_id]
@@ -180,15 +168,17 @@ const Board = ({
   const loadAvailableBoards = useCallback(async () => {
     try {
       const data = await fetchBoardsList();
-      setAvailableBoards(data?.boards.filter(b => b.board_id) || []);
+      return data?.boards.filter(b => b.board_id) || [];
     } catch (err) {
       showNotification('Failed to load boards', 'error');
+      return [];
     }
   }, [fetchBoardsList, showNotification]);
 
   const handleEditTweet = useCallback(
     async (tweet) => {
-      await loadAvailableBoards();
+      const boards = await loadAvailableBoards();
+      setAvailableBoards(boards);
       setSelectedBoardId(tweet.board_id || boardId);
       setNewStatus(tweet.status || 'approved');
       setEditTweetModal({ ...tweet });
@@ -239,6 +229,28 @@ const Board = ({
     [editTweetModal, updateExistingTweet, moveTweet, fetchTweets, newStatus, selectedBoardId, showNotification]
   );
 
+  const getRelatedTweetIds = useCallback(
+    (tweetId) => {
+      const relatedIds = new Set([tweetId]);
+      const tweet = tweets.find(t => t.tweet_id === tweetId);
+      if (tweet) {
+        if (tweet.parent_tweet_id) relatedIds.add(tweet.parent_tweet_id);
+        if (tweet.child_tweet_ids) {
+          tweet.child_tweet_ids.forEach(id => relatedIds.add(id));
+        }
+      }
+      return Array.from(relatedIds);
+    },
+    [tweets]
+  );
+
+  const handleReplyHover = useCallback(
+    (tweetId) => {
+      setHighlightedTweetId(tweetId);
+    },
+    []
+  );
+
   const titleFontSize = useMemo(() => {
     const baseSize = Math.min(16, 100 / (boardTitle.length || 1));
     return `${baseSize}vw`;
@@ -263,7 +275,6 @@ const Board = ({
       seenIds.add(tweet.tweet_id);
       return true;
     });
-    console.log("Valid tweets after filtering:", filteredTweets);
     return filteredTweets;
   }, [tweets]);
 
@@ -272,6 +283,7 @@ const Board = ({
     return validTweets.map((tweet) => {
       const replyCount = validTweets.filter((t) => t.parent_tweet_id === tweet.tweet_id).length;
       const parentTweet = validTweets.find((t) => t.tweet_id === tweet.parent_tweet_id);
+      const relatedTweetIds = highlightedTweetId ? getRelatedTweetIds(highlightedTweetId) : [];
       return (
         <MemoizedDraggableTweet
           key={tweet.tweet_id}
@@ -287,20 +299,14 @@ const Board = ({
             onLike={toggleLikeTweet}
             onDelete={deleteExistingTweet}
             onReply={handleReply}
-            onReplyHover={setHighlightedParentId}
+            onReplyHover={handleReplyHover}
             onEdit={handleEditTweet}
-            onMove={(tweet) => {
-              setSelectedBoardId(tweet.board_id || boardId);
-              setEditTweetModal({ ...tweet });
-            }}
-            onChangeType={(tweet) => {
-              setNewStatus(tweet.status || 'approved');
-              setEditTweetModal({ ...tweet });
-            }}
             onPinToggle={handlePinToggle}
-            isParentHighlighted={tweet.tweet_id === highlightedParentId || tweet.parent_tweet_id === highlightedParentId}
+            isParentHighlighted={relatedTweetIds.includes(tweet.tweet_id)}
             replyCount={replyCount}
             parentTweetText={parentTweet?.content?.value || null}
+            relatedTweetIds={relatedTweetIds}
+            availableBoards={availableBoards}
           />
         </MemoizedDraggableTweet>
       );
@@ -315,8 +321,9 @@ const Board = ({
     handleReply,
     handleEditTweet,
     handlePinToggle,
-    boardId,
-    highlightedParentId,
+    highlightedTweetId,
+    getRelatedTweetIds,
+    availableBoards,
   ]);
 
   if (error) {
@@ -583,6 +590,12 @@ Board.propTypes = {
   onPointsUpdate: PropTypes.func.isRequired,
   onLogout: PropTypes.func.isRequired,
   navigate: PropTypes.func.isRequired,
+  availableBoards: PropTypes.arrayOf(
+    PropTypes.shape({
+      board_id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired,
+    })
+  ),
 };
 
 export default memo(Board);

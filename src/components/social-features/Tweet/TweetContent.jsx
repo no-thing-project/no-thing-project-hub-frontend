@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, memo } from 'react';
 import {
   Paper,
   Typography,
@@ -10,491 +10,633 @@ import {
   Grid,
   Backdrop,
   Fade,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
-import DeleteIcon from '@mui/icons-material/Delete';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import PushPinIcon from '@mui/icons-material/PushPin';
 import PropTypes from 'prop-types';
+import { LazyLoadImage } from 'react-lazy-load-image-component';
+import Emoji from 'react-emoji-render';
+import { useTweets } from '../../../hooks/useTweets';
 
-const TweetContent = React.memo(
-  ({
-    tweet,
-    currentUser,
-    userRole,
-    onLike,
-    onDelete,
-    onReply,
-    onReplyHover,
-    onEdit,
-    onMove,
-    onChangeType,
-    onPinToggle,
-    isParentHighlighted = false,
-    replyCount = 0,
-    parentTweetText = null,
-    bypassOwnership = false,
-  }) => {
-    const isLiked = tweet.liked_by?.some(u => u.anonymous_id === currentUser?.anonymous_id);
-    const tweetAuthor = tweet.username || tweet.user?.username || 'Someone';
-    const [animate, setAnimate] = useState(false);
-    const [hovered, setHovered] = useState(false);
-    const [anchorEl, setAnchorEl] = useState(null);
-    const [openModal, setOpenModal] = useState(false);
+const TweetContent = ({
+  tweet,
+  currentUser,
+  userRole,
+  onLike,
+  onDelete,
+  onReply,
+  onReplyHover,
+  onEdit,
+  onPinToggle,
+  isParentHighlighted = false,
+  replyCount = 0,
+  parentTweetText = null,
+  bypassOwnership = false,
+  relatedTweetIds = [],
+  availableBoards = [],
+  token,
+  boardId,
+  onLogout,
+  navigate,
+}) => {
+  const MAX_TWEET_LENGTH = 280;
 
-    useEffect(() => {
-      if (tweet.stats?.likes !== undefined) {
-        setAnimate(true);
-        const timer = setTimeout(() => setAnimate(false), 300);
-        return () => clearTimeout(timer);
-      }
-    }, [tweet.stats?.likes]);
+  const { fetchTweet } = useTweets(token, boardId, currentUser, onLogout, navigate);
+  const [parentText, setParentText] = useState(parentTweetText);
+  const isLiked = useMemo(
+    () => tweet.liked_by?.some(u => u.anonymous_id === currentUser?.anonymous_id) ?? false,
+    [tweet.liked_by, currentUser?.anonymous_id]
+  );
+  const tweetAuthor = tweet.username || tweet.user?.username || 'Someone';
+  const [animate, setAnimate] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [openMediaModal, setOpenMediaModal] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    content: tweet.content?.value || '',
+    status: tweet.status || 'approved',
+    boardId: tweet.board_id || '',
+  });
 
-    const handleMouseEnter = useCallback(() => {
-      setHovered(true);
-      if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
-        onReplyHover(tweet.parent_tweet_id || tweet.tweet_id);
-      }
-    }, [onReplyHover, tweet.parent_tweet_id, tweet.tweet_id, tweet.child_tweet_ids]);
+  useEffect(() => {
+    if (tweet.stats?.likes !== undefined) {
+      setAnimate(true);
+      const timer = setTimeout(() => setAnimate(false), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [tweet.stats?.likes]);
 
-    const handleMouseLeave = useCallback(() => {
-      setHovered(false);
-      if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
-        onReplyHover(null);
-      }
-    }, [onReplyHover, tweet.parent_tweet_id, tweet.child_tweet_ids]);
+  useEffect(() => {
+    if (tweet.parent_tweet_id && !parentTweetText) {
+      fetchTweet(tweet.parent_tweet_id).then(parent => {
+        if (parent) {
+          setParentText(parent.content?.value || 'Parent tweet not found');
+        }
+      });
+    }
+  }, [tweet.parent_tweet_id, parentTweetText, fetchTweet]);
 
-    const handleMenuOpen = useCallback(event => {
-      event.stopPropagation();
-      setAnchorEl(event.currentTarget);
-    }, []);
+  const handleMouseEnter = useCallback(() => {
+    setHovered(true);
+    if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
+      onReplyHover(tweet.tweet_id);
+    }
+  }, [onReplyHover, tweet.tweet_id, tweet.parent_tweet_id, tweet.child_tweet_ids]);
 
-    const handleMenuClose = useCallback(() => setAnchorEl(null), []);
+  const handleMouseLeave = useCallback(() => {
+    setHovered(false);
+    if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
+      onReplyHover(null);
+    }
+  }, [onReplyHover, tweet.parent_tweet_id, tweet.child_tweet_ids]);
 
-    const handleOpenModal = useCallback(event => {
-      event.stopPropagation();
-      setOpenModal(true);
-    }, []);
+  const handleMenuOpen = useCallback(event => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+  }, []);
 
-    const handleCloseModal = useCallback(() => setOpenModal(false), []);
+  const handleMenuClose = useCallback(() => setAnchorEl(null), []);
 
-    // Allow editing if user is moderator, administrator, tweet owner, or bypassOwnership is true
-    const canEdit = bypassOwnership || (
+  const handleOpenMediaModal = useCallback(event => {
+    event.stopPropagation();
+    setOpenMediaModal(true);
+  }, []);
+
+  const handleCloseMediaModal = useCallback(() => setOpenMediaModal(false), []);
+
+  const handleOpenEditModal = useCallback(() => {
+    setEditForm({
+      content: tweet.content?.value || '',
+      status: tweet.status || 'approved',
+      boardId: tweet.board_id || '',
+    });
+    setEditModalOpen(true);
+    handleMenuClose();
+  }, [tweet.content?.value, tweet.status, tweet.board_id]);
+
+  const handleCloseEditModal = useCallback(() => setEditModalOpen(false), []);
+
+  const handleEditSubmit = useCallback(() => {
+    if (!editForm.content.trim()) {
+      return;
+    }
+    onEdit({
+      ...tweet,
+      content: { ...tweet.content, value: editForm.content },
+      status: editForm.status,
+      board_id: editForm.boardId,
+    });
+    setEditModalOpen(false);
+  }, [editForm, onEdit, tweet]);
+
+  const canEdit = useMemo(() => {
+    return (
+      bypassOwnership ||
       ['moderator', 'administrator'].includes(userRole) ||
-      (tweet?.anonymous_id || tweet.user_id) === currentUser?.anonymous_id ||
+      tweet?.anonymous_id === currentUser?.anonymous_id ||
+      tweet?.user_id === currentUser?.anonymous_id ||
       (tweet.username && currentUser.username && tweet.username === currentUser.username)
     );
+  }, [
+    bypassOwnership,
+    userRole,
+    tweet.anonymous_id,
+    tweet.user_id,
+    tweet.username,
+    currentUser.anonymous_id,
+    currentUser.username,
+  ]);
 
-    // Debug log for menu visibility
-    useEffect(() => {
-      console.log('TweetContent Debug:', {
-        tweetId: tweet.tweet_id,
-        canEdit,
-        userRole,
-        tweetAnonymousId: tweet.anonymous_id,
-        tweetUserId: tweet.user_id,
-        tweetUsername: tweet.username,
-        tweetContent: tweet.content,
-        currentUserAnonymousId: currentUser.anonymous_id,
-        currentUserUsername: currentUser.username,
-        bypassOwnership,
-      });
-    }, [
-      tweet.tweet_id,
-      tweet.anonymous_id,
-      tweet.user_id,
-      tweet.username,
-      tweet.content,
-      currentUser.anonymous_id,
-      currentUser.username,
-      canEdit,
-      bypassOwnership,
-      userRole,
-    ]);
+  const isRelated = relatedTweetIds.includes(tweet.tweet_id);
+  const highlightStyle = (hovered || isRelated || isParentHighlighted)
+    ? { border: '2px solid #1976d2', boxShadow: '0 0 8px rgba(25, 118, 210, 0.3)' }
+    : {};
 
-    const renderContent = useCallback((content) => {
-      const files = content.metadata?.files || [];
+  const renderContent = useMemo(() => {
+    const files = tweet.content.metadata?.files || [];
+    const imageFiles = files.filter(f => f.contentType?.startsWith('image') || f.url?.match(/\.(jpg|jpeg|png|gif)$/i));
+    const videoFiles = files.filter(f => f.contentType?.startsWith('video') || f.url?.match(/\.(mp4|webm)$/i));
+    const audioFiles = files.filter(f => f.contentType?.startsWith('audio') || f.url?.match(/\.(mp3|wav|webm)$/i));
 
-      switch (content.type) {
-        case 'text':
-          return (
-            <Typography
-              variant="body1"
-              sx={{ marginBottom: '8px', color: '#424242', fontWeight: 200 }}
-            >
-              {content.value}
-            </Typography>
-          );
-        case 'image':
-          return (
-            <Box sx={{ position: 'relative' }}>
-              <Grid container spacing={1}>
-                {files.slice(0, 4).map((file, index) => (
-                  <Grid item xs={6} key={file.fileKey || index}>
-                    <Box sx={{ position: 'relative' }}>
-                      <img
-                        src={file.url}
-                        alt={`Tweet media ${index + 1}`}
-                        style={{
-                          width: '100%',
-                          height: '100px',
-                          objectFit: 'cover',
-                          borderRadius: '8px',
-                        }}
-                        onError={e => (e.target.src = '/fallback-image.png')}
-                      />
-                      {index === 3 && files.length > 4 && (
-                        <Box
-                          sx={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            background: 'rgba(0,0,0,0.5)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            borderRadius: '8px',
-                          }}
-                        >
-                          <Typography sx={{ color: 'white' }}>
-                            +{files.length - 4}
-                          </Typography>
-                        </Box>
-                      )}
-                    </Box>
-                  </Grid>
-                ))}
-              </Grid>
-              {files.length > 0 && (
-                <Typography
-                  variant="caption"
-                  sx={{ color: 'primary.main', cursor: 'pointer', mt: 1 }}
-                  onClick={handleOpenModal}
-                  role="button"
-                  tabIndex={0}
-                  onKeyPress={e => e.key === 'Enter' && handleOpenModal(e)}
-                >
-                  View all media
-                </Typography>
-              )}
-            </Box>
-          );
-        case 'video':
-          return (
-            <Box>
-              {files[0]?.url ? (
-                <video
-                  src={files[0].url}
-                  controls
+    const renderImages = () => {
+      if (imageFiles.length === 0) return null;
+      return (
+        <Box sx={{ position: 'relative', mb: tweet.content.value ? 2 : 0 }}>
+          <Grid container spacing={1}>
+            {imageFiles.slice(0, 4).map((file, index) => (
+              <Grid item xs={imageFiles.length === 1 ? 12 : 6} sm={imageFiles.length === 1 ? 12 : 3} key={file.fileKey || index}>
+                <LazyLoadImage
+                  src={file.url}
+                  alt={`Tweet media ${index + 1}`}
+                  effect="blur"
                   style={{
-                    maxWidth: '100%',
+                    width: '100%',
+                    height: imageFiles.length === 1 ? '200px' : '100px',
+                    objectFit: 'cover',
                     borderRadius: '8px',
                   }}
-                  onError={e => console.error('Video load error:', e)}
+                  onError={e => (e.target.src = '/fallback-image.png')}
+                  placeholder={<Box sx={{ bgcolor: 'grey.200', width: '100%', height: '100%', borderRadius: '8px' }} />}
                 />
-              ) : (
-                <Typography color="error">Video unavailable</Typography>
-              )}
-              {files.length > 1 && (
-                <Typography
-                  variant="caption"
-                  sx={{ color: 'primary.main', cursor: 'pointer', mt: 1 }}
-                  onClick={handleOpenModal}
-                  role="button"
-                  tabIndex={0}
-                  onKeyPress={e => e.key === 'Enter' && handleOpenModal(e)}
-                >
-                  View all media
-                </Typography>
-              )}
-            </Box>
-          );
-        case 'audio':
-          return (
-            <Box>
-              {files[0]?.url ? (
-                <audio
-                  src={files[0].url}
-                  controls
-                  style={{ width: '100%' }}
-                  onError={e => console.error('Audio load error:', e)}
-                />
-              ) : (
-                <Typography color="error">Audio unavailable</Typography>
-              )}
-              {files.length > 1 && (
-                <Typography
-                  variant="caption"
-                  sx={{ color: 'primary.main', cursor: 'pointer', mt: 1 }}
-                  onClick={handleOpenModal}
-                  role="button"
-                  tabIndex={0}
-                  onKeyPress={e => e.key === 'Enter' && handleOpenModal(e)}
-                >
-                  View all media
-                </Typography>
-              )}
-            </Box>
-          );
-        default:
-          return <Typography color="error">Unsupported content type</Typography>;
-      }
-    }, [handleOpenModal]);
+                {index === 3 && imageFiles.length > 4 && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      background: 'rgba(0,0,0,0.5)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '8px',
+                    }}
+                  >
+                    <Typography sx={{ color: 'white' }}>
+                      +{imageFiles.length - 4}
+                    </Typography>
+                  </Box>
+                )}
+              </Grid>
+            ))}
+          </Grid>
+          {imageFiles.length > 0 && (
+            <Typography
+              variant="caption"
+              sx={{ color: 'primary.main', cursor: 'pointer', mt: 1 }}
+              onClick={handleOpenMediaModal}
+              role="button"
+              tabIndex={0}
+              onKeyPress={e => e.key === 'Enter' && handleOpenMediaModal(e)}
+              aria-label="View all media"
+            >
+              View all media ({imageFiles.length})
+            </Typography>
+          )}
+        </Box>
+      );
+    };
+
+    const renderVideos = () => {
+      if (videoFiles.length === 0) return null;
+      return (
+        <Box sx={{ mb: tweet.content.value || imageFiles.length > 0 ? 2 : 0 }}>
+          <Box sx={{ position: 'relative' }}>
+            <video
+              src={videoFiles[0].url}
+              controls
+              style={{
+                width: '100%',
+                maxHeight: videoFiles[0].duration && videoFiles[0].duration < 15 ? '100px' : '200px',
+                borderRadius: videoFiles[0].duration && videoFiles[0].duration < 15 ? '50%' : '8px',
+                objectFit: 'cover',
+              }}
+              onError={e => console.error('Video load error:', e)}
+              preload="metadata"
+              aria-label="Tweet video"
+            />
+          </Box>
+          {videoFiles.length > 1 && (
+            <Typography
+              variant="caption"
+              sx={{ color: 'primary.main', cursor: 'pointer', mt: 1 }}
+              onClick={handleOpenMediaModal}
+              role="button"
+              tabIndex={0}
+              onKeyPress={e => e.key === 'Enter' && handleOpenMediaModal(e)}
+              aria-label="View all videos"
+            >
+              View all videos ({videoFiles.length})
+            </Typography>
+          )}
+        </Box>
+      );
+    };
+
+    const renderAudio = () => {
+      if (audioFiles.length === 0) return null;
+      return (
+        <Box sx={{ mb: tweet.content.value || imageFiles.length > 0 || videoFiles.length > 0 ? 2 : 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <audio
+              src={audioFiles[0].url}
+              controls
+              style={{ width: '100%' }}
+              onError={e => console.error('Audio load error:', e)}
+              preload="metadata"
+              aria-label="Tweet audio"
+            />
+          </Box>
+          {audioFiles.length > 1 && (
+            <Typography
+              variant="caption"
+              sx={{ color: 'primary.main', cursor: 'pointer', mt: 1 }}
+              onClick={handleOpenMediaModal}
+              role="button"
+              tabIndex={0}
+              onKeyPress={e => e.key === 'Enter' && handleOpenMediaModal(e)}
+              aria-label="View all audio"
+            >
+              View all audio ({audioFiles.length})
+            </Typography>
+          )}
+        </Box>
+      );
+    };
 
     return (
       <>
-        <Paper
-          id={`tweet-${tweet.tweet_id}`}
-          className="tweet-card"
-          elevation={3}
-          onClick={e => {
-            if (e.target.closest('.tweet-menu')) {
-              e.stopPropagation();
-              return;
-            }
-          }}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-          sx={{
-            padding: '16px',
-            backgroundColor: hovered ? 'background.default' : 'background.paper',
-            borderRadius: 1,
-            minWidth: '180px',
-            maxWidth: '300px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-            transition: 'all 0.2s ease-in-out',
-            '&:hover': {
-              transform: 'scale(1.01)',
-              boxShadow: '0 6px 16px rgba(0,0,0,0.15)',
-            },
-            ...(isParentHighlighted && {
-              backgroundColor: 'background.hover',
-            }),
-            ...(tweet.status === 'pending' && {
-              border: '1px dashed #888',
-            }),
-          }}
-          role="article"
-          aria-labelledby={`tweet-title-${tweet.tweet_id}`}
-        >
-          <Typography id={`tweet-title-${tweet.tweet_id}`} sx={{ display: 'none' }}>
-            Tweet by {tweetAuthor}
-          </Typography>
-          {parentTweetText && (
-            <Box
-              sx={{
-                borderLeft: '3px solid',
-                borderColor: '#CDD0D5',
-                paddingLeft: '8px',
-                marginBottom: '8px',
-                fontStyle: 'italic',
-                fontWeight: 200,
-                color: '#CDD0D5',
-              }}
-            >
-              Reply to: {parentTweetText}
-            </Box>
-          )}
-
-          {renderContent(tweet.content)}
-
+        {tweet.content.value && (
           <Typography
             variant="body1"
-            sx={{ color: 'text.secondary', fontSize: '1rem' }}
-          >
-            Author: {tweetAuthor}
-          </Typography>
-          <Typography
-            variant="caption"
-            sx={{ color: 'text.secondary', fontSize: '0.8rem' }}
-          >
-            Status: {tweet.status}
-          </Typography>
-
-          <Box
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              marginTop: 1,
-              justifyContent: 'space-between',
+              mb: imageFiles.length > 0 || videoFiles.length > 0 || audioFiles.length > 0 ? 2 : 0,
+              color: '#424242',
+              fontWeight: 200,
+              wordBreak: 'break-word',
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Emoji text={tweet.content.value} />
+          </Typography>
+        )}
+        {renderImages()}
+        {renderVideos()}
+        {renderAudio()}
+      </>
+    );
+  }, [tweet.content, handleOpenMediaModal]);
+
+  return (
+    <>
+      <Paper
+        id={`tweet-${tweet.tweet_id}`}
+        className="tweet-card"
+        elevation={3}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        sx={{
+          p: '16px',
+          bgcolor: tweet.is_pinned ? 'rgba(255, 215, 0, 0.1)' : 'background.paper',
+          borderRadius: 1,
+          minWidth: { xs: '180px', sm: '240px' },
+          maxWidth: { xs: '90vw', sm: '320px' },
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          transition: 'all 0.2s ease-in-out',
+          ...highlightStyle,
+        }}
+        role="article"
+        aria-labelledby={`tweet-title-${tweet.tweet_id}`}
+      >
+        <Typography id={`tweet-title-${tweet.tweet_id}`} sx={{ display: 'none' }}>
+          Tweet by {tweetAuthor}
+        </Typography>
+        {tweet.is_pinned && (
+          <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
+            <PushPinIcon fontSize="small" sx={{ color: 'gold', transition: 'color 0.2s ease' }} />
+          </Box>
+        )}
+        {parentText && (
+          <Box
+            sx={{
+              borderLeft: '3px solid',
+              borderColor: 'grey.300',
+              pl: '8px',
+              mb: '8px',
+              fontStyle: 'italic',
+              fontWeight: 200,
+              color: 'grey.600',
+              bgcolor: 'grey.100',
+              p: 1,
+              borderRadius: 1,
+            }}
+          >
+            <Typography variant="caption">Replying to:</Typography>
+            <Typography variant="body2">
+              <Emoji text={parentText} />
+            </Typography>
+          </Box>
+        )}
+
+        {renderContent}
+
+        <Typography
+          variant="body2"
+          sx={{ color: 'text.secondary', fontSize: '0.9rem', mt: 1 }}
+        >
+          Author: {tweetAuthor}
+        </Typography>
+        <Typography
+          variant="caption"
+          sx={{ color: 'text.secondary', fontSize: '0.8rem' }}
+        >
+          Status: {tweet.status}
+        </Typography>
+
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            mt: 1,
+            justifyContent: 'space-between',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <IconButton
+              size="small"
+              onClick={e => {
+                e.stopPropagation();
+                onLike(tweet.tweet_id, isLiked);
+              }}
+              aria-label={isLiked ? 'Unlike tweet' : 'Like tweet'}
+            >
+              <ThumbUpIcon
+                fontSize="small"
+                sx={{ color: isLiked ? 'primary.main' : 'text.secondary', transition: 'color 0.2s ease' }}
+              />
+            </IconButton>
+            <Typography
+              variant="caption"
+              sx={{
+                mt: 0.2,
+                color: isLiked ? 'primary.main' : 'text.secondary',
+                transform: animate ? 'scale(1.2)' : 'scale(1)',
+                transition: 'transform 0.3s ease',
+              }}
+            >
+              {tweet.stats?.likes || 0}
+            </Typography>
+            {canEdit && (
               <IconButton
                 size="small"
                 onClick={e => {
                   e.stopPropagation();
-                  onLike(tweet.tweet_id, isLiked);
+                  onReply(tweet);
                 }}
-                aria-label={isLiked ? 'Unlike tweet' : 'Like tweet'}
+                aria-label="Reply to tweet"
               >
-                <ThumbUpIcon
-                  fontSize="small"
-                  sx={{ color: isLiked ? 'text.primary' : 'text.secondary' }}
-                />
+                <ChatBubbleOutlineIcon fontSize="small" sx={{ color: 'text.secondary', transition: 'color 0.2s ease' }} />
               </IconButton>
-              <Typography
-                variant="caption"
-                sx={{
-                  marginLeft: 0.5,
-                  marginTop: 0.2,
-                  color: isLiked ? 'text.primary' : 'text.secondary',
-                  transform: animate ? 'scale(1.2)' : 'scale(1)',
-                  transition: 'transform 300ms ease',
-                }}
-              >
-                {tweet.stats?.likes || 0}
+            )}
+            {(tweet.child_tweet_ids?.length > 0 || replyCount > 0) && (
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                {tweet.child_tweet_ids?.length || replyCount} {tweet.child_tweet_ids?.length === 1 ? 'Reply' : 'Replies'}
               </Typography>
-              {canEdit && ( // Show reply button only for authorized users
-                <IconButton
-                  size="small"
-                  onClick={e => {
-                    e.stopPropagation();
-                    onReply(tweet);
-                  }}
-                  sx={{ ml: 1 }}
-                  aria-label="Reply to tweet"
-                >
-                  <ChatBubbleOutlineIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                </IconButton>
-              )}
-              {replyCount > 0 && (
-                <Typography variant="caption" sx={{ marginLeft: 0.5, color: 'text.secondary' }}>
-                  {replyCount}
-                </Typography>
-              )}
-            </Box>
-
-            {canEdit && (
-              <Box>
-                <IconButton
-                  size="small"
-                  onClick={handleMenuOpen}
-                  className="tweet-menu"
-                  aria-label="Tweet options"
-                  aria-controls="tweet-menu"
-                  aria-haspopup="true"
-                >
-                  <MoreVertIcon fontSize="small" />
-                </IconButton>
-                <Menu
-                  id="tweet-menu"
-                  anchorEl={anchorEl}
-                  open={Boolean(anchorEl)}
-                  onClose={handleMenuClose}
-                >
-                  <MenuItem
-                    onClick={() => { onEdit(tweet); handleMenuClose(); }}
-                    aria-label="Edit tweet"
-                  >
-                    Edit Tweet
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => { onMove(tweet); handleMenuClose(); }}
-                    aria-label="Move to another board"
-                  >
-                    Move to Another Board
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => { onChangeType(tweet); handleMenuClose(); }}
-                    aria-label="Change tweet type"
-                  >
-                    Change Type
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => { onPinToggle(tweet); handleMenuClose(); }}
-                    aria-label={tweet.is_pinned ? 'Unpin tweet' : 'Pin tweet'}
-                  >
-                    {tweet.is_pinned ? 'Unpin Tweet' : 'Pin Tweet'}
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => { onDelete(tweet.tweet_id); handleMenuClose(); }}
-                    sx={{ color: 'error.main' }}
-                    aria-label="Delete tweet"
-                  >
-                    Delete
-                  </MenuItem>
-                </Menu>
-              </Box>
             )}
           </Box>
-        </Paper>
 
-        <Modal
-          open={openModal}
-          onClose={handleCloseModal}
-          closeAfterTransition
-          BackdropComponent={Backdrop}
-          BackdropProps={{ timeout: 500 }}
-          aria-labelledby="media-modal-title"
-        >
-          <Fade in={openModal}>
-            <Box
-              sx={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                bgcolor: 'background.paper',
-                boxShadow: 24,
-                p: 4,
-                maxWidth: '90vw',
-                maxHeight: '90vh',
-                overflow: 'auto',
-                borderRadius: 2,
-              }}
-            >
-              <Typography id="media-modal-title" variant="h6" sx={{ mb: 2 }}>
-                All Media
-              </Typography>
-              <Grid container spacing={2}>
-                {tweet.content.metadata?.files?.map((file, index) => (
-                  <Grid item xs={12} sm={6} md={4} key={file.fileKey || index}>
-                    {file.contentType.startsWith('image') ? (
-                      <img
-                        src={file.url}
-                        alt={`Media ${index + 1}`}
-                        style={{
-                          width: '100%',
-                          maxHeight: '200px',
-                          objectFit: 'cover',
-                          borderRadius: '8px',
-                        }}
-                        onError={e => (e.target.src = '/fallback-image.png')}
-                      />
-                    ) : file.contentType.startsWith('video') ? (
-                      <video
-                        src={file.url}
-                        controls
-                        style={{
-                          width: '100%',
-                          maxHeight: '200px',
-                          borderRadius: '8px',
-                        }}
-                        onError={e => console.error('Video load error:', e)}
-                      />
-                    ) : file.contentType.startsWith('audio') ? (
-                      <audio
-                        src={file.url}
-                        controls
-                        style={{ width: '100%' }}
-                        onError={e => console.error('Audio load error:', e)}
-                      />
-                    ) : (
-                      <Typography>Unsupported file type</Typography>
-                    )}
-                  </Grid>
-                ))}
-              </Grid>
+          {canEdit && (
+            <Box>
+              <IconButton
+                size="small"
+                onClick={handleMenuOpen}
+                className="tweet-menu"
+                aria-label="Tweet options"
+                aria-controls={`tweet-menu-${tweet.tweet_id}`}
+                aria-haspopup="true"
+              >
+                <MoreVertIcon fontSize="small" sx={{ transition: 'color 0.2s ease' }} />
+              </IconButton>
+              <Menu
+                id={`tweet-menu-${tweet.tweet_id}`}
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={handleMenuClose}
+                slotProps={{
+                  paper: {
+                    sx: { boxShadow: '0 2px 8px rgba(0,0,0,0.15)' },
+                  },
+                }}
+              >
+                <MenuItem
+                  onClick={handleOpenEditModal}
+                  aria-label="Edit tweet"
+                >
+                  Edit Tweet
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    onPinToggle(tweet);
+                    handleMenuClose();
+                  }}
+                  aria-label={tweet.is_pinned ? 'Unpin tweet' : 'Pin tweet'}
+                >
+                  {tweet.is_pinned ? 'Unpin Tweet' : 'Pin Tweet'}
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    onDelete(tweet.tweet_id);
+                    handleMenuClose();
+                  }}
+                  sx={{ color: 'error.main' }}
+                  aria-label="Delete tweet"
+                >
+                  Delete
+                </MenuItem>
+              </Menu>
             </Box>
-          </Fade>
-        </Modal>
-      </>
-    );
-  }
-);
+          )}
+        </Box>
+      </Paper>
+
+      <Modal
+        open={openMediaModal}
+        onClose={handleCloseMediaModal}
+        closeAfterTransition
+        slots={{ backdrop: Backdrop }}
+        slotProps={{ backdrop: { timeout: 500 } }}
+        aria-labelledby="media-modal-title"
+      >
+        <Fade in={openMediaModal}>
+          <Box
+            sx={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              bgcolor: 'background.paper',
+              boxShadow: 24,
+              p: 4,
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              borderRadius: 2,
+            }}
+            role="dialog"
+            aria-labelledby="media-modal-title"
+          >
+            <Typography id="media-modal-title" variant="h6" sx={{ mb: 2 }}>
+              All Media
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {tweet.content.metadata?.files?.map((file, index) => (
+                <Box key={file.fileKey || index}>
+                  {file.contentType?.startsWith('image') || file.url?.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                    <LazyLoadImage
+                      src={file.url}
+                      alt={`Media ${index + 1}`}
+                      effect="blur"
+                      style={{
+                        width: '100%',
+                        maxHeight: '300px',
+                        objectFit: 'contain',
+                        borderRadius: '8px',
+                      }}
+                      onError={e => (e.target.src = '/fallback-image.png')}
+                      placeholder={<Box sx={{ bgcolor: 'grey.200', width: '100%', height: '300px', borderRadius: '8px' }} />}
+                    />
+                  ) : file.contentType?.startsWith('video') || file.url?.match(/\.(mp4|webm)$/i) ? (
+                    <video
+                      src={file.url}
+                      controls
+                      style={{
+                        width: '100%',
+                        maxHeight: '300px',
+                        borderRadius: '8px',
+                      }}
+                      onError={e => console.error('Video load error:', e)}
+                      aria-label={`Video ${index + 1}`}
+                    />
+                  ) : file.contentType?.startsWith('audio') || file.url?.match(/\.(mp3|wav|webm)$/i) ? (
+                    <audio
+                      src={file.url}
+                      controls
+                      style={{ width: '100%' }}
+                      onError={e => console.error('Audio load error:', e)}
+                      aria-label={`Audio ${index + 1}`}
+                    />
+                  ) : (
+                    <Typography>Unsupported file type</Typography>
+                  )}
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        </Fade>
+      </Modal>
+
+      <Dialog open={editModalOpen} onClose={handleCloseEditModal} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Tweet</DialogTitle>
+        <DialogContent>
+          <TextField
+            multiline
+            fullWidth
+            label="Tweet Content"
+            value={editForm.content}
+            onChange={e => setEditForm(prev => ({ ...prev, content: e.target.value }))}
+            sx={{ mt: 2 }}
+            aria-label="Tweet content"
+            minRows={3}
+            inputProps={{ maxLength: MAX_TWEET_LENGTH }}
+          />
+          <Typography
+            variant="caption"
+            sx={{ display: 'block', mt: 1, color: editForm.content.length > MAX_TWEET_LENGTH ? 'error.main' : 'text.secondary' }}
+          >
+            {editForm.content.length}/{MAX_TWEET_LENGTH}
+          </Typography>
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel>Tweet Status</InputLabel>
+            <Select
+              value={editForm.status}
+              label="Tweet Status"
+              onChange={e => setEditForm(prev => ({ ...prev, status: e.target.value }))}
+              aria-label="Tweet status"
+            >
+              <MenuItem value="pending">Pending</MenuItem>
+              <MenuItem value="approved">Approved</MenuItem>
+              <MenuItem value="rejected">Rejected</MenuItem>
+              <MenuItem value="announcement">Announcement</MenuItem>
+              <MenuItem value="reminder">Reminder</MenuItem>
+              <MenuItem value="pinned">Pinned</MenuItem>
+              <MenuItem value="archived">Archived</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel>Move to Board</InputLabel>
+            <Select
+              value={editForm.boardId}
+              label="Move to Board"
+              onChange={e => setEditForm(prev => ({ ...prev, boardId: e.target.value }))}
+              aria-label="Move to board"
+            >
+              {availableBoards.map(b => (
+                <MenuItem key={b.board_id} value={b.board_id}>
+                  {b.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseEditModal} aria-label="Cancel edit tweet">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleEditSubmit}
+            variant="contained"
+            aria-label="Save edited tweet"
+            disabled={!editForm.content.trim() || editForm.content.length > MAX_TWEET_LENGTH}
+          >
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
 
 TweetContent.propTypes = {
   tweet: PropTypes.shape({
@@ -509,6 +651,7 @@ TweetContent.propTypes = {
             fileKey: PropTypes.string.isRequired,
             contentType: PropTypes.string.isRequired,
             size: PropTypes.number.isRequired,
+            duration: PropTypes.number,
           })
         ),
       }),
@@ -534,6 +677,7 @@ TweetContent.propTypes = {
     }),
     status: PropTypes.string,
     is_pinned: PropTypes.bool,
+    board_id: PropTypes.string,
   }).isRequired,
   currentUser: PropTypes.shape({
     anonymous_id: PropTypes.string,
@@ -545,13 +689,22 @@ TweetContent.propTypes = {
   onReply: PropTypes.func.isRequired,
   onReplyHover: PropTypes.func,
   onEdit: PropTypes.func.isRequired,
-  onMove: PropTypes.func.isRequired,
-  onChangeType: PropTypes.func.isRequired,
   onPinToggle: PropTypes.func.isRequired,
   isParentHighlighted: PropTypes.bool,
   replyCount: PropTypes.number,
   parentTweetText: PropTypes.string,
   bypassOwnership: PropTypes.bool,
+  relatedTweetIds: PropTypes.arrayOf(PropTypes.string),
+  availableBoards: PropTypes.arrayOf(
+    PropTypes.shape({
+      board_id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired,
+    })
+  ),
+  token: PropTypes.string.isRequired,
+  boardId: PropTypes.string.isRequired,
+  onLogout: PropTypes.func.isRequired,
+  navigate: PropTypes.func.isRequired,
 };
 
-export default TweetContent;
+export default memo(TweetContent);

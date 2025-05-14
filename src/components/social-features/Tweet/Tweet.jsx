@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, memo, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import Draggable from 'react-draggable';
 import debounce from 'lodash.debounce';
@@ -16,7 +16,6 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
     y: tweet.position?.y || 0,
   });
 
-  // Update position only when tweet.position changes and not dragging
   useEffect(() => {
     if (!dragging && !justDroppedRef.current) {
       const newX = tweet.position?.x || 0;
@@ -28,57 +27,43 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
     }
   }, [tweet.position?.x, tweet.position?.y, dragging]);
 
-  // Allow dragging if user is moderator, administrator, tweet owner, or bypassOwnership is true
-  const isDraggable = bypassOwnership || (
-    ['moderator', 'administrator'].includes(userRole) ||
-    (tweet?.anonymous_id || tweet.user_id) === currentUser.anonymous_id ||
-    (tweet.username && currentUser.username && tweet.username === currentUser.username)
-  );
-
-  // Debug log for draggability
-  useEffect(() => {
-    console.log('DraggableTweet Debug:', {
-      tweetId: tweet.tweet_id,
-      isDraggable,
-      userRole,
-      tweetAnonymousId: tweet.anonymous_id,
-      tweetUserId: tweet.user_id,
-      tweetUsername: tweet.username,
-      currentUserAnonymousId: currentUser.anonymous_id,
-      currentUserUsername: currentUser.username,
-      bypassOwnership,
-    });
-    if (!tweet.position) {
-      console.warn(`Tweet ${tweet.tweet_id} is missing position data`);
-    }
+  const isDraggable = useMemo(() => {
+    if (tweet.is_pinned) return false;
+    return (
+      bypassOwnership ||
+      ['moderator', 'administrator'].includes(userRole) ||
+      tweet?.anonymous_id === currentUser?.anonymous_id ||
+      tweet?.user_id === currentUser?.anonymous_id ||
+      (tweet.username && currentUser.username && tweet.username === currentUser.username)
+    );
   }, [
-    tweet.tweet_id,
+    bypassOwnership,
+    userRole,
     tweet.anonymous_id,
     tweet.user_id,
     tweet.username,
+    tweet.is_pinned,
     currentUser.anonymous_id,
     currentUser.username,
-    isDraggable,
-    bypassOwnership,
-    tweet.position,
-    userRole,
   ]);
 
-  // Debounced onStop handler
   const debouncedOnStop = useCallback(
     debounce((e, data) => {
       if (
         data.x !== previousPosition.current.x ||
         data.y !== previousPosition.current.y
       ) {
+        if (isNaN(data.x) || isNaN(data.y)) {
+          console.error('Invalid position data:', data);
+          return;
+        }
         previousPosition.current = { x: data.x, y: data.y };
-        onStop && onStop(e, data);
+        onStop?.(e, { ...data, tweetId: tweet.tweet_id });
       }
     }, 150),
-    [onStop]
+    [onStop, tweet.tweet_id]
   );
 
-  // Cleanup debounce on unmount
   useEffect(() => {
     return () => {
       debouncedOnStop.cancel();
@@ -90,6 +75,7 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
       nodeRef={nodeRef}
       position={localPosition}
       onStart={() => {
+        if (!isDraggable) return false;
         setDragging(true);
         return true;
       }}
@@ -97,11 +83,11 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
         setLocalPosition({ x: data.x, y: data.y });
       }}
       onStop={(e, data) => {
+        if (!isDraggable) return;
         setDragging(false);
         justDroppedRef.current = true;
 
         if (e.target.closest('.tweet-menu')) {
-          console.log('Menu click detected, skipping drag stop');
           return;
         }
 
@@ -115,12 +101,15 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
         style={{
           position: 'absolute',
           transform: 'translate(-50%, -50%)',
-          cursor: isDraggable ? 'move' : 'default',
-          opacity: tweet.status === 'pending' ? 0.7 : 1,
+          cursor: isDraggable ? (dragging ? 'grabbing' : 'grab') : 'default',
+          opacity: tweet.status === 'pending' ? 0.7 : dragging ? 0.9 : 1,
+          zIndex: dragging ? 1000 : tweet.is_pinned ? 1100 : 1,
+          transition: 'opacity 0.2s ease',
         }}
         role="region"
         aria-label={`Tweet by ${tweet.username || 'Someone'}`}
         aria-disabled={!isDraggable}
+        tabIndex={isDraggable ? 0 : -1}
       >
         {children}
       </div>
@@ -139,6 +128,7 @@ DraggableTweet.propTypes = {
     user_id: PropTypes.string,
     username: PropTypes.string,
     status: PropTypes.string,
+    is_pinned: PropTypes.bool,
   }).isRequired,
   onStop: PropTypes.func,
   children: PropTypes.node.isRequired,
@@ -150,4 +140,4 @@ DraggableTweet.propTypes = {
   bypassOwnership: PropTypes.bool,
 };
 
-export default React.memo(DraggableTweet);
+export default memo(DraggableTweet);

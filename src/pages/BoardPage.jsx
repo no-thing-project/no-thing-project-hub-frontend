@@ -55,6 +55,7 @@ const BoardPage = memo(() => {
   const {
     boardItem,
     members,
+    availableBoards,
     fetchBoard,
     fetchBoardMembersList,
     updateExistingBoard,
@@ -92,17 +93,24 @@ const BoardPage = memo(() => {
     []
   );
 
-  const userRole = boardItem
-    ? boardItem.creator_id === authData?.anonymous_id
+  const userRole = useMemo(() => {
+    if (!boardItem || !authData) return "viewer";
+    return boardItem.creator_id === authData?.anonymous_id
       ? "owner"
       : boardItem.is_public
       ? "viewer"
-      : members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || "viewer"
-    : "viewer";
+      : members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || "viewer";
+  }, [boardItem, authData, members]);
 
-  const isFavorited = boardItem?.favorited_by?.some((user) => user.anonymous_id === authData?.anonymous_id) ?? false;
+  const isFavorited = useMemo(() => 
+    boardItem?.favorited_by?.some((user) => user.anonymous_id === authData?.anonymous_id) ?? false,
+    [boardItem?.favorited_by, authData?.anonymous_id]
+  );
 
-  const boardVisibility = boardItem?.visibility ?? (boardItem?.is_public ? "public" : "private");
+  const boardVisibility = useMemo(() => 
+    boardItem?.visibility ?? (boardItem?.is_public ? "public" : "private"),
+    [boardItem?.visibility, boardItem?.is_public]
+  );
 
   const loadData = useCallback(
     async (signal) => {
@@ -143,7 +151,7 @@ const BoardPage = memo(() => {
           ? "Board not found."
           : `Failed to load board data: ${err.message}`;
         showNotification(message, "error");
-        setTimeout(() => navigate("/boards"), 2000); // Delay navigation to show notification
+        setTimeout(() => navigate("/boards"), 2000);
         setIsFullyLoaded(true);
       }
     },
@@ -157,7 +165,7 @@ const BoardPage = memo(() => {
     debouncedLoadData(controller.signal);
     return () => {
       controller.abort();
-      setPointsSpent(0); // Reset points on unmount
+      setPointsSpent(0);
     };
   }, [debouncedLoadData]);
 
@@ -172,7 +180,7 @@ const BoardPage = memo(() => {
     if (pointsData?.total_points !== undefined && pointsData.total_points < prevPoints) {
       setPointsSpent(prevPoints - pointsData.total_points);
       const timeout = setTimeout(() => setPointsSpent(0), 700);
-      return () => clearTimeout(timeout); // Clear timeout on unmount
+      return () => clearTimeout(timeout);
     }
     setPrevPoints(pointsData?.total_points ?? 0);
   }, [pointsData?.total_points, prevPoints]);
@@ -327,6 +335,7 @@ const BoardPage = memo(() => {
           navigate(`/board/${childId}`);
           handleMenuClose();
         }}
+        aria-label={`Go to child board ${childId.slice(0, 8)}`}
       >
         Go to Child Board {childId.slice(0, 8)}
       </MenuItem>
@@ -484,7 +493,11 @@ const BoardPage = memo(() => {
           anchorEl={anchorEl}
           open={Boolean(anchorEl)}
           onClose={handleMenuClose}
-          sx={{ "& .MuiMenu-paper": { borderRadius: theme.shape.borderRadiusMedium } }}
+          slotProps={{
+            paper: {
+              sx: { borderRadius: theme.shape.borderRadiusMedium },
+            },
+          }}
         >
           {childBoardMenuItems}
         </Menu>
@@ -520,6 +533,7 @@ const BoardPage = memo(() => {
         onPointsUpdate={getPoints}
         onLogout={handleLogout}
         navigate={navigate}
+        availableBoards={availableBoards}
       />
 
       {editingBoard && (
@@ -596,7 +610,7 @@ const BoardPage = memo(() => {
       <DeleteConfirmationDialog
         open={clearDialogOpen}
         onClose={() => setClearDialogOpen(false)}
-        onConfirm={() => setClearDialogOpen(false)} // Handled by Board.jsx
+        onConfirm={() => setClearDialogOpen(false)}
         message="Are you sure you want to delete all tweets on this board? This action cannot be undone."
         disabled={boardsLoading}
       />
