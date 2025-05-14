@@ -228,6 +228,35 @@ export const updateTweetApi = (boardId, tweetId, updates, token) => {
   });
 };
 
+
+/**
+ * Updates the status of a tweet.
+ * @param {string} boardId - UUID of the board
+ * @param {string} tweetId - UUID of the tweet
+ * @param {string} status - New status
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} - Updated tweet
+ */
+export const updateTweetStatusApi = (boardId, tweetId, status, token) => {
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+  validatePayload(
+    Joi.string()
+      .valid('pending', 'approved', 'rejected', 'announcement', 'reminder', 'pinned', 'archived')
+      .required(),
+    status,
+    'Invalid status'
+  );
+
+  return apiRequest('put', `/api/v1/tweets/${boardId}/${tweetId}/status`, token, {
+    payload: { status },
+    invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`, `comments:${boardId}:${tweetId}`],
+  }).then(response => {
+    console.log(`Updated status for tweet ${tweetId} to ${status}`);
+    return response; // apiRequest extracts response.data.content
+  });
+};
+
 /**
  * Toggles like/dislike for a tweet.
  * @param {string} tweetId - UUID of the tweet
@@ -253,34 +282,17 @@ export const toggleLikeApi = (tweetId, isLiked, token) => {
 export const deleteTweetApi = (boardId, tweetId, token) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+
   return apiRequest('delete', `/api/v1/tweets/${boardId}/${tweetId}`, token, {
     invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`, `comments:${boardId}:${tweetId}`],
+  }).then(response => {
+    console.log(`Deleted tweet ${tweetId} from board ${boardId}`);
+    return response;
   });
 };
 
 
-/**
- * Updates the status of a tweet.
- * @param {string} boardId - UUID of the board
- * @param {string} tweetId - UUID of the tweet
- * @param {string} status - New status (pending/approved)
- * @param {string} token - Authorization token
- * @returns {Promise<Object>} - Updated tweet
- */
-export const updateTweetStatusApi = (boardId, tweetId, status, token) => {
-  validatePayload(uuidSchema, boardId, 'Invalid boardId');
-  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
-  validatePayload(
-    Joi.string().valid('pending', 'approved', 'rejected', 'announcement', 'reminder', 'pinned', 'archived').required(),
-    status,
-    'Invalid status'
-  );
 
-  return apiRequest('put', `/api/v1/tweets/${boardId}/${tweetId}/status`, token, {
-    payload: { status },
-    invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`],
-  });
-};
 
 /**
  * Moves a tweet to another board.

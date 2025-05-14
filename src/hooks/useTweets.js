@@ -168,7 +168,6 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
     [boardId, token, currentUser, handleAuthError, withLoading]
   );
 
-
   const createNewTweet = useCallback(
     async (
       content,
@@ -464,6 +463,53 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
     [boardId, token, currentUser, handleAuthError, tweets, setTweet]
   );
 
+
+  const updateTweetStatus = useCallback(
+    async (tweetId, status) => {
+      if (!boardId || !tweetId) {
+        setError('Board ID and Tweet ID are required');
+        return null;
+      }
+      const validStatuses = ['pending', 'approved', 'rejected', 'announcement', 'reminder', 'pinned', 'archived'];
+      if (!validStatuses.includes(status)) {
+        setError(`Invalid status: ${status}. Must be one of: ${validStatuses.join(', ')}`);
+        return null;
+      }
+  
+      const currentTweet = tweets.find(t => t.tweet_id === tweetId);
+      if (!currentTweet) {
+        setError('Tweet not found');
+        return null;
+      }
+  
+      return withLoading(async () => {
+        // Optimistic update
+        const optimisticTweet = normalizeTweet({ ...currentTweet, status }, currentUser);
+        setTweets(prev => prev.map(t => (t.tweet_id === tweetId ? optimisticTweet : t)));
+  
+        try {
+          const updatedTweet = await updateTweetStatusApi(boardId, tweetId, status, token);
+          const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
+  
+          if (!normalizedTweet.tweet_id) {
+            throw new Error('Failed to update status: Invalid tweet ID');
+          }
+  
+          setTweets(prev => prev.map(t => (t.tweet_id === tweetId ? normalizedTweet : t)));
+          lastValidTweets.current = tweets;
+          setTweet(normalizedTweet);
+          return normalizedTweet;
+        } catch (err) {
+          handleAuthError(err);
+          setTweets(prev => prev.map(t => (t.tweet_id === tweetId ? normalizeTweet(currentTweet, currentUser) : t)));
+          setError(err.message || 'Failed to update tweet status');
+          throw err;
+        }
+      });
+    },
+    [boardId, token, currentUser, handleAuthError, tweets, withLoading]
+  );
+  
   const toggleLikeTweet = useCallback(
     async (tweetId, isLiked) => {
       if (!tweetId) {
@@ -527,66 +573,70 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
     },
     [token, currentUser, handleAuthError, tweets]
   );
-
+  
   const deleteExistingTweet = useCallback(
     async tweetId => {
       if (!boardId || !tweetId) {
         setError('Board ID and Tweet ID are required');
-        return;
+        return false;
       }
-
-      const deletedTweet = tweets.find(t => t.tweet_id === tweetId);
-      setTweets(prev => prev.filter(t => t.tweet_id !== tweetId));
-
-      try {
-        await deleteTweetApi(boardId, tweetId, token);
-        lastValidTweets.current = tweets;
-        setTweet(null);
-      } catch (err) {
-        handleAuthError(err);
-        if (deletedTweet) setTweets(prev => [...prev, deletedTweet]);
-      }
-    },
-    [boardId, token, handleAuthError, tweets]
-  );
-
-  const updateTweetStatus = useCallback(
-    async (tweetId, status) => {
-      if (!boardId || !tweetId) {
-        setError('Board ID and Tweet ID are required');
-        return null;
-      }
-      const validStatuses = ['pending', 'approved', 'rejected', 'announcement', 'reminder', 'pinned', 'archived'];
-      if (!validStatuses.includes(status)) {
-        setError(`Invalid status: ${status}`);
-        return null;
-      }
-
+  
       const currentTweet = tweets.find(t => t.tweet_id === tweetId);
-      setTweets(prev => prev.map(t => (t.tweet_id === tweetId ? { ...t, status } : t)));
-
-      try {
-        const updatedTweet = await updateTweetStatusApi(boardId, tweetId, status, token);
-        const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
-
-        if (!normalizedTweet.tweet_id) {
-          throw new Error('Failed to update status: Invalid tweet ID');
-        }
-
-        setTweets(prev => prev.map(t => (t.tweet_id === tweetId ? normalizedTweet : t)));
-        lastValidTweets.current = tweets;
-        setTweet(normalizedTweet);
-        return normalizedTweet;
-      } catch (err) {
-        handleAuthError(err);
-        setTweets(prev =>
-          prev.map(t => (t.tweet_id === tweetId ? normalizeTweet(currentTweet, currentUser) : t))
-        );
-        return null;
+      if (!currentTweet) {
+        setError('Tweet not found');
+        return false;
       }
+  
+      return withLoading(async () => {
+        // Optimistic update
+        const parentTweetId = currentTweet.parent_tweet_id;
+        setTweets(prev => {
+          const updatedTweets = prev.filter(t => t.tweet_id !== tweetId);
+          if (parentTweetId) {
+            return updatedTweets.map(t =>
+              t.tweet_id === parentTweetId
+                ? {
+                    ...t,
+                    child_tweet_ids: t.child_tweet_ids.filter(id => id !== tweetId),
+                    children: t.children.filter(c => c.tweet_id !== tweetId),
+                  }
+                : t
+            );
+          }
+          return updatedTweets;
+        });
+  
+        try {
+          await deleteTweetApi(boardId, tweetId, token);
+          lastValidTweets.current = tweets;
+          setTweet(null);
+          return true;
+        } catch (err) {
+          handleAuthError(err);
+          setTweets(prev => {
+            const restoredTweets = [...prev, normalizeTweet(currentTweet, currentUser)];
+            if (parentTweetId) {
+              return restoredTweets.map(t =>
+                t.tweet_id === parentTweetId
+                  ? {
+                      ...t,
+                      child_tweet_ids: [...t.child_tweet_ids, tweetId],
+                      children: [...t.children, normalizeTweet(currentTweet, currentUser)],
+                    }
+                  : t
+              );
+            }
+            return restoredTweets;
+          });
+          setError(err.message || 'Failed to delete tweet');
+          throw err;
+        }
+      });
     },
-    [boardId, token, currentUser, handleAuthError, tweets]
+    [boardId, token, currentUser, handleAuthError, tweets, withLoading]
   );
+
+
 
   const moveTweet = useCallback(
     async (tweetId, targetBoardId) => {
