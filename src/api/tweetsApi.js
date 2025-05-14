@@ -1,6 +1,6 @@
 import api from './apiClient';
 import { handleApiError } from './apiClient';
-import { uuidSchema, contentSchema, positionSchema, reminderSchema, validatePayload } from '../constants/validations';
+import { uuidSchema, contentSchema, positionSchema, reminderSchema, validatePayload, querySchema, commentQuerySchema } from '../constants/validations';
 import Joi from 'joi';
 
 // Cache configuration
@@ -76,16 +76,20 @@ const apiRequest = async (method, endpoint, token, { payload, params, signal, us
  * Fetches all tweets for a board.
  * @param {string} boardId - UUID of the board
  * @param {string} token - Authorization token
- * @param {Object} [options] - Query parameters (status, page, limit, sort, pinned_only, hashtag, mention)
- * @param {AbortSignal} [signal] - Abort signal for request cancellation
- * @returns {Promise<Object>} - Tweets, board info, and pagination
+ * @param {Object} [options] - Query parameters
+ * @param {AbortSignal} [signal] - Abort signal
+ * @returns {Promise<Object>} - Tweets, board info, pagination
  */
 export const fetchTweetsApi = (boardId, token, options = {}, signal) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(querySchema, options, 'Invalid query options');
   return apiRequest('get', `/api/v1/tweets/${boardId}`, token, {
     params: options,
     signal,
     useCache: true,
+  }).then(response => {
+    console.log(`Fetched tweets for board ${boardId}`);
+    return response;
   });
 };
 
@@ -94,13 +98,42 @@ export const fetchTweetsApi = (boardId, token, options = {}, signal) => {
  * @param {string} boardId - UUID of the board
  * @param {string} tweetId - UUID of the tweet
  * @param {string} token - Authorization token
- * @param {AbortSignal} [signal] - Abort signal for request cancellation
+ * @param {AbortSignal} [signal] - Abort signal
  * @returns {Promise<Object>} - Tweet details
  */
 export const fetchTweetById = (boardId, tweetId, token, signal) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
-  return apiRequest('get', `/api/v1/tweets/${boardId}/${tweetId}`, token, { signal, useCache: true });
+  return apiRequest('get', `/api/v1/tweets/${boardId}/${tweetId}`, token, {
+    signal,
+    useCache: true,
+  }).then(response => {
+    console.log(`Fetched tweet ${tweetId} for board ${boardId}`);
+    return response;
+  });
+};
+
+/**
+ * Fetches comments for a tweet.
+ * @param {string} boardId - UUID of the board
+ * @param {string} tweetId - UUID of the tweet
+ * @param {string} token - Authorization token
+ * @param {Object} [options] - Query parameters
+ * @param {AbortSignal} [signal] - Abort signal
+ * @returns {Promise<Object>} - Comments and pagination
+ */
+export const getTweetCommentsApi = (boardId, tweetId, token, options = {}, signal) => {
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
+  validatePayload(commentQuerySchema, options, 'Invalid comment query options');
+  return apiRequest('get', `/api/v1/tweets/${boardId}/${tweetId}/comments`, token, {
+    params: options,
+    signal,
+    useCache: true,
+  }).then(response => {
+    console.log(`Fetched comments for tweet ${tweetId} in board ${boardId}`);
+    return response;
+  });
 };
 
 /**
@@ -225,24 +258,6 @@ export const deleteTweetApi = (boardId, tweetId, token) => {
   });
 };
 
-/**
- * Fetches comments for a tweet.
- * @param {string} boardId - UUID of the board
- * @param {string} tweetId - UUID of the tweet
- * @param {string} token - Authorization token
- * @param {Object} [options] - Query parameters (page, limit, sort)
- * @param {AbortSignal} [signal] - Abort signal for request cancellation
- * @returns {Promise<Object>} - Comments and pagination
- */
-export const getTweetCommentsApi = (boardId, tweetId, token, options = {}, signal) => {
-  validatePayload(uuidSchema, boardId, 'Invalid boardId');
-  validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
-  return apiRequest('get', `/api/v1/tweets/${boardId}/${tweetId}/comments`, token, {
-    params: options,
-    signal,
-    useCache: true,
-  });
-};
 
 /**
  * Updates the status of a tweet.

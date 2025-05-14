@@ -12,6 +12,28 @@ export const uuidSchema = Joi.string().uuid({ version: ['uuidv4'] }).required().
     'any.required': '{#label} is required',
   });
   
+export const querySchema = Joi.object({
+    status: Joi.string()
+      .valid('pending', 'approved', 'rejected', 'announcement', 'reminder', 'pinned', 'archived')
+      .optional(),
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(100).default(20),
+    sort: Joi.string()
+      .valid('created_at:asc', 'created_at:desc', 'like_count:desc', 'comment_count:desc')
+      .default('created_at:desc'),
+    pinned_only: Joi.boolean().default(false),
+    hashtag: Joi.string().pattern(/^#[a-zA-Z0-9_]{1,50}$/).optional(),
+    mention: Joi.string().pattern(/^@[a-zA-Z0-9_]{1,50}$/).optional(),
+  }).label('QuerySchema');
+  
+export const commentQuerySchema = Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(100).default(20),
+    sort: Joi.string()
+      .valid('created_at:asc', 'created_at:desc', 'like_count:desc')
+      .default('created_at:desc'),
+  }).label('CommentQuerySchema');
+  
 export  const contentSchema = Joi.object({
     type: Joi.string()
       .valid(

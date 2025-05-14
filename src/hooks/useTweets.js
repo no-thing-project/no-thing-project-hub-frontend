@@ -3,11 +3,11 @@ import debounce from 'lodash/debounce';
 import {
   fetchTweetsApi,
   fetchTweetById,
+  getTweetCommentsApi,
   createTweetApi,
   updateTweetApi,
   toggleLikeApi,
   deleteTweetApi,
-  getTweetCommentsApi,
   updateTweetStatusApi,
   moveTweetApi,
   pinTweetApi,
@@ -22,12 +22,12 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
   const [tweets, setTweets] = useState([]);
   const [tweet, setTweet] = useState(null);
   const [comments, setComments] = useState([]);
-  const [pagination, setPagination] = useState({});
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0 });
   const [boardInfo, setBoardInfo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const lastValidTweets = useRef([]);
-  const abortControllerRef = useRef(new AbortController());
+  const lastValidComments = useRef([]);
 
   const handleAuthError = useCallback(
     err => {
@@ -35,8 +35,10 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       if (err.status === 401 || err.status === 403) {
         onLogout('Session expired. Please log in again.');
         navigate('/login');
+        setError('Unauthorized access. Please log in.');
+      } else {
+        setError(err.message || 'An unexpected error occurred');
       }
-      setError(err.message || 'An error occurred');
     },
     [onLogout, navigate]
   );
@@ -70,58 +72,102 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
 
   const fetchTweets = useCallback(
     debouncedApiCall(
-      async (options = {}, signal = abortControllerRef.current.signal) => {
+      async (options = {}) => {
         if (!boardId) {
           setError('Board ID is required to fetch tweets');
           return [];
         }
-        return withLoading(async () => {
-          const data = await fetchTweetsApi(boardId, token, options, signal);
-          const flattenTweets = (tweet, acc = []) => {
-            const normalized = normalizeTweet(tweet, currentUser);
-            if (normalized.tweet_id) acc.push(normalized);
-            if (tweet.children?.length) {
-              tweet.children.forEach(child => flattenTweets(child, acc));
-            }
-            return acc;
-          };
-          const allTweets = data.tweets.flatMap(t => flattenTweets(t));
-          setTweets(allTweets);
-          lastValidTweets.current = allTweets;
-          setBoardInfo(data.board);
-          setPagination(data.pagination);
-          return allTweets;
-        }).catch(err => {
+        const controller = new AbortController();
+        try {
+          return await withLoading(async () => {
+            const data = await fetchTweetsApi(boardId, token, options, controller.signal);
+            const normalizedTweets = data.tweets.map(tweet => ({
+              ...normalizeTweet(tweet, currentUser),
+              children: tweet.children || [], // Store children as-is for lazy normalization
+            }));
+            setTweets(normalizedTweets);
+            lastValidTweets.current = normalizedTweets;
+            setBoardInfo(data.board);
+            setPagination({
+              page: data.pagination.page,
+              limit: data.pagination.limit,
+              total: data.pagination.total,
+            });
+            return normalizedTweets;
+          });
+        } catch (err) {
           handleAuthError(err);
           return lastValidTweets.current;
-        });
+        } finally {
+          controller.abort(); // Clean up
+        }
       }
     ),
     [boardId, token, currentUser, handleAuthError, withLoading]
   );
 
   const fetchTweet = useCallback(
-    debouncedApiCall(async (tweetId, signal = abortControllerRef.current.signal) => {
+    debouncedApiCall(async tweetId => {
       if (!boardId || !tweetId) {
         setError('Board ID and Tweet ID are required');
         return null;
       }
-      return withLoading(async () => {
-        const tweetData = await fetchTweetById(boardId, tweetId, token, signal);
-        const normalizedTweet = normalizeTweet(tweetData, currentUser);
-        if (!normalizedTweet.tweet_id) {
-          setError('Invalid tweet ID');
-          return null;
-        }
-        setTweet(normalizedTweet);
-        return normalizedTweet;
-      }).catch(err => {
+      const controller = new AbortController();
+      try {
+        return await withLoading(async () => {
+          const tweetData = await fetchTweetById(boardId, tweetId, token, controller.signal);
+          const normalizedTweet = normalizeTweet(tweetData, currentUser);
+          if (!normalizedTweet.tweet_id) {
+            setError('Invalid tweet ID');
+            return null;
+          }
+          setTweet(normalizedTweet);
+          return normalizedTweet;
+        });
+      } catch (err) {
         handleAuthError(err);
         return null;
-      });
+      } finally {
+        controller.abort();
+      }
     }),
     [boardId, token, currentUser, handleAuthError, withLoading]
   );
+
+  const fetchTweetComments = useCallback(
+    debouncedApiCall(
+      async (tweetId, options = {}) => {
+        if (!boardId || !tweetId) {
+          setError('Board ID and Tweet ID are required');
+          return [];
+        }
+        const controller = new AbortController();
+        try {
+          return await withLoading(async () => {
+            const data = await getTweetCommentsApi(boardId, tweetId, token, options, controller.signal);
+            const normalizedComments = data.comments
+              .map(c => normalizeTweet(c, currentUser))
+              .filter(c => c.tweet_id);
+            setComments(normalizedComments);
+            lastValidComments.current = normalizedComments;
+            setPagination({
+              page: data.pagination.page,
+              limit: data.pagination.limit,
+              total: data.pagination.total,
+            });
+            return normalizedComments;
+          });
+        } catch (err) {
+          handleAuthError(err);
+          return lastValidComments.current;
+        } finally {
+          controller.abort();
+        }
+      }
+    ),
+    [boardId, token, currentUser, handleAuthError, withLoading]
+  );
+
 
   const createNewTweet = useCallback(
     async (
@@ -502,30 +548,6 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       }
     },
     [boardId, token, handleAuthError, tweets]
-  );
-
-  const fetchTweetComments = useCallback(
-    debouncedApiCall(
-      async (tweetId, options = {}, signal = abortControllerRef.current.signal) => {
-        if (!boardId || !tweetId) {
-          setError('Board ID and Tweet ID are required');
-          return null;
-        }
-        return withLoading(async () => {
-          const data = await getTweetCommentsApi(boardId, tweetId, token, options, signal);
-          const normalizedComments = data.comments
-            .map(c => normalizeTweet(c, currentUser))
-            .filter(c => c.tweet_id);
-          setComments(normalizedComments);
-          setPagination(data.pagination);
-          return normalizedComments;
-        }).catch(err => {
-          handleAuthError(err);
-          return null;
-        });
-      }
-    ),
-    [boardId, token, currentUser, handleAuthError, withLoading]
   );
 
   const updateTweetStatus = useCallback(
