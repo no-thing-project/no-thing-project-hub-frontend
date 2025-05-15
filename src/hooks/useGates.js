@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   fetchGates,
   fetchGateById,
@@ -25,11 +25,43 @@ const ERROR_MESSAGES = {
   GENERIC: "An error occurred.",
 };
 
-// Constant for maximum cache size
+// Constants for configuration
 const MAX_CACHE_SIZE = 10;
+const DEBOUNCE_MS = 300;
 
-// Cache for gate lists
-const gateListCache = new Map();
+// LRU Cache implementation
+class LRUCache {
+  constructor(capacity) {
+    this.capacity = capacity;
+    this.cache = new Map();
+  }
+
+  get(key) {
+    if (!this.cache.has(key)) return undefined;
+    const value = this.cache.get(key);
+    this.cache.delete(key);
+    this.cache.set(key, value);
+    return value;
+  }
+
+  set(key, value) {
+    if (this.cache.size >= this.capacity) {
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(key, value);
+  }
+
+  has(key) {
+    return this.cache.has(key);
+  }
+
+  clear() {
+    this.cache.clear();
+  }
+}
+
+const gateListCache = new LRUCache(MAX_CACHE_SIZE);
 
 /**
  * Hook for managing gates and their members
@@ -47,41 +79,40 @@ export const useGates = (token, onLogout, navigate) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  /**
-   * Handle authentication errors
-   * @param {Error} err - Error object
-   * @returns {null} Always returns null
-   */
-  const handleAuthError = useCallback(
-    (err) => {
+  const debounceTimer = useRef(null);
+  const abortControllers = useRef(new Set());
+
+  // Centralized error handling
+  const handleError = useCallback(
+    (err, customMessage) => {
+      if (err.name === "AbortError") return null;
       const status = err.status || 500;
       if (status === 401 || status === 403) {
         onLogout("Your session has expired. Please log in again.");
         navigate("/login");
       }
-      setError(err.message || ERROR_MESSAGES.GENERIC);
+      setError(customMessage || err.message || ERROR_MESSAGES.GENERIC);
       return null;
     },
     [onLogout, navigate]
   );
 
-  /**
-   * Reset hook state
-   */
-  const resetState = useCallback(() => {
-    setGates([]);
-    setGate(null);
-    setMembers([]);
-    setStats(null);
-    setPagination({});
-    setError(null);
+  // Debounce utility
+  const debounce = useCallback((fn, ms) => {
+    return (...args) => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+      return new Promise((resolve) => {
+        debounceTimer.current = setTimeout(async () => {
+          const result = await fn(...args);
+          resolve(result);
+        }, ms);
+      });
+    };
   }, []);
 
-  /**
-   * Normalize gate members data
-   * @param {Array} members - Array of members
-   * @returns {Array} Normalized array of members
-   */
+  // Normalize gate members data
   const normalizeMembers = useCallback((members = []) => {
     return members.map((member) => ({
       member_id: member.member_id || member.anonymous_id || "",
@@ -94,12 +125,31 @@ export const useGates = (token, onLogout, navigate) => {
     }));
   }, []);
 
-  /**
-   * Fetch list of gates with caching
-   * @param {object} [filters={}] - Query filters
-   * @param {AbortSignal} [signal] - Abort signal for request cancellation
-   * @returns {Promise<object|null>} Gate data or null if error
-   */
+  // Reset hook state
+  const resetState = useCallback(() => {
+    setGates([]);
+    setGate(null);
+    setMembers([]);
+    setStats(null);
+    setPagination({});
+    setError(null);
+    gateListCache.clear();
+  }, []);
+
+  // Create AbortController with cleanup
+  const createAbortController = useCallback(() => {
+    const controller = new AbortController();
+    abortControllers.current.add(controller);
+    return controller;
+  }, []);
+
+  // Cleanup AbortControllers
+  const cleanupAbortControllers = useCallback(() => {
+    abortControllers.current.forEach((controller) => controller.abort());
+    abortControllers.current.clear();
+  }, []);
+
+  // Fetch list of gates with caching
   const fetchGatesList = useCallback(
     async (filters = {}, signal) => {
       if (!token) {
@@ -108,8 +158,8 @@ export const useGates = (token, onLogout, navigate) => {
       }
 
       const cacheKey = JSON.stringify(filters);
-      if (gateListCache.has(cacheKey)) {
-        const cachedData = gateListCache.get(cacheKey);
+      const cachedData = gateListCache.get(cacheKey);
+      if (cachedData) {
         setGates(cachedData.gates || []);
         setPagination(cachedData.pagination || {});
         return cachedData;
@@ -123,32 +173,23 @@ export const useGates = (token, onLogout, navigate) => {
         if (!data) throw new Error("No data received");
         setGates(data.gates || []);
         setPagination(data.pagination || {});
-
-        if (gateListCache.size >= MAX_CACHE_SIZE) {
-          const oldestKey = gateListCache.keys().next().value;
-          gateListCache.delete(oldestKey);
-        }
         gateListCache.set(cacheKey, data);
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch gates error:", err);
-          return handleAuthError(err);
-        }
-        return null;
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, handleError]
   );
 
-  /**
-   * Fetch a single gate by ID
-   * @param {string} gateId - Gate ID
-   * @param {AbortSignal} [signal] - Abort signal for request cancellation
-   * @returns {Promise<object|null>} Gate data or null if error
-   */
+  const debouncedFetchGatesList = useMemo(
+    () => debounce(fetchGatesList, DEBOUNCE_MS),
+    [fetchGatesList]
+  );
+
+  // Fetch a single gate by ID
   const fetchGate = useCallback(
     async (gateId, signal) => {
       if (!token || !gateId) {
@@ -167,23 +208,15 @@ export const useGates = (token, onLogout, navigate) => {
         setStats(data.stats || null);
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch gate error:", err);
-          return handleAuthError(err);
-        }
-        return null;
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError, normalizeMembers]
+    [token, handleError, normalizeMembers]
   );
 
-  /**
-   * Create a new gate
-   * @param {object} gateData - Gate data
-   * @returns {Promise<object|null>} Created gate or null if error
-   */
+  // Create a new gate
   const createNewGate = useCallback(
     async (gateData) => {
       if (!token || !gateData?.name?.trim()) {
@@ -213,24 +246,17 @@ export const useGates = (token, onLogout, navigate) => {
         if (!newGate) throw new Error("Failed to create gate");
         setGates((prev) => [...prev, newGate]);
         gateListCache.clear();
-        setError(null);
         return newGate;
       } catch (err) {
-        console.error("Create gate error:", err);
-        return handleAuthError(err);
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, handleError]
   );
 
-  /**
-   * Update an existing gate
-   * @param {string} gateId - Gate ID
-   * @param {object} gateData - Data to update
-   * @returns {Promise<object|null>} Updated gate or null if error
-   */
+  // Update an existing gate
   const updateExistingGate = useCallback(
     async (gateId, gateData) => {
       if (!token || !gateId || !gateData?.name?.trim()) {
@@ -254,24 +280,17 @@ export const useGates = (token, onLogout, navigate) => {
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         setGate((prev) => (prev?.gate_id === gateId ? updatedGate : prev));
         gateListCache.clear();
-        setError(null);
         return updatedGate;
       } catch (err) {
-        console.error("Update gate error:", err);
-        return handleAuthError(err);
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, handleError]
   );
 
-  /**
-   * Update gate status
-   * @param {string} gateId - Gate ID
-   * @param {object} statusData - Status data
-   * @returns {Promise<object|null>} Updated gate or null if error
-   */
+  // Update gate status
   const updateGateStatusById = useCallback(
     async (gateId, statusData) => {
       if (!token || !gateId || !statusData) {
@@ -294,23 +313,17 @@ export const useGates = (token, onLogout, navigate) => {
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         setGate((prev) => (prev?.gate_id === gateId ? updatedGate : prev));
         gateListCache.clear();
-        setError(null);
         return updatedGate;
       } catch (err) {
-        console.error("Update gate status error:", err);
-        return handleAuthError(err);
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, handleError]
   );
 
-  /**
-   * Delete a gate
-   * @param {string} gateId - Gate ID
-   * @returns {Promise<boolean|null>} True if successful, null if error
-   */
+  // Delete a gate
   const deleteExistingGate = useCallback(
     async (gateId) => {
       if (!token || !gateId) {
@@ -326,24 +339,17 @@ export const useGates = (token, onLogout, navigate) => {
         setGates((prev) => prev.filter((g) => g.gate_id !== gateId));
         setGate(null);
         gateListCache.clear();
-        setError(null);
         return true;
       } catch (err) {
-        console.error("Delete gate error:", err);
-        return handleAuthError(err);
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, handleError]
   );
 
-  /**
-   * Add a member to a gate
-   * @param {string} gateId - Gate ID
-   * @param {object} memberData - Member data { username, role }
-   * @returns {Promise<object|null>} Updated gate or null if error
-   */
+  // Add a member to a gate
   const addMemberToGate = useCallback(
     async (gateId, { username, role = "viewer" }) => {
       if (!token || !gateId || !username?.trim()) {
@@ -367,24 +373,17 @@ export const useGates = (token, onLogout, navigate) => {
         setGate((prev) => (prev?.gate_id === gateId ? gate : prev));
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? gate : g)));
         gateListCache.clear();
-        setError(null);
         return gate;
       } catch (err) {
-        console.error("Add member error:", err);
-        return handleAuthError(err);
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError, normalizeMembers]
+    [token, handleError, normalizeMembers]
   );
 
-  /**
-   * Remove a member from a gate
-   * @param {string} gateId - Gate ID
-   * @param {string} username - Username
-   * @returns {Promise<object|null>} Updated gate or null if error
-   */
+  // Remove a member from a gate
   const removeMemberFromGate = useCallback(
     async (gateId, username) => {
       if (!token || !gateId || !username) {
@@ -408,25 +407,17 @@ export const useGates = (token, onLogout, navigate) => {
         setGate((prev) => (prev?.gate_id === gateId ? gate : prev));
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? gate : g)));
         gateListCache.clear();
-        setError(null);
         return gate;
       } catch (err) {
-        console.error("Remove member error:", err);
-        return handleAuthError(err);
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError, normalizeMembers]
+    [token, handleError, normalizeMembers]
   );
 
-  /**
-   * Update a member's role in a gate
-   * @param {string} gateId - Gate ID
-   * @param {string} username - Username
-   * @param {string} role - New role
-   * @returns {Promise<object|null>} Updated gate or null if error
-   */
+  // Update a member's role in a gate
   const updateMemberRole = useCallback(
     async (gateId, username, role) => {
       if (!token || !gateId || !username || !role) {
@@ -452,24 +443,17 @@ export const useGates = (token, onLogout, navigate) => {
         setGate((prev) => (prev?.gate_id === gateId ? gate : prev));
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? gate : g)));
         gateListCache.clear();
-        setError(null);
         return gate;
       } catch (err) {
-        console.error("Update member role error:", err);
-        return handleAuthError(err);
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError, normalizeMembers]
+    [token, handleError, normalizeMembers]
   );
 
-  /**
-   * Fetch gate members list
-   * @param {string} gateId - Gate ID
-   * @param {AbortSignal} [signal] - Abort signal for request cancellation
-   * @returns {Promise<object|null>} Members data or null if error
-   */
+  // Fetch gate members list
   const fetchGateMembersList = useCallback(
     async (gateId, signal) => {
       if (!token || !gateId) {
@@ -485,27 +469,17 @@ export const useGates = (token, onLogout, navigate) => {
         if (!data) throw new Error("No members data received");
         setMembers(normalizeMembers(data.members));
         gateListCache.clear();
-        setError(null);
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch gate members error:", err);
-          return handleAuthError(err);
-        }
-        return null;
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError, normalizeMembers]
+    [token, handleError, normalizeMembers]
   );
 
-  /**
-   * Toggle favorite status for a gate
-   * @param {string} gateId - Gate ID
-   * @param {boolean} isFavorited - Current favorite status
-   * @returns {Promise<object|null>} Updated gate or null if error
-   */
+  // Toggle favorite status for a gate
   const toggleFavoriteGate = useCallback(
     async (gateId, isFavorited) => {
       if (!token || !gateId) {
@@ -524,48 +498,40 @@ export const useGates = (token, onLogout, navigate) => {
         setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
         setGate((prev) => (prev?.gate_id === gateId ? updatedGate : prev));
         gateListCache.clear();
-        setError(null);
         return updatedGate;
       } catch (err) {
-        console.error("Toggle favorite error:", err);
-        return handleAuthError(err);
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError]
+    [token, handleError]
   );
 
-  // Clear cache and reset state on token change
+  // Handle token change and initial fetch
   useEffect(() => {
     if (!token) {
-      gateListCache.clear();
+      cleanupAbortControllers();
       resetState();
       return;
     }
 
-    const controller = new AbortController();
-    let timeoutId;
-
-    const fetchData = async () => {
-      try {
-        await fetchGatesList({}, controller.signal);
-      } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Initial fetch gates error:", err);
-        }
+    const controller = createAbortController();
+    debouncedFetchGatesList({}, controller.signal).catch((err) => {
+      if (err.name !== "AbortError") {
+        console.error("Initial fetch gates error:", err);
       }
-    };
-
-    // Debounce fetch to prevent multiple rapid calls
-    timeoutId = setTimeout(fetchData, 100);
+    });
 
     return () => {
-      controller.abort();
-      clearTimeout(timeoutId);
+      cleanupAbortControllers();
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
     };
-  }, [token, fetchGatesList, resetState]);
+  }, [token, debouncedFetchGatesList, resetState, createAbortController, cleanupAbortControllers]);
 
+  // Memoized return object
   return useMemo(
     () => ({
       gates,
@@ -575,7 +541,7 @@ export const useGates = (token, onLogout, navigate) => {
       pagination,
       loading,
       error,
-      fetchGatesList,
+      fetchGatesList: debouncedFetchGatesList,
       fetchGate,
       createNewGate,
       updateExistingGate,
@@ -596,7 +562,7 @@ export const useGates = (token, onLogout, navigate) => {
       pagination,
       loading,
       error,
-      fetchGatesList,
+      debouncedFetchGatesList,
       fetchGate,
       createNewGate,
       updateExistingGate,

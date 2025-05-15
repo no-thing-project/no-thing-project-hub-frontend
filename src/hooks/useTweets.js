@@ -15,8 +15,8 @@ import {
   unpinTweetApi,
   setReminderApi,
   shareTweetApi,
+  generatePresignedUrlApi,
 } from '../api/tweetsApi';
-import { uploadFiles } from '../api/mediaApi';
 import { normalizeTweet } from '../utils/tweetUtils';
 
 export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
@@ -44,33 +44,68 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
   }, [onLogout, navigate]);
 
   const withLoading = useMemo(
-    () =>
-      async (fn) => {
-        setLoading(true);
-        setError(null);
-        try {
-          return await fn();
-        } finally {
-          setLoading(false);
-        }
-      },
+    () => async (fn) => {
+      setLoading(true);
+      setError(null);
+      try {
+        return await fn();
+      } finally {
+        setLoading(false);
+      }
+    },
     []
   );
 
   const debouncedApiCall = useMemo(
-    () =>
-      (fn) => {
-        const debouncedFn = debounce(
-          (resolve, reject, ...args) => {
-            fn(...args).then(resolve).catch(reject);
-          },
-          300,
-          { leading: false, trailing: true }
-        );
-        return (...args) => new Promise((resolve, reject) => debouncedFn(resolve, reject, ...args));
-      },
+    () => (fn) => {
+      const debouncedFn = debounce(
+        (resolve, reject, ...args) => {
+          fn(...args).then(resolve).catch(reject);
+        },
+        300,
+        { leading: false, trailing: true }
+      );
+      return (...args) => new Promise((resolve, reject) => debouncedFn(resolve, reject, ...args));
+    },
     []
   );
+
+  const uploadFileToS3 = useCallback(async (file, token, onProgress) => {
+    try {
+      const contentType = file.type.split('/')[0];
+      const { presignedUrl, fileKey, contentType: fileContentType } = await generatePresignedUrlApi(file.type, contentType, token);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', presignedUrl, true);
+      xhr.setRequestHeader('Content-Type', file.type);
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          onProgress?.(percent);
+        }
+      };
+
+      return new Promise((resolve, reject) => {
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            resolve({
+              fileKey,
+              contentType: fileContentType,
+              size: file.size,
+              url: presignedUrl.split('?')[0],
+            });
+          } else {
+            reject(new Error(`Upload failed with status ${xhr.status}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Upload failed'));
+        xhr.send(file);
+      });
+    } catch (err) {
+      throw new Error(`Failed to upload file: ${err.message}`);
+    }
+  }, []);
 
   const fetchTweets = useCallback(
     debouncedApiCall(async (options = {}) => {
@@ -84,7 +119,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           const data = await fetchTweetsApi(boardId, token, options, controller.signal);
           const normalizedTweets = data.tweets.map((tweet) => ({
             ...normalizeTweet(tweet, currentUser),
-            children: tweet.children || [],
+            children: tweet.children?.map(child => normalizeTweet(child, currentUser)) || [],
           }));
           ReactDOM.unstable_batchedUpdates(() => {
             setTweets(normalizedTweets);
@@ -117,8 +152,8 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       const controller = new AbortController();
       try {
         return await withLoading(async () => {
-          const tweetData = await fetchTweetById(boardId, tweetId, token, controller.signal);
-          const normalizedTweet = normalizeTweet(tweetData, currentUser);
+          const data = await fetchTweetById(boardId, tweetId, token, controller.signal);
+          const normalizedTweet = normalizeTweet(data.tweets?.[0], currentUser);
           if (!normalizedTweet.tweet_id) {
             setError('Invalid tweet ID');
             return null;
@@ -146,7 +181,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       try {
         return await withLoading(async () => {
           const data = await getTweetCommentsApi(boardId, tweetId, token, options, controller.signal);
-          const normalizedComments = data.comments
+          const normalizedComments = data.tweets
             .map((c) => normalizeTweet(c, currentUser))
             .filter((c) => c.tweet_id);
           ReactDOM.unstable_batchedUpdates(() => {
@@ -201,8 +236,13 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         value: content.value || '',
         metadata: {
           files: [],
-          ...(content.metadata?.hashtags?.length && { hashtags: content.metadata.hashtags }),
-          ...(content.metadata?.mentions?.length && { mentions: content.metadata.mentions }),
+          hashtags: content.metadata?.hashtags || [],
+          mentions: content.metadata?.mentions || [],
+          style: content.metadata?.style || {},
+          poll_options: content.metadata?.poll_options || [],
+          event_details: content.metadata?.event_details || {},
+          quote_ref: content.metadata?.quote_ref || null,
+          embed_data: content.metadata?.embed_data || null,
         },
       };
 
@@ -243,16 +283,16 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       });
 
       try {
-        const uploadedFiles = files.length ? await uploadFiles(files, token, onProgress) : [];
+        const uploadedFiles = await Promise.all(
+          files.map(file => uploadFileToS3(file, token, (progress) => onProgress?.(progress / files.length)))
+        );
+
         const finalContent = {
           ...contentObj,
           type: uploadedFiles.length ? uploadedFiles[0].contentType.split('/')[0] : contentObj.type,
           metadata: {
             ...contentObj.metadata,
-            files: uploadedFiles.map((file) => ({
-              ...file,
-              url: file.url || URL.createObjectURL(file),
-            })),
+            files: uploadedFiles,
           },
         };
 
@@ -333,7 +373,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         throw err;
       }
     },
-    [boardId, token, currentUser, handleAuthError]
+    [boardId, token, currentUser, handleAuthError, uploadFileToS3, tweets]
   );
 
   const updateExistingTweet = useCallback(
@@ -355,7 +395,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         setError('At least one update field is required');
         return null;
       }
-      if (updates.content && !updates.content.value && !files.length) {
+      if (updates.content && !updates.content.value && !files.length && !currentTweet.content.metadata.files.length) {
         setError('Content must have text or files');
         return null;
       }
@@ -369,26 +409,16 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
             type: files.length
               ? files[0].type.split('/')[0]
               : updates.content.type || currentTweet.content.type || 'text',
-            value: typeof updates.content === 'string' ? updates.content : updates.content.value || '',
+            value: updates.content.value || '',
             metadata: {
               files: currentTweet.content.metadata.files || [],
-              hashtags:
-                updates.content.metadata?.hashtags || currentTweet.content.metadata.hashtags || [],
-              mentions:
-                updates.content.metadata?.mentions || currentTweet.content.metadata.mentions || [],
-              ...(updates.content.metadata?.style && { style: updates.content.metadata.style }),
-              ...(updates.content.metadata?.poll_options && {
-                poll_options: updates.content.metadata.poll_options,
-              }),
-              ...(updates.content.metadata?.event_details && {
-                event_details: updates.content.metadata.event_details,
-              }),
-              ...(updates.content.metadata?.quote_ref && {
-                quote_ref: updates.content.metadata.quote_ref,
-              }),
-              ...(updates.content.metadata?.embed_data && {
-                embed_data: updates.content.metadata.embed_data,
-              }),
+              hashtags: updates.content.metadata?.hashtags || currentTweet.content.metadata.hashtags || [],
+              mentions: updates.content.metadata?.mentions || currentTweet.content.metadata.mentions || [],
+              style: updates.content.metadata?.style || currentTweet.content.metadata.style || {},
+              poll_options: updates.content.metadata?.poll_options || currentTweet.content.metadata.poll_options || [],
+              event_details: updates.content.metadata?.event_details || currentTweet.content.metadata.event_details || {},
+              quote_ref: updates.content.metadata?.quote_ref || currentTweet.content.metadata.quote_ref || null,
+              embed_data: updates.content.metadata?.embed_data || currentTweet.content.metadata.embed_data || null,
             },
           }
         : currentTweet.content;
@@ -412,7 +442,9 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       });
 
       try {
-        const uploadedFiles = files.length ? await uploadFiles(files, token, onProgress) : [];
+        const uploadedFiles = await Promise.all(
+          files.map(file => uploadFileToS3(file, token, (progress) => onProgress?.(progress / files.length)))
+        );
 
         const finalUpdates = {
           ...updates,
@@ -424,15 +456,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
                   : contentObj.type,
                 metadata: {
                   ...contentObj.metadata,
-                  files: uploadedFiles.length
-                    ? [
-                        ...contentObj.metadata.files,
-                        ...uploadedFiles.map((file) => ({
-                          ...file,
-                          url: file.url || URL.createObjectURL(file),
-                        })),
-                      ]
-                    : contentObj.metadata.files,
+                  files: [...contentObj.metadata.files, ...uploadedFiles],
                 },
               }
             : undefined,
@@ -475,7 +499,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         throw err;
       }
     },
-    [boardId, token, currentUser, handleAuthError, tweets]
+    [boardId, token, currentUser, handleAuthError, tweets, uploadFileToS3]
   );
 
   const updateTweetStatus = useCallback(
@@ -550,7 +574,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
                     likes: isLiked ? t.stats.likes - 1 : t.stats.likes + 1,
                     like_count: isLiked ? t.stats.like_count - 1 : t.stats.like_count + 1,
                   },
-                  likedByUser: !isLiked,
+                  is_liked: !isLiked,
                 }
               : t
           )
@@ -587,13 +611,13 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
                       likes: isLiked ? t.stats.likes + 1 : t.stats.likes - 1,
                       like_count: isLiked ? t.stats.like_count + 1 : t.stats.like_count - 1,
                     },
-                    likedByUser: isLiked,
+                    is_liked: isLiked,
                   }
                 : t
             )
           );
         });
-        return null;
+        throw err;
       }
     },
     [token, currentUser, handleAuthError, tweets]
@@ -674,6 +698,11 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       }
 
       const movedTweet = tweets.find((t) => t.tweet_id === tweetId);
+      if (!movedTweet) {
+        setError('Tweet not found');
+        return null;
+      }
+
       ReactDOM.unstable_batchedUpdates(() => {
         setTweets((prev) => prev.filter((t) => t.tweet_id !== tweetId));
       });
@@ -694,9 +723,10 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       } catch (err) {
         ReactDOM.unstable_batchedUpdates(() => {
           handleAuthError(err);
-          if (movedTweet) setTweets((prev) => [...prev, movedTweet]);
+          if (movedTweet) setTweets((prev) => [...prev, normalizeTweet(movedTweet, currentUser)]);
+          setError(err.message || 'Failed to move tweet');
         });
-        return null;
+        throw err;
       }
     },
     [boardId, token, currentUser, handleAuthError, tweets]
@@ -710,6 +740,11 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       }
 
       const currentTweet = tweets.find((t) => t.tweet_id === tweetId);
+      if (!currentTweet) {
+        setError('Tweet not found');
+        return null;
+      }
+
       ReactDOM.unstable_batchedUpdates(() => {
         setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? { ...t, is_pinned: true } : t)));
       });
@@ -734,8 +769,9 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           setTweets((prev) =>
             prev.map((t) => (t.tweet_id === tweetId ? normalizeTweet(currentTweet, currentUser) : t))
           );
+          setError(err.message || 'Failed to pin tweet');
         });
-        return null;
+        throw err;
       }
     },
     [boardId, token, currentUser, handleAuthError, tweets]
@@ -749,6 +785,11 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       }
 
       const currentTweet = tweets.find((t) => t.tweet_id === tweetId);
+      if (!currentTweet) {
+        setError('Tweet not found');
+        return null;
+      }
+
       ReactDOM.unstable_batchedUpdates(() => {
         setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? { ...t, is_pinned: false } : t)));
       });
@@ -773,8 +814,9 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           setTweets((prev) =>
             prev.map((t) => (t.tweet_id === tweetId ? normalizeTweet(currentTweet, currentUser) : t))
           );
+          setError(err.message || 'Failed to unpin tweet');
         });
-        return null;
+        throw err;
       }
     },
     [boardId, token, currentUser, handleAuthError, tweets]
@@ -788,6 +830,11 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       }
 
       const currentTweet = tweets.find((t) => t.tweet_id === tweetId);
+      if (!currentTweet) {
+        setError('Tweet not found');
+        return null;
+      }
+
       ReactDOM.unstable_batchedUpdates(() => {
         setTweets((prev) =>
           prev.map((t) =>
@@ -816,8 +863,9 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           setTweets((prev) =>
             prev.map((t) => (t.tweet_id === tweetId ? normalizeTweet(currentTweet, currentUser) : t))
           );
+          setError(err.message || 'Failed to set reminder');
         });
-        return null;
+        throw err;
       }
     },
     [boardId, token, currentUser, handleAuthError, tweets]
@@ -831,16 +879,24 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       }
 
       const currentTweet = tweets.find((t) => t.tweet_id === tweetId);
+      if (!currentTweet) {
+        setError('Tweet not found');
+        return null;
+      }
+
       ReactDOM.unstable_batchedUpdates(() => {
         setTweets((prev) =>
           prev.map((t) =>
             t.tweet_id === tweetId
               ? {
                   ...t,
-                  shared: [
-                    ...(t.shared || []),
-                    { platform: sharedTo, timestamp: new Date().toISOString() },
-                  ],
+                  analytics: {
+                    ...t.analytics,
+                    shares: [
+                      ...(t.analytics?.shares || []),
+                      { platform: sharedTo, timestamp: new Date().toISOString() },
+                    ],
+                  },
                 }
               : t
           )
@@ -867,8 +923,9 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           setTweets((prev) =>
             prev.map((t) => (t.tweet_id === tweetId ? normalizeTweet(currentTweet, currentUser) : t))
           );
+          setError(err.message || 'Failed to share tweet');
         });
-        return null;
+        throw err;
       }
     },
     [boardId, token, currentUser, handleAuthError, tweets]

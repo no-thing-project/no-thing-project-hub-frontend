@@ -68,7 +68,7 @@ const apiRequest = async (method, endpoint, token, { payload, params, signal, us
     invalidatePrefixes.forEach(prefix => invalidateCacheByPrefix(prefix));
     return data;
   } catch (err) {
-    return handleApiError(err, {});
+    throw handleApiError(err, {});
   }
 };
 
@@ -137,6 +137,21 @@ export const getTweetCommentsApi = (boardId, tweetId, token, options = {}, signa
 };
 
 /**
+ * Generates a presigned URL for file upload.
+ * @param {string} fileType - MIME type of the file
+ * @param {string} contentType - Content type (e.g., 'image', 'video')
+ * @param {string} token - Authorization token
+ * @returns {Promise<Object>} - Presigned URL and file metadata
+ */
+export const generatePresignedUrlApi = (fileType, contentType, token) => {
+  validatePayload(Joi.string().required(), fileType, 'Invalid fileType');
+  validatePayload(Joi.string().required(), contentType, 'Invalid contentType');
+  return apiRequest('post', `/api/v1/tweets/presigned-url`, token, {
+    payload: { fileType, contentType },
+  });
+};
+
+/**
  * Creates a new tweet via API.
  * @param {string} boardId - UUID of the board
  * @param {Object} content - Tweet content object
@@ -166,22 +181,27 @@ export const createTweetApi = (
   files,
   token
 ) => {
-  // Validate inputs
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(contentSchema, content, 'Invalid content');
   validatePayload(positionSchema, { x, y }, 'Invalid position');
   validatePayload(uuidSchema, anonymousId, 'Invalid anonymousId');
   if (parentTweetId) validatePayload(uuidSchema, parentTweetId, 'Invalid parentTweetId');
   if (reminder) validatePayload(reminderSchema, reminder, 'Invalid reminder');
-  if (files.length) validatePayload(Joi.array().items().max(10), files, 'Invalid files');
+  if (files.length) validatePayload(Joi.array().items(
+    Joi.object({
+      url: Joi.string().uri().optional(),
+      fileKey: Joi.string().required(),
+      contentType: Joi.string().required(),
+      size: Joi.number().max(50 * 1024 * 1024).required(), // 50MB
+    })
+  ).max(10), files, 'Invalid files');
 
-  // Construct payload
   const payload = {
     content: {
       ...content,
       metadata: {
         ...content.metadata,
-        files: files || [], // Ensure files are included
+        files: files || [],
       },
     },
     position: { x, y },
@@ -195,15 +215,21 @@ export const createTweetApi = (
 
   return apiRequest('post', `/api/v1/tweets/${boardId}`, token, {
     payload,
-    invalidatePrefixes: [`tweets:${boardId}`],
-  })
+    invalidatePrefixes: [`tweets:${boardId}`, `comments:${boardId}`],
+  }).then(response => {
+    const tweet = response.tweets?.[0];
+    if (!tweet || !tweet.tweet_id) {
+      throw new Error('Invalid tweet response from server');
+    }
+    return tweet;
+  });
 };
 
 /**
  * Updates an existing tweet.
  * @param {string} boardId - UUID of the board
  * @param {string} tweetId - UUID of the tweet
- * @param {Object} updates - Fields to update (content, position, status, scheduled_at, reminder)
+ * @param {Object} updates - Fields to update
  * @param {string} token - Authorization token
  * @returns {Promise<Object>} - Updated tweet
  */
@@ -214,8 +240,8 @@ export const updateTweetApi = (boardId, tweetId, updates, token) => {
     Joi.object({
       content: contentSchema.optional(),
       position: positionSchema.optional(),
-      status: Joi.string().valid('pending', 'approved').optional(),
-      scheduled_at: Joi.date().iso().min('now').allow(null).optional(),
+      status: Joi.string().valid('pending', 'approved', 'rejected', 'announcement', 'reminder', 'pinned', 'archived').optional(),
+      scheduled_at: Joi.date().iso().allow(null).optional(),
       reminder: reminderSchema.optional(),
     }).min(1),
     updates,
@@ -225,9 +251,8 @@ export const updateTweetApi = (boardId, tweetId, updates, token) => {
   return apiRequest('put', `/api/v1/tweets/${boardId}/${tweetId}`, token, {
     payload: updates,
     invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`, `comments:${boardId}:${tweetId}`],
-  });
+  }).then(response => response.tweets?.[0]);
 };
-
 
 /**
  * Updates the status of a tweet.
@@ -241,9 +266,7 @@ export const updateTweetStatusApi = (boardId, tweetId, status, token) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
   validatePayload(
-    Joi.string()
-      .valid('pending', 'approved', 'rejected', 'announcement', 'reminder', 'pinned', 'archived')
-      .required(),
+    Joi.string().valid('pending', 'approved', 'rejected', 'announcement', 'reminder', 'pinned', 'archived').required(),
     status,
     'Invalid status'
   );
@@ -251,7 +274,7 @@ export const updateTweetStatusApi = (boardId, tweetId, status, token) => {
   return apiRequest('put', `/api/v1/tweets/${boardId}/${tweetId}/status`, token, {
     payload: { status },
     invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`, `comments:${boardId}:${tweetId}`],
-  });
+  }).then(response => response.tweets?.[0]);
 };
 
 /**
@@ -265,8 +288,8 @@ export const toggleLikeApi = (tweetId, isLiked, token) => {
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
   const endpoint = isLiked ? 'dislike' : 'like';
   return apiRequest('post', `/api/v1/tweets/${tweetId}/${endpoint}`, token, {
-    invalidatePrefixes: [`tweet:${tweetId}`],
-  });
+    invalidatePrefixes: [`tweets:`, `tweet:${tweetId}`, `comments:`],
+  }).then(response => response.tweets?.[0]);
 };
 
 /**
@@ -282,14 +305,8 @@ export const deleteTweetApi = (boardId, tweetId, token) => {
 
   return apiRequest('delete', `/api/v1/tweets/${boardId}/${tweetId}`, token, {
     invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`, `comments:${boardId}:${tweetId}`],
-  }).then(response => {
-    console.log(`Deleted tweet ${tweetId} from board ${boardId}`);
-    return response;
-  });
+  }).then(response => response);
 };
-
-
-
 
 /**
  * Moves a tweet to another board.
@@ -304,8 +321,8 @@ export const moveTweetApi = (tweetId, targetBoardId, token) => {
 
   return apiRequest('post', `/api/v1/tweets/${tweetId}/move`, token, {
     payload: { targetBoardId },
-    invalidatePrefixes: ['tweets:', 'tweet:'],
-  });
+    invalidatePrefixes: ['tweets:', 'tweet:', 'comments:'],
+  }).then(response => response.tweets?.[0]);
 };
 
 /**
@@ -321,7 +338,7 @@ export const pinTweetApi = (boardId, tweetId, token) => {
 
   return apiRequest('post', `/api/v1/tweets/${boardId}/${tweetId}/pin`, token, {
     invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`],
-  });
+  }).then(response => response.tweets?.[0]);
 };
 
 /**
@@ -337,7 +354,7 @@ export const unpinTweetApi = (boardId, tweetId, token) => {
 
   return apiRequest('post', `/api/v1/tweets/${boardId}/${tweetId}/unpin`, token, {
     invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`],
-  });
+  }).then(response => response.tweets?.[0]);
 };
 
 /**
@@ -355,8 +372,8 @@ export const setReminderApi = (boardId, tweetId, reminder, token) => {
 
   return apiRequest('put', `/api/v1/tweets/${boardId}/${tweetId}/reminder`, token, {
     payload: reminder,
-    invalidatePrefixes: [`tweet:${boardId}:${tweetId}`],
-  });
+    invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`],
+  }).then(response => response.tweets?.[0]);
 };
 
 /**
@@ -374,6 +391,6 @@ export const shareTweetApi = (boardId, tweetId, sharedTo, token) => {
 
   return apiRequest('post', `/api/v1/tweets/${boardId}/${tweetId}/share`, token, {
     payload: { shared_to: sharedTo },
-    invalidatePrefixes: [`tweet:${boardId}:${tweetId}`],
-  });
+    invalidatePrefixes: [`tweets:${boardId}`, `tweet:${boardId}:${tweetId}`],
+  }).then(response => response.tweets?.[0]);
 };

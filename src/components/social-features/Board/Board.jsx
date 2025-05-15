@@ -30,6 +30,9 @@ import { useNotification } from '../../../context/NotificationContext';
 
 const MAX_TWEET_LENGTH = 1000;
 
+// Simple in-memory cache for API requests
+const apiCache = new Map();
+
 const Board = ({
   boardId,
   boardTitle,
@@ -49,7 +52,8 @@ const Board = ({
   const [editTweetModal, setEditTweetModal] = useState(null);
   const [newStatus, setNewStatus] = useState('');
   const [selectedBoardId, setSelectedBoardId] = useState('');
-  const [preloadParentTweets, setPreloadParentTweets] = useState({});
+  const [cachedBoards, setCachedBoards] = useState(availableBoards);
+  const isFetching = useRef(false);
 
   const {
     tweets,
@@ -84,57 +88,44 @@ const Board = ({
     handleTouchEnd,
   } = useBoardInteraction(boardMainRef);
 
-  const isFetching = useRef(false);
-
-  // Fetch tweets and preload parent tweets
+  // Fetch tweets and boards once
   useEffect(() => {
     const controller = new AbortController();
-    const preloadParents = async () => {
-      const parentIds = [...new Set(tweets.filter(t => t.parent_tweet_id).map(t => t.parent_tweet_id))];
-      if (!parentIds.length) return;
+    const cacheKey = `boards:${token}`;
 
-      try {
-        const parentPromises = parentIds.map(id => fetchTweet(id));
-        const parents = await Promise.all(parentPromises);
-        const parentMap = parentIds.reduce((acc, id, index) => {
-          const parent = parents[index];
-          if (parent?.content?.value) {
-            acc[id] = parent.content.value;
-          }
-          return acc;
-        }, {});
-        setPreloadParentTweets(prev => ({ ...prev, ...parentMap }));
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          showNotification('Failed to preload parent tweets', 'error');
-        }
-      }
-    };
-
-    const loadTweets = async () => {
+    const loadData = async () => {
       if (isFetching.current) return;
       isFetching.current = true;
+
       try {
-        await fetchTweets({}, controller.signal);
-        if (tweets.length) {
-          await preloadParents();
+        // Fetch tweets with include_parents option (assuming backend supports it)
+        await fetchTweets({ include_parents: true }, controller.signal);
+
+        // Fetch boards only if not in cache or prop
+        if (cachedBoards.length === 0 && !apiCache.has(cacheKey)) {
+          const boardsData = await fetchBoardsList();
+          const validBoards = boardsData?.boards.filter(b => b.board_id) || [];
+          setCachedBoards(validBoards);
+          apiCache.set(cacheKey, validBoards);
+        } else if (apiCache.has(cacheKey)) {
+          setCachedBoards(apiCache.get(cacheKey));
         }
       } catch (err) {
         if (err.name !== 'AbortError') {
-          showNotification('Failed to load tweets', 'error');
+          showNotification('Failed to load data', 'error');
         }
       } finally {
         isFetching.current = false;
       }
     };
 
-    loadTweets();
+    loadData();
 
     return () => {
       controller.abort();
       isFetching.current = false;
     };
-  }, [fetchTweets, fetchTweet, showNotification, boardId]);
+  }, [fetchTweets, fetchBoardsList, showNotification, boardId, token, cachedBoards.length]);
 
   // Center board after loading
   useEffect(() => {
@@ -145,6 +136,10 @@ const Board = ({
 
   const handlePopupSubmit = useCallback(
     async (content, x, y, scheduledAt, files, onProgress) => {
+      if (content.value.length > MAX_TWEET_LENGTH) {
+        showNotification(`Tweet exceeds ${MAX_TWEET_LENGTH} character limit`, 'error');
+        return;
+      }
       try {
         const newTweet = await createNewTweet(
           content,
@@ -172,7 +167,7 @@ const Board = ({
   );
 
   const handleReply = useCallback(
-    tweet => {
+    (tweet) => {
       const tweetElement = document.getElementById(`tweet-${tweet.tweet_id}`);
       const parentTweetHeight = tweetElement ? tweetElement.getBoundingClientRect().height : 150;
       setReplyTweet(tweet);
@@ -186,7 +181,7 @@ const Board = ({
   );
 
   const throttlePopup = useCallback(
-    fn => {
+    (fn) => {
       let lastCall = 0;
       return (...args) => {
         const now = Date.now();
@@ -200,37 +195,26 @@ const Board = ({
   );
 
   const handleMouseUpWithPopup = useCallback(
-    e => handleMouseUp(e, throttlePopup((x, y) => setTweetPopup({ visible: true, x, y }))),
+    (e) => handleMouseUp(e, throttlePopup((x, y) => setTweetPopup({ visible: true, x, y }))),
     [handleMouseUp, throttlePopup]
   );
 
   const handleTouchEndWithPopup = useCallback(
-    e => handleTouchEnd(e, throttlePopup((x, y) => setTweetPopup({ visible: true, x, y }))),
+    (e) => handleTouchEnd(e, throttlePopup((x, y) => setTweetPopup({ visible: true, x, y }))),
     [handleTouchEnd, throttlePopup]
   );
 
-  const loadAvailableBoards = useCallback(async () => {
-    try {
-      const data = await fetchBoardsList();
-      return data?.boards.filter(b => b.board_id) || [];
-    } catch (err) {
-      showNotification('Failed to load boards', 'error');
-      return [];
-    }
-  }, [fetchBoardsList, showNotification]);
-
   const handleEditTweet = useCallback(
-    async tweet => {
-      const boards = await loadAvailableBoards();
+    (tweet) => {
       setSelectedBoardId(tweet.board_id || boardId);
       setNewStatus(tweet.status || 'approved');
-      setEditTweetModal({ ...tweet, availableBoards: boards });
+      setEditTweetModal({ ...tweet, availableBoards: cachedBoards });
     },
-    [loadAvailableBoards, boardId]
+    [cachedBoards, boardId]
   );
 
   const handlePinToggle = useCallback(
-    async tweet => {
+    async (tweet) => {
       try {
         if (tweet.is_pinned) {
           await unpinTweet(tweet.tweet_id);
@@ -249,6 +233,14 @@ const Board = ({
   const handleSaveEditedTweet = useCallback(
     async () => {
       if (!editTweetModal) return;
+      if (!editTweetModal.content?.value?.trim()) {
+        showNotification('Tweet content cannot be empty', 'error');
+        return;
+      }
+      if (editTweetModal.content.value.length > MAX_TWEET_LENGTH) {
+        showNotification(`Tweet exceeds ${MAX_TWEET_LENGTH} character limit`, 'error');
+        return;
+      }
       try {
         await updateExistingTweet(editTweetModal.tweet_id, {
           content: {
@@ -272,19 +264,19 @@ const Board = ({
   );
 
   const getRelatedTweetIds = useCallback(
-    tweetId => {
+    (tweetId) => {
       const relatedIds = new Set([tweetId]);
-      const tweet = tweets.find(t => t.tweet_id === tweetId);
+      const tweet = tweets.find((t) => t.tweet_id === tweetId);
       if (tweet) {
         if (tweet.parent_tweet_id) relatedIds.add(tweet.parent_tweet_id);
-        tweet.child_tweet_ids?.forEach(id => relatedIds.add(id));
+        tweet.child_tweet_ids?.forEach((id) => relatedIds.add(id));
       }
       return Array.from(relatedIds);
     },
     [tweets]
   );
 
-  const handleReplyHover = useCallback(tweetId => setHighlightedTweetId(tweetId), []);
+  const handleReplyHover = useCallback((tweetId) => setHighlightedTweetId(tweetId), []);
 
   const titleFontSize = useMemo(() => {
     const baseSize = Math.min(16, 100 / (boardTitle.length || 1));
@@ -298,7 +290,7 @@ const Board = ({
       return [];
     }
     const seenIds = new Set();
-    return tweets.filter(tweet => {
+    return tweets.filter((tweet) => {
       if (
         !tweet ||
         !tweet.tweet_id ||
@@ -312,7 +304,9 @@ const Board = ({
       if (
         !tweet.position ||
         typeof tweet.position.x !== 'number' ||
-        typeof tweet.position.y !== 'number'
+        typeof tweet.position.y !== 'number' ||
+        isNaN(tweet.position.x) ||
+        isNaN(tweet.position.y)
       ) {
         console.warn('Invalid tweet position:', tweet);
         return false;
@@ -334,8 +328,8 @@ const Board = ({
 
   const renderedTweets = useMemo(() => {
     if (!validTweets.length) return null;
-    return validTweets.map(tweet => {
-      const replyCount = validTweets.filter(t => t.parent_tweet_id === tweet.tweet_id).length;
+    return validTweets.map((tweet) => {
+      const replyCount = validTweets.filter((t) => t.parent_tweet_id === tweet.tweet_id).length;
       const relatedTweetIds = highlightedTweetId ? getRelatedTweetIds(highlightedTweetId) : [];
       return (
         <DraggableTweet
@@ -357,9 +351,13 @@ const Board = ({
             onPinToggle={handlePinToggle}
             isParentHighlighted={relatedTweetIds.includes(tweet.tweet_id)}
             replyCount={replyCount}
-            parentTweetText={tweet.parent_tweet_id ? preloadParentTweets[tweet.parent_tweet_id] || null : null}
+            parentTweetText={
+              tweet.parent_tweet_id
+                ? tweets.find((t) => t.tweet_id === tweet.parent_tweet_id)?.content?.value || null
+                : null
+            }
             relatedTweetIds={relatedTweetIds}
-            availableBoards={editTweetModal?.availableBoards || availableBoards}
+            availableBoards={editTweetModal?.availableBoards || cachedBoards}
             boardId={boardId}
           />
         </DraggableTweet>
@@ -378,10 +376,10 @@ const Board = ({
     handlePinToggle,
     highlightedTweetId,
     getRelatedTweetIds,
-    preloadParentTweets,
-    availableBoards,
+    cachedBoards,
     editTweetModal,
     boardId,
+    tweets,
   ]);
 
   if (error) {
@@ -392,7 +390,7 @@ const Board = ({
         </Typography>
         <Button
           variant="contained"
-          onClick={() => fetchTweets()}
+          onClick={() => fetchTweets({ include_parents: true })}
           aria-label="Retry fetching board data"
         >
           Retry
@@ -502,7 +500,7 @@ const Board = ({
                 renderedTweets
               )}
               {tweetPopup.visible && (
-                <Box onClick={e => e.stopPropagation()}>
+                <Box onClick={(e) => e.stopPropagation()}>
                   <TweetPopup
                     x={tweetPopup.x}
                     y={tweetPopup.y}
@@ -569,8 +567,8 @@ const Board = ({
                   fullWidth
                   label="Tweet Content"
                   value={editTweetModal.content?.value || ''}
-                  onChange={e =>
-                    setEditTweetModal(prev => ({
+                  onChange={(e) =>
+                    setEditTweetModal((prev) => ({
                       ...prev,
                       content: { ...prev.content, value: e.target.value },
                     }))
@@ -582,39 +580,41 @@ const Board = ({
                   error={(editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH}
                   helperText={
                     (editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH
-                      ? `Content exceeds ${MAX_TWEET_LENGTH} characters`
+                      ? `Tweet exceeds ${MAX_TWEET_LENGTH} characters`
                       : `${editTweetModal.content?.value?.length || 0}/${MAX_TWEET_LENGTH}`
                   }
                 />
                 <FormControl fullWidth sx={{ mt: 2 }}>
-                  <InputLabel>Tweet Status</InputLabel>
+                  <InputLabel id="status-label">Tweet Status</InputLabel>
                   <Select
+                    labelId="status-label"
                     value={newStatus}
                     label="Tweet Status"
-                    onChange={e => setNewStatus(e.target.value)}
+                    onChange={(e) => setNewStatus(e.target.value)}
                     aria-label="Tweet status"
                   >
-                    <MenuItem value="pending">Pending</MenuItem>
-                    <MenuItem value="approved">Approved</MenuItem>
-                    <MenuItem value="rejected">Rejected</MenuItem>
-                    <MenuItem value="announcement">Announcement</MenuItem>
-                    <MenuItem value="reminder">Reminder</MenuItem>
-                    <MenuItem value="pinned">Pinned</MenuItem>
-                    <MenuItem value="archived">Archived</MenuItem>
+                    {['pending', 'approved', 'rejected', 'announcement', 'reminder', 'pinned', 'archived'].map(
+                      (status) => (
+                        <MenuItem key={status} value={status}>
+                          {status.charAt(0).toUpperCase() + status.slice(1)}
+                        </MenuItem>
+                      )
+                    )}
                   </Select>
                 </FormControl>
-                {(editTweetModal.availableBoards || availableBoards).length > 0 && (
+                {cachedBoards.length > 0 && (
                   <FormControl fullWidth sx={{ mt: 2 }}>
-                    <InputLabel>Move to Board</InputLabel>
+                    <InputLabel id="board-label">Move to Board</InputLabel>
                     <Select
+                      labelId="board-label"
                       value={selectedBoardId}
                       label="Move to Board"
-                      onChange={e => setSelectedBoardId(e.target.value)}
+                      onChange={(e) => setSelectedBoardId(e.target.value)}
                       aria-label="Move to board"
                     >
-                      {(editTweetModal.availableBoards || availableBoards).map(b => (
-                        <MenuItem key={b.board_id} value={b.board_id}>
-                          {b.name}
+                      {cachedBoards.map((board) => (
+                        <MenuItem key={board.board_id} value={board.board_id}>
+                          {board.title || board.name || 'Untitled Board'}
                         </MenuItem>
                       ))}
                     </Select>
@@ -628,11 +628,11 @@ const Board = ({
                 <Button
                   onClick={handleSaveEditedTweet}
                   variant="contained"
-                  aria-label="Save edited tweet"
                   disabled={
                     !editTweetModal.content?.value?.trim() ||
                     (editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH
                   }
+                  aria-label="Save edited tweet"
                 >
                   Save
                 </Button>
@@ -659,7 +659,8 @@ Board.propTypes = {
   availableBoards: PropTypes.arrayOf(
     PropTypes.shape({
       board_id: PropTypes.string.isRequired,
-      name: PropTypes.string.isRequired,
+      title: PropTypes.string,
+      name: PropTypes.string,
     })
   ),
 };

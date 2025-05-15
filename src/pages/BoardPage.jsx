@@ -35,7 +35,7 @@ import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import Board from "../components/social-features/Board/Board";
 import useAuth from "../hooks/useAuth";
 import { useBoards } from "../hooks/useBoards";
-import usePoints from "../hooks/usePoints";
+import { usePoints } from "../hooks/usePoints";
 import { useGates } from "../hooks/useGates";
 import { useClasses } from "../hooks/useClasses";
 import BoardFormDialog from "../components/Dialogs/BoardFormDialog";
@@ -67,9 +67,21 @@ const BoardPage = memo(() => {
     loading: boardsLoading,
     error: boardError,
   } = useBoards(token, handleLogout, navigate);
-  const { pointsData, getPoints } = usePoints(token, handleLogout, navigate);
-  const { gates, fetchGatesList, loading: gatesLoading, error: gatesError } = useGates(token, handleLogout, navigate);
-  const { classes, fetchClassesList, loading: classesLoading, error: classesError } = useClasses(token, handleLogout, navigate);
+  const { pointsData, fetchPointsData, loading: pointsLoading, error: pointsError } = usePoints(
+    token,
+    handleLogout,
+    navigate
+  );
+  const { gates, fetchGatesList, loading: gatesLoading, error: gatesError } = useGates(
+    token,
+    handleLogout,
+    navigate
+  );
+  const { classes, fetchClassesList, loading: classesLoading, error: classesError } = useClasses(
+    token,
+    handleLogout,
+    navigate
+  );
 
   const [isFullyLoaded, setIsFullyLoaded] = useState(false);
   const [editingBoard, setEditingBoard] = useState(null);
@@ -102,13 +114,13 @@ const BoardPage = memo(() => {
       : members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || "viewer";
   }, [boardItem, authData, members]);
 
-  const isFavorited = useMemo(() => 
-    boardItem?.favorited_by?.some((user) => user.anonymous_id === authData?.anonymous_id) ?? false,
+  const isFavorited = useMemo(
+    () => boardItem?.favorited_by?.some((user) => user.anonymous_id === authData?.anonymous_id) ?? false,
     [boardItem?.favorited_by, authData?.anonymous_id]
   );
 
-  const boardVisibility = useMemo(() => 
-    boardItem?.visibility ?? (boardItem?.is_public ? "public" : "private"),
+  const boardVisibility = useMemo(
+    () => boardItem?.visibility ?? (boardItem?.is_public ? "public" : "private"),
     [boardItem?.visibility, boardItem?.is_public]
   );
 
@@ -124,21 +136,15 @@ const BoardPage = memo(() => {
         const boardData = await fetchBoard(board_id, signal);
         if (!boardData) throw new Error("Board not found.");
 
-        await getPoints(signal);
+        await fetchPointsData(signal);
 
         if (boardData.is_public === false && userRole === "viewer") {
           throw new Error("Access denied to private board.");
         }
 
         const promises = [];
-        if (userRole !== "viewer") {
-          promises.push(fetchBoardMembersList(board_id, signal));
-        }
         if (userRole === "owner" || userRole === "admin") {
-          promises.push(
-            fetchGatesList({ visibility: "public" }, signal),
-            fetchClassesList({}, signal)
-          );
+          promises.push(fetchGatesList({ visibility: "public" }, signal), fetchClassesList({}, signal));
         }
 
         await Promise.all(promises);
@@ -155,7 +161,18 @@ const BoardPage = memo(() => {
         setIsFullyLoaded(true);
       }
     },
-    [isAuthenticated, token, board_id, fetchBoard, fetchBoardMembersList, getPoints, fetchGatesList, fetchClassesList, showNotification, userRole, navigate]
+    [
+      isAuthenticated,
+      token,
+      board_id,
+      fetchBoard,
+      fetchPointsData,
+      fetchGatesList,
+      fetchClassesList,
+      showNotification,
+      userRole,
+      navigate,
+    ]
   );
 
   const debouncedLoadData = useMemo(() => debounce(loadData, 300), [debounce, loadData]);
@@ -170,11 +187,11 @@ const BoardPage = memo(() => {
   }, [debouncedLoadData]);
 
   useEffect(() => {
-    const errors = [boardError, gatesError, classesError].filter(Boolean);
+    const errors = [boardError, gatesError, classesError, pointsError].filter(Boolean);
     if (errors.length) {
       errors.forEach((err) => showNotification(err, "error"));
     }
-  }, [boardError, gatesError, classesError, showNotification]);
+  }, [boardError, gatesError, classesError, pointsError, showNotification]);
 
   useEffect(() => {
     if (pointsData?.total_points !== undefined && pointsData.total_points < prevPoints) {
@@ -274,13 +291,21 @@ const BoardPage = memo(() => {
     }
   }, [boardItem, authData?.anonymous_id, userRole]);
 
-  const handleManageMembers = useCallback(() => {
+  const handleManageMembers = useCallback(async () => {
     if (userRole !== "owner" && userRole !== "admin") {
       showNotification("You do not have permission to manage members.", "error");
       return;
     }
-    setMembersDialogOpen(true);
-  }, [userRole]);
+    const controller = new AbortController();
+    try {
+      await fetchBoardMembersList(board_id, controller.signal);
+      setMembersDialogOpen(true);
+    } catch (err) {
+      if (err.name === "AbortError") return;
+      showNotification(`Failed to load members: ${err.message}`, "error");
+    }
+    return () => controller.abort();
+  }, [userRole, board_id, fetchBoardMembersList, showNotification]);
 
   const handleShare = useCallback(() => {
     const boardUrl = `${window.location.origin}/board/${board_id}`;
@@ -327,7 +352,7 @@ const BoardPage = memo(() => {
   const handleMenuClose = useCallback(() => setAnchorEl(null), []);
 
   const childBoardMenuItems = useMemo(() => {
-    const uniqueChildIds = [...new Set(boardItem?.child_board_ids?.filter(id => id) || [])];
+    const uniqueChildIds = [...new Set(boardItem?.child_board_ids?.filter((id) => id) || [])];
     return uniqueChildIds.map((childId) => (
       <MenuItem
         key={childId}
@@ -342,7 +367,7 @@ const BoardPage = memo(() => {
     ));
   }, [boardItem?.child_board_ids, navigate, handleMenuClose]);
 
-  if (authLoading || boardsLoading || !isFullyLoaded) {
+  if (authLoading || boardsLoading || pointsLoading || !isFullyLoaded) {
     return <LoadingSpinner />;
   }
 
@@ -526,11 +551,11 @@ const BoardPage = memo(() => {
 
       <Board
         boardId={board_id}
-        boardTitle={boardItem.name}
+        boardTitle={boardItem?.name}
         token={token}
         currentUser={authData}
         userRole={userRole}
-        onPointsUpdate={getPoints}
+        onPointsUpdate={fetchPointsData}
         onLogout={handleLogout}
         navigate={navigate}
         availableBoards={availableBoards}
