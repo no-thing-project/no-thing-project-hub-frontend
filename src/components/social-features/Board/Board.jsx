@@ -28,7 +28,7 @@ import { useTweets } from '../../../hooks/useTweets';
 import { useBoards } from '../../../hooks/useBoards';
 import { useNotification } from '../../../context/NotificationContext';
 
-const MAX_TWEET_LENGTH = 280;
+const MAX_TWEET_LENGTH = 1000;
 
 const Board = ({
   boardId,

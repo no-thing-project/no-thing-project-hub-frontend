@@ -1,6 +1,6 @@
 import { alpha } from '@mui/material';
 
-const MAX_TWEET_LENGTH = 280;
+const MAX_TWEET_LENGTH = 1000;
 
 const TweetContentStyles = {
   // Tweet Card (Paper)

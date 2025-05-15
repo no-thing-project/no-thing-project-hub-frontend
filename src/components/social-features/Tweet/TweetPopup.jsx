@@ -16,7 +16,7 @@ import { PhotoCamera, Mic, VideoCall, Delete } from '@mui/icons-material';
 import { actionButtonStyles, cancelButtonStyle, inputStyles } from '../../../styles/BaseStyles';
 import { SUPPORTED_MIME_TYPES, MAX_FILE_SIZE, MAX_FILES } from '../../../constants/validations';
 
-const MAX_TWEET_LENGTH = 280;
+const MAX_TWEET_LENGTH = 1000;
 
 const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   const [draft, setDraft] = useState('');

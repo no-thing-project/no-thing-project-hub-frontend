@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { throttle } from "lodash";
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { throttle } from 'lodash';
 
-// Board constants
 export const BOARD_SIZE = 10000;
 const ZOOM_MIN = 0.3;
 const ZOOM_MAX = 2;
@@ -10,11 +9,6 @@ const ZOOM_SENSITIVITY = 0.001;
 const MOVE_STEP = 50;
 const ANIMATION_DURATION = 300;
 
-/**
- * Custom hook for handling board interactions (pan, zoom, drag).
- * @param {React.RefObject} boardRef - Reference to the board container element.
- * @returns {Object} Interaction state and handlers.
- */
 export const useBoardInteraction = (boardRef) => {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -31,11 +25,6 @@ export const useBoardInteraction = (boardRef) => {
     offsetRef.current = offset;
   }, [scale, offset]);
 
-  /**
-   * Clamps offset to keep the board within the viewport.
-   * @param {Object} newOffset - The new offset {x, y}.
-   * @returns {Object} Clamped offset.
-   */
   const clampOffset = useCallback((newOffset) => {
     const scaledSize = BOARD_SIZE * scaleRef.current;
     const minX = window.innerWidth - scaledSize;
@@ -46,9 +35,6 @@ export const useBoardInteraction = (boardRef) => {
     };
   }, []);
 
-  /**
-   * Centers the board in the viewport.
-   */
   const centerBoard = useCallback(() => {
     const newOffset = {
       x: window.innerWidth / 2 - (BOARD_SIZE * scaleRef.current) / 2,
@@ -57,9 +43,6 @@ export const useBoardInteraction = (boardRef) => {
     setOffset(clampOffset(newOffset));
   }, [clampOffset]);
 
-  /**
-   * Animates zoom and offset to reset (100%).
-   */
   const animateReset = useCallback(() => {
     const startScale = scaleRef.current;
     const startOffset = offsetRef.current;
@@ -75,14 +58,11 @@ export const useBoardInteraction = (boardRef) => {
       const progress = Math.min(elapsed / ANIMATION_DURATION, 1);
       const easedProgress = 1 - Math.pow(1 - progress, 3);
 
-      const newScale = startScale + (targetScale - startScale) * easedProgress;
-      const newOffset = {
+      setScale(startScale + (targetScale - startScale) * easedProgress);
+      setOffset(clampOffset({
         x: startOffset.x + (targetOffset.x - startOffset.x) * easedProgress,
         y: startOffset.y + (targetOffset.y - startOffset.y) * easedProgress,
-      };
-
-      setScale(newScale);
-      setOffset(clampOffset(newOffset));
+      }));
 
       if (progress < 1) {
         animationFrame.current = requestAnimationFrame(animate);
@@ -95,35 +75,31 @@ export const useBoardInteraction = (boardRef) => {
     animationFrame.current = requestAnimationFrame(animate);
   }, [clampOffset]);
 
-  /**
-   * Handles zoom changes.
-   * @param {number} delta - Zoom delta.
-   * @param {number} [mouseX] - Mouse X position for zoom focus.
-   * @param {number} [mouseY] - Mouse Y position for zoom focus.
-   */
   const handleZoom = useCallback((delta, mouseX, mouseY) => {
     setScale((prevScale) => {
       const newScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, prevScale + delta));
       const currentOffset = offsetRef.current;
-      const newOffset = clampOffset({
+      setOffset(clampOffset({
         x: mouseX !== undefined
           ? mouseX - ((mouseX - currentOffset.x) / prevScale) * newScale
           : window.innerWidth / 2 - (BOARD_SIZE * newScale) / 2,
         y: mouseY !== undefined
           ? mouseY - ((mouseY - currentOffset.y) / prevScale) * newScale
           : window.innerHeight / 2 - (BOARD_SIZE * newScale) / 2,
-      });
-      setOffset(newOffset);
+      }));
       return newScale;
     });
   }, [clampOffset]);
 
   const handleZoomButton = useCallback((direction) => {
-    if (direction === "reset") {
+    if (direction === 'reset') {
       animateReset();
     } else {
-      const delta = direction === "in" ? ZOOM_STEP : -ZOOM_STEP;
-      handleZoom(delta, window.innerWidth / 2, window.innerHeight / 2);
+      handleZoom(
+        direction === 'in' ? ZOOM_STEP : -ZOOM_STEP,
+        window.innerWidth / 2,
+        window.innerHeight / 2
+      );
     }
   }, [handleZoom, animateReset]);
 
@@ -131,14 +107,13 @@ export const useBoardInteraction = (boardRef) => {
     throttle((e) => {
       if (!boardRef.current) return;
       e.preventDefault();
-      const delta = -e.deltaY * ZOOM_SENSITIVITY;
-      handleZoom(delta, e.clientX, e.clientY);
+      handleZoom(-e.deltaY * ZOOM_SENSITIVITY, e.clientX, e.clientY);
     }, 50),
     [handleZoom, boardRef]
   );
 
   const handleMouseDown = useCallback((e) => {
-    if (!boardRef.current || e.target.closest(".tweet-card, .tweet-popup, .MuiIconButton-root")) return;
+    if (!boardRef.current || e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root')) return;
     dragStart.current = { x: e.clientX, y: e.clientY, offsetX: offset.x, offsetY: offset.y };
     isDragging.current = false;
   }, [offset]);
@@ -152,7 +127,10 @@ export const useBoardInteraction = (boardRef) => {
         isDragging.current = true;
       }
       if (isDragging.current) {
-        setOffset(clampOffset({ x: dragStart.current.offsetX + dx, y: dragStart.current.offsetY + dy }));
+        setOffset(clampOffset({
+          x: dragStart.current.offsetX + dx,
+          y: dragStart.current.offsetY + dy,
+        }));
       }
     }, 10),
     [clampOffset]
@@ -199,16 +177,21 @@ export const useBoardInteraction = (boardRef) => {
           isDragging.current = true;
         }
         if (isDragging.current) {
-          setOffset(clampOffset({ x: touchStart.current.offsetX + dx, y: touchStart.current.offsetY + dy }));
+          setOffset(clampOffset({
+            x: touchStart.current.offsetX + dx,
+            y: touchStart.current.offsetY + dy,
+          }));
         }
       } else if (e.touches.length === 2 && pinchStartDistance.current) {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const currentDistance = Math.sqrt(dx * dx + dy * dy);
         const delta = (currentDistance - pinchStartDistance.current) * ZOOM_SENSITIVITY;
-        const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-        const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-        handleZoom(delta, centerX, centerY);
+        handleZoom(
+          delta,
+          (e.touches[0].clientX + e.touches[1].clientX) / 2,
+          (e.touches[0].clientY + e.touches[1].clientY) / 2
+        );
         pinchStartDistance.current = currentDistance;
       }
     }, 10),
@@ -243,30 +226,30 @@ export const useBoardInteraction = (boardRef) => {
 
   const handleKeyDown = useCallback(
     (e) => {
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       switch (e.key) {
-        case "+":
-        case "=":
+        case '+':
+        case '=':
           e.preventDefault();
           handleZoom(ZOOM_STEP, window.innerWidth / 2, window.innerHeight / 2);
           break;
-        case "-":
+        case '-':
           e.preventDefault();
           handleZoom(-ZOOM_STEP, window.innerWidth / 2, window.innerHeight / 2);
           break;
-        case "ArrowUp":
+        case 'ArrowUp':
           e.preventDefault();
           setOffset((prev) => clampOffset({ ...prev, y: prev.y + MOVE_STEP }));
           break;
-        case "ArrowDown":
+        case 'ArrowDown':
           e.preventDefault();
           setOffset((prev) => clampOffset({ ...prev, y: prev.y - MOVE_STEP }));
           break;
-        case "ArrowLeft":
+        case 'ArrowLeft':
           e.preventDefault();
           setOffset((prev) => clampOffset({ ...prev, x: prev.x + MOVE_STEP }));
           break;
-        case "ArrowRight":
+        case 'ArrowRight':
           e.preventDefault();
           setOffset((prev) => clampOffset({ ...prev, x: prev.x - MOVE_STEP }));
           break;
@@ -284,29 +267,29 @@ export const useBoardInteraction = (boardRef) => {
   useEffect(() => {
     const boardElement = boardRef.current;
     if (boardElement) {
-      boardElement.addEventListener("wheel", handleWheel, { passive: false });
-      boardElement.addEventListener("mousedown", handleMouseDown);
-      boardElement.addEventListener("touchstart", handleTouchStart, { passive: false });
+      boardElement.addEventListener('wheel', handleWheel, { passive: false });
+      boardElement.addEventListener('mousedown', handleMouseDown);
+      boardElement.addEventListener('touchstart', handleTouchStart, { passive: false });
     }
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-    window.addEventListener("touchmove", handleTouchMove, { passive: false });
-    window.addEventListener("touchend", handleTouchEnd);
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("resize", handleResize);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleResize);
 
     return () => {
       if (boardElement) {
-        boardElement.removeEventListener("wheel", handleWheel);
-        boardElement.removeEventListener("mousedown", handleMouseDown);
-        boardElement.removeEventListener("touchstart", handleTouchStart);
+        boardElement.removeEventListener('wheel', handleWheel);
+        boardElement.removeEventListener('mousedown', handleMouseDown);
+        boardElement.removeEventListener('touchstart', handleTouchStart);
       }
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-      window.removeEventListener("touchmove", handleTouchMove);
-      window.removeEventListener("touchend", handleTouchEnd);
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleResize);
       if (animationFrame.current) cancelAnimationFrame(animationFrame.current);
     };
   }, [

@@ -31,7 +31,7 @@ import { LazyLoadImage } from 'react-lazy-load-image-component';
 import Emoji from 'react-emoji-render';
 import TweetContentStyles from './tweetContentStyles';
 
-const MAX_TWEET_LENGTH = 280;
+const MAX_TWEET_LENGTH = 1000;
 
 const TweetContent = ({
   tweet,
