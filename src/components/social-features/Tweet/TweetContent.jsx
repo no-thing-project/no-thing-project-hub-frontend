@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, memo } from 'react';
+import React, { useState, useCallback, useMemo, memo } from "react";
 import {
   Paper,
   Typography,
@@ -22,27 +22,27 @@ import {
   Link,
   Chip,
   Collapse,
-} from '@mui/material';
-import ThumbUpIcon from '@mui/icons-material/ThumbUp';
-import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import PushPinIcon from '@mui/icons-material/PushPin';
-import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
-import PropTypes from 'prop-types';
-import { LazyLoadImage } from 'react-lazy-load-image-component';
-import Emoji from 'react-emoji-render';
-import TweetContentStyles from './tweetContentStyles';
+} from "@mui/material";
+import ThumbUpIcon from "@mui/icons-material/ThumbUp";
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import PushPinIcon from "@mui/icons-material/PushPin";
+import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
+import PropTypes from "prop-types";
+import { LazyLoadImage } from "react-lazy-load-image-component";
+import Emoji from "react-emoji-render";
+import TweetContentStyles from "./tweetContentStyles";
 
 const MAX_TWEET_LENGTH = 1000;
 
 const statusColorMap = {
-  pending: 'default',
-  approved: 'success',
-  rejected: 'error',
-  announcement: 'info',
-  reminder: 'warning',
-  pinned: 'primary',
-  archived: 'default',
+  pending: "default",
+  approved: "success",
+  rejected: "error",
+  announcement: "info",
+  reminder: "warning",
+  pinned: "primary",
+  archived: "default",
 };
 
 const TweetContent = ({
@@ -69,19 +69,22 @@ const TweetContent = ({
   const [openMediaModal, setOpenMediaModal] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({
-    content: tweet.content?.value || '',
-    status: tweet.status || 'approved',
-    boardId: tweet.board_id || boardId || '',
+    content: tweet.content?.value || "",
+    status: tweet.status || "approved",
+    boardId: tweet.board_id || boardId || "",
   });
   const [isExpanded, setIsExpanded] = useState(false);
 
   const tweetAuthor = useMemo(
-    () => tweet.username || tweet.user?.username || 'Someone',
+    () => tweet.username || tweet.user?.username || "Someone",
     [tweet.username, tweet.user?.username]
   );
 
   const isLiked = useMemo(
-    () => tweet.liked_by?.some(u => u.anonymous_id === currentUser?.anonymous_id) ?? false,
+    () =>
+      tweet.liked_by?.some(
+        (u) => u.anonymous_id === currentUser?.anonymous_id
+      ) ?? false,
     [tweet.liked_by, currentUser?.anonymous_id]
   );
 
@@ -95,26 +98,32 @@ const TweetContent = ({
 
   const handleMouseEnter = useCallback(() => {
     setHovered(true);
-    if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
+    if (
+      (tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) &&
+      onReplyHover
+    ) {
       onReplyHover(tweet.tweet_id);
     }
   }, [onReplyHover, tweet]);
 
   const handleMouseLeave = useCallback(() => {
     setHovered(false);
-    if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
+    if (
+      (tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) &&
+      onReplyHover
+    ) {
       onReplyHover(null);
     }
   }, [onReplyHover, tweet]);
 
-  const handleMenuOpen = useCallback(event => {
+  const handleMenuOpen = useCallback((event) => {
     event.stopPropagation();
     setAnchorEl(event.currentTarget);
   }, []);
 
   const handleMenuClose = useCallback(() => setAnchorEl(null), []);
 
-  const handleOpenMediaModal = useCallback(event => {
+  const handleOpenMediaModal = useCallback((event) => {
     event.stopPropagation();
     setOpenMediaModal(true);
   }, []);
@@ -123,9 +132,9 @@ const TweetContent = ({
 
   const handleOpenEditModal = useCallback(() => {
     setEditForm({
-      content: tweet.content?.value || '',
-      status: tweet.status || 'approved',
-      boardId: tweet.board_id || boardId || '',
+      content: tweet.content?.value || "",
+      status: tweet.status || "approved",
+      boardId: tweet.board_id || boardId || "",
     });
     setEditModalOpen(true);
     handleMenuClose();
@@ -145,42 +154,52 @@ const TweetContent = ({
   }, [editForm, onEdit, tweet]);
 
   const canEdit = useMemo(() => {
-    if (bypassOwnership || ['moderator', 'administrator'].includes(userRole)) return true;
+    if (bypassOwnership || ["moderator", "administrator"].includes(userRole))
+      return true;
     return (
       tweet.anonymous_id === currentUser?.anonymous_id ||
       tweet.user_id === currentUser?.anonymous_id ||
-      (tweet.username && currentUser?.username && tweet.username === currentUser.username)
+      (tweet.username &&
+        currentUser?.username &&
+        tweet.username === currentUser.username)
     );
   }, [bypassOwnership, userRole, tweet, currentUser]);
 
-const isRelated = useMemo(() => relatedTweetIds.includes(tweet.tweet_id), [relatedTweetIds, tweet.tweet_id]);
+  const isRelated = useMemo(
+    () => relatedTweetIds.includes(tweet.tweet_id),
+    [relatedTweetIds, tweet.tweet_id]
+  );
 
-const highlightStyle = useMemo(() => {
-  if (hovered || isRelated || isParentHighlighted) {
-    return {
-      zIndex: 999,
-      boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
-      transform: 'translateY(-2px)',
-      transition: 'all 0.3s ease',
-      backgroundColor: 'rgb(250,250,250)'
-    };
-  }
-  return {};
-}, [hovered, isRelated, isParentHighlighted]);
+  const highlightStyle = useMemo(() => {
+    if (hovered || isRelated || isParentHighlighted) {
+      return {
+        zIndex: 999,
+        boxShadow: "0 8px 20px rgba(0,0,0,0.15)",
+        transform: "translateY(-2px)",
+        transition: "all 0.3s ease",
+        backgroundColor: "rgb(250,250,250)",
+      };
+    }
+    return {};
+  }, [hovered, isRelated, isParentHighlighted]);
 
   const renderContent = useMemo(() => {
     const files = tweet.content?.metadata?.files || [];
     const hasText = !!tweet.content?.value;
-    const imageFiles = files.filter(f => f.contentType?.startsWith('image'));
-    const videoFiles = files.filter(f => f.contentType?.startsWith('video'));
-    const audioFiles = files.filter(f => f.contentType?.startsWith('audio'));
+    const imageFiles = files.filter((f) => f.contentType?.startsWith("image"));
+    const videoFiles = files.filter((f) => f.contentType?.startsWith("video"));
+    const audioFiles = files.filter((f) => f.contentType?.startsWith("audio"));
     const otherFiles = files.filter(
-      f =>
-        !f.contentType?.startsWith('image') &&
-        !f.contentType?.startsWith('video') &&
-        !f.contentType?.startsWith('audio')
+      (f) =>
+        !f.contentType?.startsWith("image") &&
+        !f.contentType?.startsWith("video") &&
+        !f.contentType?.startsWith("audio")
     );
-    const hasMedia = imageFiles.length || videoFiles.length || audioFiles.length || otherFiles.length;
+    const hasMedia =
+      imageFiles.length ||
+      videoFiles.length ||
+      audioFiles.length ||
+      otherFiles.length;
 
     const renderImages = () => {
       if (!imageFiles.length) return null;
@@ -199,7 +218,7 @@ const highlightStyle = useMemo(() => {
                   alt={`img-${index}`}
                   effect="blur"
                   style={TweetContentStyles.image(imageFiles.length === 1)}
-                  onError={e => (e.target.src = '/fallback-image.png')}
+                  onError={(e) => (e.target.src = "/fallback-image.png")}
                   placeholder={<Box sx={TweetContentStyles.imagePlaceholder} />}
                 />
               </Grid>
@@ -211,7 +230,7 @@ const highlightStyle = useMemo(() => {
             onClick={handleOpenMediaModal}
             role="button"
             tabIndex={0}
-            onKeyPress={e => e.key === 'Enter' && handleOpenMediaModal(e)}
+            onKeyPress={(e) => e.key === "Enter" && handleOpenMediaModal(e)}
           >
             View all images ({imageFiles.length})
           </Typography>
@@ -222,7 +241,11 @@ const highlightStyle = useMemo(() => {
     const renderVideos = () => {
       if (!videoFiles.length) return null;
       return (
-        <Box sx={TweetContentStyles.videoContainer(hasText || imageFiles.length > 0)}>
+        <Box
+          sx={TweetContentStyles.videoContainer(
+            hasText || imageFiles.length > 0
+          )}
+        >
           <Box sx={TweetContentStyles.videoInner}>
             <video
               src={videoFiles[0].url}
@@ -238,7 +261,7 @@ const highlightStyle = useMemo(() => {
             onClick={handleOpenMediaModal}
             role="button"
             tabIndex={0}
-            onKeyPress={e => e.key === 'Enter' && handleOpenMediaModal(e)}
+            onKeyPress={(e) => e.key === "Enter" && handleOpenMediaModal(e)}
           >
             View all videos ({videoFiles.length})
           </Typography>
@@ -249,7 +272,11 @@ const highlightStyle = useMemo(() => {
     const renderAudio = () => {
       if (!audioFiles.length) return null;
       return (
-        <Box sx={TweetContentStyles.audioContainer(hasText || imageFiles.length > 0 || videoFiles.length > 0)}>
+        <Box
+          sx={TweetContentStyles.audioContainer(
+            hasText || imageFiles.length > 0 || videoFiles.length > 0
+          )}
+        >
           <audio
             src={audioFiles[0].url}
             controls
@@ -263,7 +290,7 @@ const highlightStyle = useMemo(() => {
             onClick={handleOpenMediaModal}
             role="button"
             tabIndex={0}
-            onKeyPress={e => e.key === 'Enter' && handleOpenMediaModal(e)}
+            onKeyPress={(e) => e.key === "Enter" && handleOpenMediaModal(e)}
           >
             View all audio ({audioFiles.length})
           </Typography>
@@ -276,9 +303,17 @@ const highlightStyle = useMemo(() => {
       return (
         <Box sx={TweetContentStyles.otherFilesContainer(hasText)}>
           {otherFiles.slice(0, 2).map((file, idx) => (
-            <Box key={file.fileKey || `other-${idx}`} sx={TweetContentStyles.otherFileItem(idx)}>
+            <Box
+              key={file.fileKey || `other-${idx}`}
+              sx={TweetContentStyles.otherFileItem(idx)}
+            >
               <InsertDriveFileIcon sx={TweetContentStyles.otherFileIcon} />
-              <Link href={file.url} target="_blank" rel="noopener noreferrer" sx={TweetContentStyles.otherFileLink}>
+              <Link
+                href={file.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={TweetContentStyles.otherFileLink}
+              >
                 {file.fileKey || `File ${idx + 1}`}
               </Link>
             </Box>
@@ -289,7 +324,7 @@ const highlightStyle = useMemo(() => {
             onClick={handleOpenMediaModal}
             role="button"
             tabIndex={0}
-            onKeyPress={e => e.key === 'Enter' && handleOpenMediaModal(e)}
+            onKeyPress={(e) => e.key === "Enter" && handleOpenMediaModal(e)}
           >
             View all files ({otherFiles.length})
           </Typography>
@@ -299,37 +334,65 @@ const highlightStyle = useMemo(() => {
 
     return (
       <>
-        {hasText && (() => {
-          const text = tweet.content.value;
-          const firstPart = text.slice(0, 200);
-          const restPart = text.slice(200);
-          const shouldTruncate = text.length > 200;
-          return (
-            <Box>
-              <Typography variant="body1" sx={TweetContentStyles.contentText(hasMedia)}>
-                <Emoji text={firstPart} />
-              </Typography>
-              {shouldTruncate && (
-                <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                  <Typography variant="body1" sx={TweetContentStyles.contentText(hasMedia)}>
-                    <Emoji text={restPart} />
-                  </Typography>
-                </Collapse>
-              )}
-              {shouldTruncate && (
-                <Button
-                  onClick={() => setIsExpanded(prev => !prev)}
-                  size="small"
-                  variant="text"
-                  sx={{ textTransform: 'none', mt: 1, p: 0, minWidth: 'auto', color: 'text.secondary' }}
-                  aria-label={isExpanded ? 'Show less text' : 'Read more text'}
+        {hasText &&
+          (() => {
+            const text = tweet.content.value;
+            const PREVIEW_LEN = 200;
+
+            let previewText = text;
+            let remainderText = "";
+            if (text.length > PREVIEW_LEN) {
+              const cutoff = text.slice(0, PREVIEW_LEN);
+              const lastSpace = cutoff.lastIndexOf(" ");
+              previewText = cutoff.slice(0, lastSpace);
+              remainderText = text.slice(lastSpace);
+            }
+
+            return (
+              <Box>
+                <Typography
+                  variant="body1"
+                  sx={TweetContentStyles.contentText(hasMedia)}
                 >
-                  {isExpanded ? 'Show less' : 'Read more'}
-                </Button>
-              )}
-            </Box>
-          );
-        })()}
+                  <Emoji
+                    text={
+                      previewText + (!isExpanded && remainderText ? "..." : "")
+                    }
+                  />
+                </Typography>
+
+                {remainderText && (
+                  <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                    <Typography
+                      variant="body1"
+                      sx={TweetContentStyles.contentText(hasMedia)}
+                    >
+                      <Emoji text={remainderText} />
+                    </Typography>
+                  </Collapse>
+                )}
+
+                {remainderText && (
+                  <Button
+                    onClick={() => setIsExpanded((prev) => !prev)}
+                    size="small"
+                    variant="text"
+                    sx={{
+                      textTransform: "none",
+                      mt: 1,
+                      p: 0,
+                      color: "text.secondary",
+                    }}
+                    aria-label={
+                      isExpanded ? "Show less text" : "Read more text"
+                    }
+                  >
+                    {isExpanded ? "Show less" : "Read more"}
+                  </Button>
+                )}
+              </Box>
+            );
+          })()}
         {renderImages()}
         {renderVideos()}
         {renderAudio()}
@@ -343,12 +406,17 @@ const highlightStyle = useMemo(() => {
     [tweet.child_tweet_ids, replyCount]
   );
   const replyLabel = useMemo(
-    () => (hasReplies ? `${replyCount || tweet.child_tweet_ids.length} ${replyCount === 1 ? 'Reply' : 'Replies'}` : ''),
+    () =>
+      hasReplies
+        ? `${replyCount || tweet.child_tweet_ids.length} ${
+            replyCount === 1 ? "Reply" : "Replies"
+          }`
+        : "",
     [hasReplies, replyCount, tweet.child_tweet_ids]
   );
 
-  const rawStatus = tweet.status || 'unknown';
-  const chipColor = statusColorMap[rawStatus] || 'default';
+  const rawStatus = tweet.status || "unknown";
+  const chipColor = statusColorMap[rawStatus] || "default";
   const chipLabel = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
 
   return (
@@ -360,15 +428,18 @@ const highlightStyle = useMemo(() => {
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         sx={{
-          position: 'relative',
-          overflow: 'visible',
+          position: "relative",
+          overflow: "visible",
           ...TweetContentStyles.tweetCard(tweet.is_pinned),
-          ...highlightStyle
+          ...highlightStyle,
         }}
         role="article"
         aria-labelledby={`tweet-title-${tweet.tweet_id}`}
       >
-        <Typography sx={TweetContentStyles.tweetTitle} id={`tweet-title-${tweet.tweet_id}`}>
+        <Typography
+          sx={TweetContentStyles.tweetTitle}
+          id={`tweet-title-${tweet.tweet_id}`}
+        >
           Tweet by {tweetAuthor}
         </Typography>
         {tweet.is_pinned && (
@@ -378,7 +449,10 @@ const highlightStyle = useMemo(() => {
         )}
         {parentTweetText && (
           <Box sx={TweetContentStyles.replyToContainer}>
-            <Typography variant="caption" sx={TweetContentStyles.replyToCaption}>
+            <Typography
+              variant="caption"
+              sx={TweetContentStyles.replyToCaption}
+            >
               Replying to:
             </Typography>
             <Typography variant="body2" sx={TweetContentStyles.replyToText}>
@@ -389,15 +463,15 @@ const highlightStyle = useMemo(() => {
         {renderContent}
         <Box
           sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
             mt: 2,
             mb: 2,
           }}
         >
           <Chip label={chipLabel} color={chipColor} size="small" />
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
             Author: {tweetAuthor}
           </Typography>
         </Box>
@@ -405,28 +479,37 @@ const highlightStyle = useMemo(() => {
           <Box sx={TweetContentStyles.actionButtons}>
             <IconButton
               size="small"
-              onClick={e => {
+              onClick={(e) => {
                 e.stopPropagation();
                 onLike(tweet.tweet_id, isLiked);
               }}
-              aria-label={isLiked ? 'Unlike tweet' : 'Like tweet'}
+              aria-label={isLiked ? "Unlike tweet" : "Like tweet"}
               sx={TweetContentStyles.likeButton}
             >
-              <ThumbUpIcon fontSize="small" sx={TweetContentStyles.likeIcon(isLiked)} />
+              <ThumbUpIcon
+                fontSize="small"
+                sx={TweetContentStyles.likeIcon(isLiked)}
+              />
             </IconButton>
-            <Typography variant="caption" sx={TweetContentStyles.likeCount(isLiked, animate)}>
+            <Typography
+              variant="caption"
+              sx={TweetContentStyles.likeCount(isLiked, animate)}
+            >
               {tweet.stats?.likes || 0}
             </Typography>
             <IconButton
               size="small"
-              onClick={e => {
+              onClick={(e) => {
                 e.stopPropagation();
                 onReply(tweet);
               }}
               aria-label="Reply to tweet"
               sx={TweetContentStyles.replyButton}
             >
-              <ChatBubbleOutlineIcon fontSize="small" sx={TweetContentStyles.replyIcon} />
+              <ChatBubbleOutlineIcon
+                fontSize="small"
+                sx={TweetContentStyles.replyIcon}
+              />
             </IconButton>
             {hasReplies && (
               <Typography variant="caption" sx={TweetContentStyles.replyCount}>
@@ -445,7 +528,10 @@ const highlightStyle = useMemo(() => {
                 aria-haspopup="true"
                 sx={TweetContentStyles.menuButton}
               >
-                <MoreVertIcon fontSize="small" sx={TweetContentStyles.menuIcon} />
+                <MoreVertIcon
+                  fontSize="small"
+                  sx={TweetContentStyles.menuIcon}
+                />
               </IconButton>
               <Menu
                 id={`tweet-menu-${tweet.tweet_id}`}
@@ -461,7 +547,7 @@ const highlightStyle = useMemo(() => {
                     handleMenuClose();
                   }}
                 >
-                  {tweet.is_pinned ? 'Unpin Tweet' : 'Pin Tweet'}
+                  {tweet.is_pinned ? "Unpin Tweet" : "Pin Tweet"}
                 </MenuItem>
                 <MenuItem
                   onClick={() => {
@@ -487,30 +573,40 @@ const highlightStyle = useMemo(() => {
         aria-labelledby="media-modal-title"
       >
         <Fade in={openMediaModal}>
-          <Box sx={TweetContentStyles.mediaModalBox} role="dialog" aria-labelledby="media-modal-title">
-            <Typography id="media-modal-title" variant="h6" sx={TweetContentStyles.mediaModalTitle}>
+          <Box
+            sx={TweetContentStyles.mediaModalBox}
+            role="dialog"
+            aria-labelledby="media-modal-title"
+          >
+            <Typography
+              id="media-modal-title"
+              variant="h6"
+              sx={TweetContentStyles.mediaModalTitle}
+            >
               All Media
             </Typography>
             <Box sx={TweetContentStyles.mediaModalContent}>
               {(tweet.content?.metadata?.files || []).map((file, idx) => (
                 <Box key={file.fileKey || `media-${idx}`}>
-                  {file.contentType?.startsWith('image') ? (
+                  {file.contentType?.startsWith("image") ? (
                     <LazyLoadImage
                       src={file.url}
                       alt={`Media ${idx + 1}`}
                       effect="blur"
                       style={TweetContentStyles.modalImage}
-                      onError={e => (e.target.src = '/fallback-image.png')}
-                      placeholder={<Box sx={TweetContentStyles.modalImagePlaceholder} />}
+                      onError={(e) => (e.target.src = "/fallback-image.png")}
+                      placeholder={
+                        <Box sx={TweetContentStyles.modalImagePlaceholder} />
+                      }
                     />
-                  ) : file.contentType?.startsWith('video') ? (
+                  ) : file.contentType?.startsWith("video") ? (
                     <video
                       src={file.url}
                       controls
                       style={TweetContentStyles.modalVideo}
                       aria-label={`Video ${idx + 1}`}
                     />
-                  ) : file.contentType?.startsWith('audio') ? (
+                  ) : file.contentType?.startsWith("audio") ? (
                     <audio
                       src={file.url}
                       controls
@@ -519,7 +615,9 @@ const highlightStyle = useMemo(() => {
                     />
                   ) : (
                     <Box sx={TweetContentStyles.modalOtherFile}>
-                      <InsertDriveFileIcon sx={TweetContentStyles.modalOtherFileIcon} />
+                      <InsertDriveFileIcon
+                        sx={TweetContentStyles.modalOtherFileIcon}
+                      />
                       <Link
                         href={file.url}
                         target="_blank"
@@ -551,7 +649,9 @@ const highlightStyle = useMemo(() => {
             fullWidth
             label="Tweet Content"
             value={editForm.content}
-            onChange={e => setEditForm(prev => ({ ...prev, content: e.target.value }))}
+            onChange={(e) =>
+              setEditForm((prev) => ({ ...prev, content: e.target.value }))
+            }
             sx={{ mt: 2 }}
             aria-label="Tweet content"
             minRows={3}
@@ -568,7 +668,9 @@ const highlightStyle = useMemo(() => {
             <Select
               value={editForm.status}
               label="Tweet Status"
-              onChange={e => setEditForm(prev => ({ ...prev, status: e.target.value }))}
+              onChange={(e) =>
+                setEditForm((prev) => ({ ...prev, status: e.target.value }))
+              }
               aria-label="Tweet status"
             >
               <MenuItem value="pending">Pending</MenuItem>
@@ -586,10 +688,12 @@ const highlightStyle = useMemo(() => {
               <Select
                 value={editForm.boardId}
                 label="Move to Board"
-                onChange={e => setEditForm(prev => ({ ...prev, boardId: e.target.value }))}
+                onChange={(e) =>
+                  setEditForm((prev) => ({ ...prev, boardId: e.target.value }))
+                }
                 aria-label="Move to board"
               >
-                {availableBoards.map(b => (
+                {availableBoards.map((b) => (
                   <MenuItem key={b.board_id} value={b.board_id}>
                     {b.name}
                   </MenuItem>
@@ -606,7 +710,10 @@ const highlightStyle = useMemo(() => {
             onClick={handleEditSubmit}
             variant="contained"
             aria-label="Save edited tweet"
-            disabled={!editForm.content.trim() || editForm.content.length > MAX_TWEET_LENGTH}
+            disabled={
+              !editForm.content.trim() ||
+              editForm.content.length > MAX_TWEET_LENGTH
+            }
           >
             Save
           </Button>
@@ -645,16 +752,29 @@ TweetContent.propTypes = {
     user: PropTypes.shape({ username: PropTypes.string }),
     created_at: PropTypes.string,
     liked_by: PropTypes.arrayOf(
-      PropTypes.shape({ anonymous_id: PropTypes.string, username: PropTypes.string })
+      PropTypes.shape({
+        anonymous_id: PropTypes.string,
+        username: PropTypes.string,
+      })
     ),
-    stats: PropTypes.shape({ likes: PropTypes.number, like_count: PropTypes.number, view_count: PropTypes.number }),
+    stats: PropTypes.shape({
+      likes: PropTypes.number,
+      like_count: PropTypes.number,
+      view_count: PropTypes.number,
+    }),
     status: PropTypes.string,
     scheduled_at: PropTypes.string,
-    reminder: PropTypes.shape({ schedule: PropTypes.string, enabled: PropTypes.bool }),
+    reminder: PropTypes.shape({
+      schedule: PropTypes.string,
+      enabled: PropTypes.bool,
+    }),
     is_pinned: PropTypes.bool,
     board_id: PropTypes.string,
   }).isRequired,
-  currentUser: PropTypes.shape({ anonymous_id: PropTypes.string, username: PropTypes.string }).isRequired,
+  currentUser: PropTypes.shape({
+    anonymous_id: PropTypes.string,
+    username: PropTypes.string,
+  }).isRequired,
   userRole: PropTypes.string.isRequired,
   onLike: PropTypes.func.isRequired,
   onDelete: PropTypes.func.isRequired,
@@ -668,7 +788,10 @@ TweetContent.propTypes = {
   bypassOwnership: PropTypes.bool,
   relatedTweetIds: PropTypes.arrayOf(PropTypes.string),
   availableBoards: PropTypes.arrayOf(
-    PropTypes.shape({ board_id: PropTypes.string.isRequired, name: PropTypes.string.isRequired })
+    PropTypes.shape({
+      board_id: PropTypes.string.isRequired,
+      name: PropTypes.string.isRequired,
+    })
   ),
   boardId: PropTypes.string,
 };
@@ -680,7 +803,7 @@ TweetContent.defaultProps = {
   bypassOwnership: false,
   relatedTweetIds: [],
   availableBoards: [],
-  boardId: '',
+  boardId: "",
 };
 
 export default memo(TweetContent);
