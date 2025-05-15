@@ -1,21 +1,20 @@
-import { alpha } from '@mui/material';
-
 const MAX_TWEET_LENGTH = 1000;
 
 const TweetContentStyles = {
   // Tweet Card (Paper)
   tweetCard: (isPinned) => ({
-    p: { xs: 1.5, sm: 2 },
-    bgcolor: (theme) => (isPinned ? alpha(theme.palette.warning.light, 0.15) : theme.palette.background.paper),
-    borderRadius: 2,
-    minWidth: { xs: '160px', sm: '220px' },
-    maxWidth: { xs: '90vw', sm: '340px' },
+    p: 3,
+    bgcolor: "background.paper",
+    borderRadius: 1,
+    minWidth: '300px',
+    maxWidth: '350px',
     boxShadow: '0 6px 16px rgba(0,0,0,0.12)',
-    transition: 'all 0.3s ease-in-out',
+    transition: 'all 0.3s ease',
     position: 'relative',
     '&:hover': {
       transform: 'translateY(-4px)',
-      boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
+      transition: 'all 0.3s ease',
+      boxShadow: '0 8px 20px rgba(0,0,0,0.15)'
     },
   }),
 
@@ -67,8 +66,12 @@ const TweetContentStyles = {
 
   // Image Grid
   imageContainer: (hasText) => ({
+    display: 'flex',
     position: 'relative',
+    justifyContent: 'center',
+    flexDirection: 'column',
     mb: hasText ? 2 : 0,
+    mt: 2,
   }),
   image: (isSingle) => ({
     width: '100%',
@@ -110,7 +113,12 @@ const TweetContentStyles = {
 
   // Video
   videoContainer: (hasTextOrImages) => ({
+    display: 'flex',
+    position: 'relative',
+    justifyContent: 'center',
+    flexDirection: 'column',
     mb: hasTextOrImages ? 2 : 0,
+    mt: 2,
   }),
   videoInner: {
     position: 'relative',
@@ -132,7 +140,12 @@ const TweetContentStyles = {
 
   // Audio
   audioContainer: (hasTextOrMedia) => ({
+    display: 'flex',
+    position: 'relative',
+    justifyContent: 'center',
+    flexDirection: 'column',
     mb: hasTextOrMedia ? 2 : 0,
+    mt: 2,
   }),
   audioInner: {
     display: 'flex',
@@ -178,12 +191,6 @@ const TweetContentStyles = {
   },
 
   // Metadata
-  metadataContainer: {
-    mt: 1.5,
-    borderTop: '1px solid',
-    borderColor: 'divider',
-    pt: 1,
-  },
   authorText: {
     color: 'text.secondary',
     fontSize: { xs: '0.85rem', sm: '0.9rem' },
@@ -203,10 +210,10 @@ const TweetContentStyles = {
   actionButtons: {
     display: 'flex',
     alignItems: 'center',
-    gap: { xs: 0.5, sm: 1 },
+    gap: '0.5'
   },
   likeButton: {
-    '&:hover': { bgcolor: 'primary.light' },
+    '&:hover': { bgcolor: 'grey.100' },
   },
   likeIcon: (isLiked) => ({
     color: isLiked ? 'primary.main' : 'text.secondary',
@@ -219,7 +226,7 @@ const TweetContentStyles = {
     fontSize: { xs: '0.75rem', sm: '0.85rem' },
   }),
   replyButton: {
-    '&:hover': { bgcolor: 'primary.light' },
+    '&:hover': { bgcolor: 'grey.100' },
   },
   replyIcon: {
     color: 'text.secondary',

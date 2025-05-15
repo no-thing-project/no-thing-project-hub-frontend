@@ -12,6 +12,7 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
     y: tweet.position?.y ?? 0,
   });
   const [dragging, setDragging] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
   // Sync local position with tweet.position when not dragging
   useEffect(() => {
@@ -102,6 +103,7 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
     <Draggable
       nodeRef={nodeRef}
       position={localPosition}
+      positionOffset={{ x: '-50%', y: '-50%' }} 
       disabled={!isDraggable}
       onStart={handleStart}
       onDrag={handleDrag}
@@ -109,12 +111,17 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
     >
       <div
         ref={nodeRef}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         style={{
           position: 'absolute',
           transform: 'translate(-50%, -50%)',
           cursor: isDraggable ? (dragging ? 'grabbing' : 'grab') : 'default',
-          opacity: tweet.status === 'pending' ? 0.7 : dragging ? 0.9 : 1,
-          zIndex: dragging ? 1000 : tweet.is_pinned ? 1100 : 1,
+          zIndex: dragging || hovered
+            ? 1000 
+            : tweet.is_pinned
+            ? 1100
+            : 1,
           transition: 'opacity 0.2s ease',
         }}
         role="region"
