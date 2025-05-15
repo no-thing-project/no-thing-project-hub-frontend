@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback, useMemo, memo } from '
 import PropTypes from 'prop-types';
 import Draggable from 'react-draggable';
 import debounce from 'lodash/debounce';
+import { BOARD_SIZE } from '../../../hooks/useBoard';
 
 const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypassOwnership = false }) => {
   const nodeRef = useRef(null);
@@ -17,8 +18,8 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
   // Sync local position with tweet.position when not dragging
   useEffect(() => {
     if (!dragging && !justDroppedRef.current) {
-      const newX = tweet.position?.x ?? 0;
-      const newY = tweet.position?.y ?? 0;
+      const newX = Math.max(0, Math.min(tweet.position?.x ?? 0, BOARD_SIZE - 200));
+      const newY = Math.max(0, Math.min(tweet.position?.y ?? 0, BOARD_SIZE - 100));
       if (localPosition.x !== newX || localPosition.y !== newY) {
         setLocalPosition({ x: newX, y: newY });
         previousPosition.current = { x: newX, y: newY };
@@ -37,10 +38,6 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
     );
   }, [
     tweet,
-    tweet?.is_pinned,
-    tweet?.anonymous_id,
-    tweet?.user_id,
-    tweet?.username,
     bypassOwnership,
     userRole,
     currentUser?.anonymous_id,
@@ -51,16 +48,18 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
   const debouncedOnStop = useMemo(
     () =>
       debounce((e, data) => {
+        const clampedX = Math.max(0, Math.min(data.x, BOARD_SIZE - 200));
+        const clampedY = Math.max(0, Math.min(data.y, BOARD_SIZE - 100));
         if (
-          data.x !== previousPosition.current.x ||
-          data.y !== previousPosition.current.y
+          clampedX !== previousPosition.current.x ||
+          clampedY !== previousPosition.current.y
         ) {
-          if (isNaN(data.x) || isNaN(data.y)) {
+          if (isNaN(clampedX) || isNaN(clampedY)) {
             console.error('Invalid position data:', data);
             return;
           }
-          previousPosition.current = { x: data.x, y: data.y };
-          onStop?.(e, { x: data.x, y: data.y, tweetId: tweet.tweet_id });
+          previousPosition.current = { x: clampedX, y: clampedY };
+          onStop?.(e, { x: clampedX, y: clampedY, tweetId: tweet.tweet_id });
         }
       }, 150),
     [onStop, tweet.tweet_id]
@@ -103,7 +102,7 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
     <Draggable
       nodeRef={nodeRef}
       position={localPosition}
-      positionOffset={{ x: '-50%', y: '-50%' }} 
+      positionOffset={{ x: '-50%', y: '-50%' }}
       disabled={!isDraggable}
       onStart={handleStart}
       onDrag={handleDrag}
@@ -118,11 +117,11 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
           transform: 'translate(-50%, -50%)',
           cursor: isDraggable ? (dragging ? 'grabbing' : 'grab') : 'default',
           zIndex: dragging || hovered
-            ? 1000 
+            ? 1000
             : tweet.is_pinned
             ? 1100
             : 1,
-          transition: 'opacity 0.2s ease',
+          transition: 'opacity 0.2s ease, transform 0.2s ease',
         }}
         role="region"
         aria-label={`Tweet by ${tweet.username || 'Someone'}`}
