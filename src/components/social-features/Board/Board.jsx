@@ -58,6 +58,7 @@ const Board = ({
   const [cachedBoards, setCachedBoards] = useState(availableBoards);
   const [isListView, setIsListView] = useState(false);
   const [page, setPage] = useState(1);
+  const [boardState, setBoardState] = useState(null); // New state to save board state
   const isFetching = useRef(false);
 
   const {
@@ -88,6 +89,7 @@ const Board = ({
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
+    restoreBoardState,
   } = useBoardInteraction(boardMainRef);
 
   // Fetch data (tweets and boards)
@@ -307,10 +309,22 @@ const Board = ({
 
   // Toggle view
   const handleViewToggle = useCallback(() => {
-    setIsListView((prev) => !prev);
+    setIsListView((prev) => {
+      if (!prev) {
+        // Switching to list view: save board state
+        setBoardState({ scale, offset });
+      } else {
+        // Switching to board view: restore board state
+        if (boardState) {
+          restoreBoardState(boardState);
+        } else {
+          centerBoard();
+        }
+      }
+      return !prev;
+    });
     setPage(1);
-    if (!isListView) centerBoard();
-  }, [isListView, centerBoard]);
+  }, [isListView, scale, offset, boardState, restoreBoardState, centerBoard]);
 
   // Calculate title font size
   const titleFontSize = useMemo(
@@ -390,8 +404,8 @@ const Board = ({
             transition={{ duration: 0.3 }}
             sx={{
               width: '100%',
-              maxWidth: { xs: '95vw', sm: '600px' },
-              mx: 'auto',
+              maxWidth: { xs: '95vw', sm: '600px' }, // Ensure reasonable width
+              mx: 'auto', // Center tweets horizontally
               mb: 2,
               pl: tweet.parent_tweet_id ? 4 : 0,
               borderLeft: tweet.parent_tweet_id
@@ -526,7 +540,16 @@ const Board = ({
             {error && renderError()}
 
             {isListView ? (
-              <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: '100%', display: 'flex', flexDirection: 'column' }}>
+              <Box
+                sx={{
+                  p: { xs: 2, sm: 3 },
+                  maxWidth: { xs: '95vw', sm: '680px' }, // Adjusted for centering
+                  mx: 'auto', // Center the container
+                  display: 'flex',
+                  flexDirection: 'column',
+                  minHeight: '100%',
+                }}
+              >
                 {validTweets.length === 0 ? (
                   <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
                     No tweets yet. Create one to get started!

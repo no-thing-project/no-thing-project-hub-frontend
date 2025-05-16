@@ -7,7 +7,7 @@ const ZOOM_MAX = 2;
 const ZOOM_STEP = 0.05;
 const ZOOM_SENSITIVITY = 0.001;
 const MOVE_STEP = 50;
-const ANIMATION_DURATION = 300;
+const ANIMATION_DURATION = 400;
 
 export const useBoardInteraction = (boardRef) => {
   const [scale, setScale] = useState(1);
@@ -41,7 +41,17 @@ export const useBoardInteraction = (boardRef) => {
       y: window.innerHeight / 2 - (BOARD_SIZE * scaleRef.current) / 2,
     };
     setOffset(clampOffset(newOffset));
+    setScale(1);
   }, [clampOffset]);
+
+  const restoreBoardState = useCallback(
+    (state) => {
+      if (!state) return;
+      setScale(state.scale);
+      setOffset(clampOffset(state.offset));
+    },
+    [clampOffset]
+  );
 
   const animateReset = useCallback(() => {
     const startScale = scaleRef.current;
@@ -318,5 +328,6 @@ export const useBoardInteraction = (boardRef) => {
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
+    restoreBoardState,
   };
 };
