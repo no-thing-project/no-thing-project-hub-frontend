@@ -4,16 +4,26 @@ const MAX_TWEET_LENGTH = 1000;
 
 const TweetContentStyles = {
   // Tweet Card (Paper)
-  tweetCard: (isPinned, isListView) => ({
+  tweetCard: (isPinned, isParentHighlighted, isListView) => ({
     p: 4,
     mb: 1,
+    bgcolor: (theme) =>
+    isPinned
+      ? alpha(theme.palette.warning.light, 0.25)
+      : isParentHighlighted
+      ? alpha(theme.palette.primary.light, 0.15)
+      : theme.palette.background.paper,
     borderRadius: 3,
-    minWidth: { xs: '60vw', sm: '400px' },
-    maxWidth: isListView ? { xs: '90vw', sm: '700px' } : { xs: '90vw', sm: '400px' },
+    minWidth: { xs: '60vw', sm: '360px' },
+    maxWidth: isListView ? { xs: '90vw', sm: '900px' } : { xs: '90vw', sm: '360px' },
     boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
     transition: 'all 0.3s ease-in-out',
     position: 'relative',
     opacity: 0.97,
+    border: (theme) =>
+    isParentHighlighted
+      ? `2px solid ${theme.palette.primary.main}`
+      : `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
     '&:hover': {
       transform: 'translateY(-4px)',
       boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
@@ -110,7 +120,7 @@ const TweetContentStyles = {
     height: isSingle ? { xs: '180px', sm: '220px' } : { xs: '90px', sm: '110px' },
     objectFit: 'cover',
     objectPosition: 'center',
-    borderRadius: '30px',
+    borderRadius: '20px',
     border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
     transition: 'transform 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease',
     opacity: 0.97,
