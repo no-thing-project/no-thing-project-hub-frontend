@@ -5,7 +5,7 @@ const MAX_TWEET_LENGTH = 1000;
 const TweetContentStyles = {
   // Tweet Card (Paper)
   tweetCard: (isPinned, isParentHighlighted) => ({
-    p: { xs: 2, sm: 2.5 },
+    p: 4,
     mb: 1,
     bgcolor: (theme) =>
       isPinned
@@ -13,7 +13,7 @@ const TweetContentStyles = {
         : isParentHighlighted
         ? alpha(theme.palette.primary.light, 0.15)
         : theme.palette.background.paper,
-    borderRadius: 1,
+    borderRadius: 3,
     minWidth: { xs: '180px', sm: '240px' },
     maxWidth: { xs: '90vw', sm: '360px' },
     boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
