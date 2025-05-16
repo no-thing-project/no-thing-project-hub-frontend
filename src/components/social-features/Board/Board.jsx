@@ -28,13 +28,10 @@ import TweetPopup from '../Tweet/TweetPopup';
 import { useTweets } from '../../../hooks/useTweets';
 import { useBoards } from '../../../hooks/useBoards';
 import { useNotification } from '../../../context/NotificationContext';
-import { LazyLoadImage } from 'react-lazy-load-image-component';
-import 'react-lazy-load-image-component/src/effects/blur.css';
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 
 const MAX_TWEET_LENGTH = 1000;
-const apiCache = new Map();
 
 const Board = ({
   boardId,
@@ -44,9 +41,9 @@ const Board = ({
   userRole,
   onPointsUpdate,
   onLogout,
+  navigate,
   availableBoards = [],
 }) => {
-  const navigate = useNavigate();
   const { showNotification } = useNotification();
   const boardMainRef = useRef(null);
   const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0 });
@@ -55,10 +52,10 @@ const Board = ({
   const [editTweetModal, setEditTweetModal] = useState(null);
   const [newStatus, setNewStatus] = useState('');
   const [selectedBoardId, setSelectedBoardId] = useState('');
-  const [cachedBoards, setCachedBoards] = useState(availableBoards);
+  const [boards, setBoards] = useState(availableBoards); // Замість cachedBoards використовуємо boards
   const [isListView, setIsListView] = useState(false);
   const [page, setPage] = useState(1);
-  const [boardState, setBoardState] = useState(null); // New state to save board state
+  const [boardState, setBoardState] = useState(null);
   const isFetching = useRef(false);
 
   const {
@@ -92,51 +89,59 @@ const Board = ({
     restoreBoardState,
   } = useBoardInteraction(boardMainRef);
 
-  // Fetch data (tweets and boards)
-  const fetchData = useCallback(async () => {
-    const controller = new AbortController();
-    const cacheKey = `boards:${token}`;
-
-    if (isFetching.current) return;
-    isFetching.current = true;
-
-    try {
-      await debouncedFetchTweets({ include_parents: true, page, limit: 20 }, controller.signal);
-      if (cachedBoards.length === 0 && !apiCache.has(cacheKey)) {
-        const boardsData = await fetchBoardsList();
-        const validBoards = boardsData?.boards.filter((b) => b.board_id) || [];
-        setCachedBoards(validBoards);
-        apiCache.set(cacheKey, validBoards);
-      } else if (apiCache.has(cacheKey)) {
-        setCachedBoards(apiCache.get(cacheKey));
-      }
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        showNotification('Failed to load data', 'error');
-      }
-    } finally {
-      isFetching.current = false;
-    }
-
-    return () => controller.abort();
-  }, [cachedBoards.length, fetchBoardsList, page, showNotification, token]);
-
-  const debouncedFetchTweets = useMemo(
-    () => debounce(fetchTweets, 300),
-    [fetchTweets]
-  );
-
+  // Fetch tweets on mount
   useEffect(() => {
+    if (!token || !boardId) return;
+
+    const controller = new AbortController();
+    const fetchData = async () => {
+      if (isFetching.current) return;
+      isFetching.current = true;
+      try {
+        await fetchTweets({ include_parents: true, page, limit: 20 }, controller.signal);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          showNotification(err.message || 'Failed to load tweets', 'error');
+          if (err.message?.includes('Board not found')) {
+            setTimeout(() => navigate('/boards'), 2000);
+          }
+        }
+      } finally {
+        isFetching.current = false;
+      }
+    };
+
     fetchData();
-    return () => debouncedFetchTweets.cancel();
-  }, [fetchData, debouncedFetchTweets]);
+    return () => controller.abort();
+  }, [token, boardId, page, fetchTweets, showNotification, navigate]);
+
+  // Fetch boards list when editing tweet
+  useEffect(() => {
+    if (!editTweetModal || boards.length > 0) return;
+
+    const controller = new AbortController();
+    const fetchBoards = async () => {
+      try {
+        const boardsData = await fetchBoardsList({}, controller.signal);
+        const validBoards = boardsData?.boards.filter((b) => b.board_id) || [];
+        setBoards(validBoards); // Оновлюємо boards напряму
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          showNotification('Failed to load boards', 'error');
+        }
+      }
+    };
+
+    fetchBoards();
+    return () => controller.abort();
+  }, [editTweetModal, boards, fetchBoardsList, token, showNotification]);
 
   // Center board after loading
   useEffect(() => {
-    if (!loading && boardMainRef.current) {
+    if (!loading && boardMainRef.current && !isListView) {
       centerBoard();
     }
-  }, [loading, centerBoard]);
+  }, [loading, centerBoard, isListView]);
 
   // Handle infinite scroll in list view
   const handleScroll = useMemo(
@@ -241,9 +246,9 @@ const Board = ({
     (tweet) => {
       setSelectedBoardId(tweet.board_id || boardId);
       setNewStatus(tweet.status || 'approved');
-      setEditTweetModal({ ...tweet, availableBoards: cachedBoards });
+      setEditTweetModal({ ...tweet, availableBoards: boards });
     },
-    [cachedBoards, boardId]
+    [boards, boardId]
   );
 
   // Pin toggle
@@ -324,7 +329,7 @@ const Board = ({
       return !prev;
     });
     setPage(1);
-  }, [isListView, scale, offset, boardState, restoreBoardState, centerBoard]);
+  }, [scale, offset, boardState, restoreBoardState, centerBoard]);
 
   // Calculate title font size
   const titleFontSize = useMemo(
@@ -367,7 +372,6 @@ const Board = ({
   // Render single tweet
   const renderTweet = useCallback(
     (tweet) => {
-      console.log('Rendering tweet:', tweet.tweet_id, 'Position:', tweet.position); // Debug log
       const replyCount = validTweets.filter((t) => t.parent_tweet_id === tweet.tweet_id).length;
       const relatedTweetIds = highlightedTweetId ? getRelatedTweetIds(highlightedTweetId) : [];
       const tweetContent = (
@@ -389,7 +393,7 @@ const Board = ({
               : null
           }
           relatedTweetIds={relatedTweetIds}
-          availableBoards={editTweetModal?.availableBoards || cachedBoards}
+          availableBoards={editTweetModal?.availableBoards || boards}
           boardId={boardId}
           isListView={isListView}
         />
@@ -405,8 +409,8 @@ const Board = ({
             transition={{ duration: 0.3 }}
             sx={{
               width: '100%',
-              maxWidth: { xs: '95vw', sm: '600px' }, // Ensure reasonable width
-              mx: 'auto', // Center tweets horizontally
+              maxWidth: { xs: '95vw', sm: '600px' },
+              mx: 'auto',
               mb: 2,
               pl: tweet.parent_tweet_id ? 4 : 0,
               borderLeft: tweet.parent_tweet_id
@@ -446,7 +450,7 @@ const Board = ({
       handleEditTweet,
       handlePinToggle,
       editTweetModal,
-      cachedBoards,
+      boards,
       boardId,
       updateExistingTweet,
     ]
@@ -454,7 +458,6 @@ const Board = ({
 
   // Render tweets
   const renderedTweets = useMemo(() => {
-    console.log('Valid tweets count:', validTweets.length); // Debug log
     if (!validTweets.length) return null;
     return validTweets.map(renderTweet);
   }, [validTweets, renderTweet]);
@@ -467,7 +470,7 @@ const Board = ({
       </Typography>
       <Button
         variant="contained"
-        onClick={() => debouncedFetchTweets({ include_parents: true })}
+        onClick={() => fetchTweets({ include_parents: true })}
         sx={{
           borderRadius: 2,
           textTransform: 'none',
@@ -476,7 +479,7 @@ const Board = ({
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
           '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transform: 'scale(1.03)', bgcolor: 'primary.light' },
         }}
-        aria-label="Retry fetching board data"
+        aria-label="Retry fetching tweets"
       >
         Retry
       </Button>
@@ -544,8 +547,8 @@ const Board = ({
               <Box
                 sx={{
                   p: { xs: 2, sm: 3 },
-                  maxWidth: { xs: '95vw', sm: '680px' }, // Adjusted for centering
-                  mx: 'auto', // Center the container
+                  maxWidth: { xs: '95vw', sm: '680px' },
+                  mx: 'auto',
                   display: 'flex',
                   flexDirection: 'column',
                   minHeight: '100%',
@@ -806,7 +809,7 @@ const Board = ({
                     )}
                   </Select>
                 </FormControl>
-                {cachedBoards.length > 0 && (
+                {boards.length > 0 && (
                   <FormControl fullWidth>
                     <InputLabel id="board-label">Move to Board</InputLabel>
                     <Select
@@ -823,7 +826,7 @@ const Board = ({
                       }}
                       aria-label="Move to board"
                     >
-                      {cachedBoards.map((board) => (
+                      {boards.map((board) => (
                         <MenuItem key={board.board_id} value={board.board_id}>
                           {board.title || board.name || 'Untitled Board'}
                         </MenuItem>
@@ -889,6 +892,7 @@ Board.propTypes = {
   userRole: PropTypes.string.isRequired,
   onPointsUpdate: PropTypes.func.isRequired,
   onLogout: PropTypes.func.isRequired,
+  navigate: PropTypes.func.isRequired,
   availableBoards: PropTypes.arrayOf(
     PropTypes.shape({
       board_id: PropTypes.string.isRequired,

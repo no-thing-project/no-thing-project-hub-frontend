@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, memo } from "react";
+import React, { useState, useCallback, useEffect, useMemo, memo, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Box,
@@ -52,8 +52,9 @@ const BoardPage = memo(() => {
   const theme = useTheme();
   const { board_id } = useParams();
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
+  const pointsRef = useRef(null);
+  const [pointsVisible, setPointsVisible] = useState(false);
 
-  const [isFullyLoaded, setIsFullyLoaded] = useState(false);
   const [editingBoard, setEditingBoard] = useState(null);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -86,15 +87,6 @@ const BoardPage = memo(() => {
     fetchPointsData,
   } = usePoints(token, handleLogout, navigate);
 
-  const userRole = useMemo(() => {
-    if (!boardData || !authData) return "viewer";
-    return boardData.creator_id === authData?.anonymous_id
-      ? "owner"
-      : boardData.is_public
-      ? "viewer"
-      : members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || "viewer";
-  }, [boardData, authData, members]);
-
   const {
     gates,
     loading: gatesLoading,
@@ -109,6 +101,15 @@ const BoardPage = memo(() => {
     fetchClassesList,
   } = useClasses(token, handleLogout, navigate);
 
+  const userRole = useMemo(() => {
+    if (!boardData || !authData) return "viewer";
+    return boardData.creator_id === authData?.anonymous_id
+      ? "owner"
+      : boardData.is_public
+      ? "viewer"
+      : members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || "viewer";
+  }, [boardData, authData, members]);
+
   const isFavorited = useMemo(
     () => boardData?.favorited_by?.some((user) => user.anonymous_id === authData?.anonymous_id) ?? false,
     [boardData?.favorited_by, authData?.anonymous_id]
@@ -119,50 +120,46 @@ const BoardPage = memo(() => {
     [boardData?.visibility, boardData?.is_public]
   );
 
-  // Fetch data on mount or when dependencies change
+  // Intersection observer for points UI visibility
   useEffect(() => {
-    if (!token || !board_id || !isAuthenticated) return;
+    if (!pointsRef.current || pointsLoading) return;
 
-    const controller = new AbortController();
-    Promise.all([
-      fetchBoard(board_id, controller.signal),
-      fetchPointsData(controller.signal),
-      userRole === "owner" || userRole === "admin"
-        ? fetchGatesList({ visibility: "public" }, controller.signal)
-        : Promise.resolve(),
-      userRole === "owner" || userRole === "admin"
-        ? fetchClassesList({}, controller.signal)
-        : Promise.resolve(),
-    ]).catch((err) => {
-      if (err.name !== "AbortError") {
-        showNotification(err.message || "Failed to load data", "error");
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !pointsData && !pointsLoading) {
+          setPointsVisible(true);
+          const controller = new AbortController();
+          fetchPointsData(controller.signal).catch((err) => {
+            if (err.name !== "AbortError") {
+              showNotification(err.message || "Failed to load points", "error");
+            }
+          });
+          return () => controller.abort();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(pointsRef.current);
+    return () => observer.disconnect();
+  }, [pointsRef, pointsData, pointsLoading, fetchPointsData, showNotification]);
+
+  // Handle board errors
+  useEffect(() => {
+    if (boardError) {
+      showNotification(boardError || "Error loading board", "error");
+      if (boardError?.includes("Board not found")) {
+        setTimeout(() => navigate("/boards"), 2000);
       }
-    });
-
-    return () => controller.abort();
-  }, [token, board_id, isAuthenticated, userRole, fetchBoard, fetchPointsData, fetchGatesList, fetchClassesList, showNotification]);
-
-  // Check if all data is loaded
-  useEffect(() => {
-    if (
-      boardData &&
-      pointsData &&
-      (!gatesLoading || userRole !== "owner" && userRole !== "admin") &&
-      (!classesLoading || userRole !== "owner" && userRole !== "admin")
-    ) {
-      setIsFullyLoaded(true);
     }
-  }, [boardData, pointsData, gatesLoading, classesLoading, userRole]);
-
-  // Handle errors
-  useEffect(() => {
-    const errors = [boardError, pointsError, gatesError, classesError].filter(Boolean);
-    if (errors.length) {
-      errors.forEach((err) => showNotification(err.message || "Error occurred", "error"));
+    if (pointsError) {
+      showNotification(pointsError || "Error loading points", "error");
     }
-    if (boardError?.includes("Board not found")) {
-      showNotification("Board not found.", "error");
-      setTimeout(() => navigate("/boards"), 2000);
+    if (gatesError) {
+      showNotification(gatesError || "Error loading gates", "error");
+    }
+    if (classesError) {
+      showNotification(classesError || "Error loading classes", "error");
     }
   }, [boardError, pointsError, gatesError, classesError, showNotification, navigate]);
 
@@ -175,6 +172,37 @@ const BoardPage = memo(() => {
     }
     setPrevPoints(pointsData?.total_points ?? 0);
   }, [pointsData?.total_points, prevPoints]);
+
+  // Fetch board data for specific actions
+  const fetchBoardData = useCallback(async () => {
+    if (boardData || boardLoading) return;
+    const controller = new AbortController();
+    try {
+      await fetchBoard(board_id, controller.signal);
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        showNotification(err.message || "Failed to load board", "error");
+      }
+    }
+    return () => controller.abort();
+  }, [boardData, boardLoading, fetchBoard, board_id, showNotification]);
+
+  // Fetch gates and classes when editing board
+  useEffect(() => {
+    if (!editingBoard || !token || !isAuthenticated || (userRole !== "owner" && userRole !== "admin")) return;
+
+    const controller = new AbortController();
+    Promise.all([
+      fetchGatesList({ visibility: "public" }, controller.signal),
+      fetchClassesList({}, controller.signal),
+    ]).catch((err) => {
+      if (err.name !== "AbortError") {
+        showNotification(err.message || "Failed to load gates or classes", "error");
+      }
+    });
+
+    return () => controller.abort();
+  }, [editingBoard, token, isAuthenticated, userRole, fetchGatesList, fetchClassesList, showNotification]);
 
   const validateBoardData = useCallback(
     (data) => {
@@ -224,67 +252,75 @@ const BoardPage = memo(() => {
   }, [editingBoard, userRole, validateBoardData, updateExistingBoard, showNotification]);
 
   const handleFavorite = useCallback(async () => {
+    if (!boardData) await fetchBoardData();
+    if (!boardData) return;
     try {
       await toggleFavoriteBoard(board_id, isFavorited);
       showNotification(`Board ${isFavorited ? "unfavorited" : "favorited"} successfully!`, "success");
     } catch (err) {
       showNotification("Failed to toggle favorite", "error");
     }
-  }, [board_id, isFavorited, toggleFavoriteBoard, showNotification]);
+  }, [boardData, fetchBoardData, board_id, isFavorited, toggleFavoriteBoard, showNotification]);
 
-  const handleEdit = useCallback(() => {
+  const handleEdit = useCallback(async () => {
     if (userRole !== "owner" && userRole !== "admin") {
       showNotification("You do not have permission to edit this board.", "error");
       return;
     }
-    if (boardData) {
-      setEditingBoard({
-        board_id: boardData.board_id,
-        name: boardData.name || "",
-        description: boardData.description || "",
-        is_public: boardData.is_public || false,
-        visibility: boardData.visibility || (boardData.is_public ? "public" : "private"),
-        type: boardData.type || "personal",
-        gate_id: boardData.gate_id || "",
-        class_id: boardData.class_id || "",
-        settings: {
-          max_tweets: boardData.settings?.max_tweets || 100,
-          tweet_cost: boardData.settings?.tweet_cost || 1,
-          max_members: boardData.settings?.max_members || 50,
-          favorite_cost: boardData.settings?.favorite_cost || 1,
-          points_to_creator: boardData.settings?.points_to_creator || 1,
-          allow_invites: boardData.settings?.allow_invites !== false,
-          require_approval: boardData.settings?.require_approval || false,
-          ai_moderation_enabled: boardData.settings?.ai_moderation_enabled !== false,
-          auto_archive_after: boardData.settings?.auto_archive_after || 30,
-        },
-        tags: boardData.tags || [],
-        current_user: { anonymous_id: authData?.anonymous_id, role: userRole },
-      });
-    }
-  }, [boardData, authData?.anonymous_id, userRole, showNotification]);
+    if (!boardData) await fetchBoardData();
+    if (!boardData) return;
+    setEditingBoard({
+      board_id: boardData.board_id,
+      name: boardData.name || "",
+      description: boardData.description || "",
+      is_public: boardData.is_public || false,
+      visibility: boardData.visibility || (boardData.is_public ? "public" : "private"),
+      type: boardData.type || "personal",
+      gate_id: boardData.gate_id || "",
+      class_id: boardData.class_id || "",
+      settings: {
+        max_tweets: boardData.settings?.max_tweets || 100,
+        tweet_cost: boardData.settings?.tweet_cost || 1,
+        max_members: boardData.settings?.max_members || 50,
+        favorite_cost: boardData.settings?.favorite_cost || 1,
+        points_to_creator: boardData.settings?.points_to_creator || 1,
+        allow_invites: boardData.settings?.allow_invites !== false,
+        require_approval: boardData.settings?.require_approval || false,
+        ai_moderation_enabled: boardData.settings?.ai_moderation_enabled !== false,
+        auto_archive_after: boardData.settings?.auto_archive_after || 30,
+      },
+      tags: boardData.tags || [],
+      current_user: { anonymous_id: authData?.anonymous_id, role: userRole },
+    });
+  }, [boardData, authData?.anonymous_id, userRole, fetchBoardData, showNotification]);
 
-  const handleManageMembers = useCallback(() => {
+  const handleManageMembers = useCallback(async () => {
     if (userRole !== "owner" && userRole !== "admin") {
       showNotification("You do not have permission to manage members.", "error");
       return;
     }
+    if (!boardData) await fetchBoardData();
+    if (!boardData) return;
     setMembersDialogOpen(true);
-  }, [userRole, showNotification]);
+  }, [userRole, boardData, fetchBoardData, showNotification]);
 
-  const handleShare = useCallback(() => {
+  const handleShare = useCallback(async () => {
+    if (!boardData) await fetchBoardData();
+    if (!boardData) return;
     const boardUrl = `${window.location.origin}/board/${board_id}`;
     setInviteLink(boardUrl);
     setShareDialogOpen(true);
-  }, [board_id]);
+  }, [boardData, fetchBoardData, board_id]);
 
-  const handleOpenDeleteDialog = useCallback(() => {
+  const handleOpenDeleteDialog = useCallback(async () => {
     if (userRole !== "owner") {
       showNotification("You do not have permission to delete this board.", "error");
       return;
     }
+    if (!boardData) await fetchBoardData();
+    if (!boardData) return;
     setDeleteDialogOpen(true);
-  }, [userRole, showNotification]);
+  }, [userRole, boardData, fetchBoardData, showNotification]);
 
   const handleDelete = useCallback(async () => {
     try {
@@ -331,7 +367,25 @@ const BoardPage = memo(() => {
     ));
   }, [boardData?.child_board_ids, navigate, handleMenuClose]);
 
-  if (authLoading || boardLoading || pointsLoading || !isFullyLoaded) {
+  const handleChildBoardsMenuOpen = useCallback(
+    async (event) => {
+      if (!boardData) await fetchBoardData();
+      if (!boardData) return;
+      setAnchorEl(event.currentTarget);
+    },
+    [boardData, fetchBoardData]
+  );
+
+  const handleClearBoard = useCallback(async () => {
+    if (userRole !== "owner" && userRole !== "admin") {
+      showNotification("You do not have permission to clear this board.", "error");
+      return;
+    }
+    setClearDialogOpen(false);
+    showNotification("Clear board functionality not implemented.", "warning");
+  }, [userRole, showNotification]);
+
+  if (authLoading) {
     return <LoadingSpinner />;
   }
 
@@ -351,34 +405,38 @@ const BoardPage = memo(() => {
         }}
       >
         <AnimatePresence>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.2 }}
-          >
-            <Tooltip title={`Board visibility: ${boardVisibility}`}>
-              <IconButton aria-label={`Board visibility: ${boardVisibility}`}>
-                {boardVisibility === "public" ? <Public /> : <Lock />}
-              </IconButton>
-            </Tooltip>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.2 }}
-          >
-            <Tooltip title={isFavorited ? "Unfavorite Board" : "Favorite Board"}>
-              <IconButton
-                onClick={handleFavorite}
-                aria-label={isFavorited ? "Unfavorite board" : "Favorite board"}
+          {boardData && (
+            <>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.2 }}
               >
-                {isFavorited ? <Favorite color="error" /> : <FavoriteBorder />}
-              </IconButton>
-            </Tooltip>
-          </motion.div>
+                <Tooltip title={`Board visibility: ${boardVisibility}`}>
+                  <IconButton aria-label={`Board visibility: ${boardVisibility}`}>
+                    {boardVisibility === "public" ? <Public /> : <Lock />}
+                  </IconButton>
+                </Tooltip>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Tooltip title={isFavorited ? "Unfavorite Board" : "Favorite Board"}>
+                  <IconButton
+                    onClick={handleFavorite}
+                    aria-label={isFavorited ? "Unfavorite board" : "Favorite board"}
+                  >
+                    {isFavorited ? <Favorite color="error" /> : <FavoriteBorder />}
+                  </IconButton>
+                </Tooltip>
+              </motion.div>
+            </>
+          )}
 
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
@@ -456,7 +514,7 @@ const BoardPage = memo(() => {
             </motion.div>
           )}
 
-          {childBoardMenuItems.length > 0 && (
+          {boardData?.child_board_ids?.length > 0 && (
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -467,7 +525,7 @@ const BoardPage = memo(() => {
                 <IconButton
                   aria-controls="board-menu"
                   aria-haspopup="true"
-                  onClick={handleMenuOpen}
+                  onClick={handleChildBoardsMenuOpen}
                   sx={{ bgcolor: "background.paper", "&:hover": { bgcolor: "action.hover" } }}
                   aria-label="Open child boards menu"
                 >
@@ -493,6 +551,7 @@ const BoardPage = memo(() => {
       </Box>
 
       <Box
+        ref={pointsRef}
         sx={{
           position: "absolute",
           bottom: 16,
@@ -504,22 +563,29 @@ const BoardPage = memo(() => {
           "@media (max-width: 600px)": { transform: "scale(0.8)" },
         }}
       >
-        <Tooltip title="Available points">
-          <IconButton size="small" aria-label="Available points">
-            <Toll />
-          </IconButton>
-        </Tooltip>
-        <AnimatedPoints points={pointsData?.total_points || 0} />
-        {pointsSpent > 0 && <PointsDeductionAnimation pointsSpent={pointsSpent} />}
+        {pointsVisible && (
+          <>
+            <Tooltip title="Available points">
+              <IconButton size="small" aria-label="Available points">
+                <Toll />
+              </IconButton>
+            </Tooltip>
+            <AnimatedPoints points={pointsData?.total_points || 0} />
+            {pointsSpent > 0 && <PointsDeductionAnimation pointsSpent={pointsSpent} />}
+          </>
+        )}
       </Box>
 
       <Board
         boardId={board_id}
-        boardTitle={boardData?.name}
+        boardTitle={boardData?.name || ""}
         token={token}
         currentUser={authData}
         userRole={userRole}
-        onPointsUpdate={() => fetchPointsData()}
+        onPointsUpdate={() => {
+          if (!pointsVisible) setPointsVisible(true);
+          fetchPointsData();
+        }}
         onLogout={handleLogout}
         navigate={navigate}
         availableBoards={[]}
@@ -541,22 +607,24 @@ const BoardPage = memo(() => {
         />
       )}
 
-      <MemberFormDialog
-        open={membersDialogOpen}
-        title="Manage Board Members"
-        boardId={board_id}
-        token={token}
-        onSave={() => {
-          fetchBoard(board_id);
-          setMembersDialogOpen(false);
-        }}
-        onCancel={() => setMembersDialogOpen(false)}
-        disabled={userRole !== "owner" && userRole !== "admin"}
-        members={members || []}
-        addMember={(boardId, memberData) => addMemberToBoard(boardId, memberData)}
-        removeMember={(boardId, username) => removeMemberFromBoard(boardId, username)}
-        updateMemberRole={(boardId, username, role) => updateMemberRole(boardId, username, role)}
-      />
+      {membersDialogOpen && (
+        <MemberFormDialog
+          open={membersDialogOpen}
+          title="Manage Board Members"
+          boardId={board_id}
+          token={token}
+          onSave={() => {
+            fetchBoard(board_id);
+            setMembersDialogOpen(false);
+          }}
+          onCancel={() => setMembersDialogOpen(false)}
+          disabled={userRole !== "owner" && userRole !== "admin"}
+          members={members || []}
+          addMember={(boardId, memberData) => addMemberToBoard(boardId, memberData)}
+          removeMember={(boardId, username) => removeMemberFromBoard(boardId, username)}
+          updateMemberRole={(boardId, username, role) => updateMemberRole(boardId, username, role)}
+        />
+      )}
 
       <Dialog
         open={shareDialogOpen}
@@ -599,7 +667,7 @@ const BoardPage = memo(() => {
       <DeleteConfirmationDialog
         open={clearDialogOpen}
         onClose={() => setClearDialogOpen(false)}
-        onConfirm={() => setClearDialogOpen(false)}
+        onConfirm={handleClearBoard}
         message="Are you sure you want to delete all tweets on this board? This action cannot be undone."
         disabled={boardLoading}
       />
