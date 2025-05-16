@@ -6,13 +6,14 @@ const TweetContentStyles = {
   // Tweet Card (Paper)
   tweetCard: (isPinned, isParentHighlighted) => ({
     p: { xs: 2, sm: 2.5 },
+    mb: 1,
     bgcolor: (theme) =>
       isPinned
         ? alpha(theme.palette.warning.light, 0.25)
         : isParentHighlighted
         ? alpha(theme.palette.primary.light, 0.15)
         : theme.palette.background.paper,
-    borderRadius: 3,
+    borderRadius: 1,
     minWidth: { xs: '180px', sm: '240px' },
     maxWidth: { xs: '90vw', sm: '360px' },
     boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
@@ -42,8 +43,7 @@ const TweetContentStyles = {
     '&.list-view': {
       maxWidth: { xs: '95vw', sm: '680px' },
       margin: '0 auto',
-      mb: 3,
-      borderRadius: 3,
+      mb: 3
     },
   }),
 
@@ -109,13 +109,11 @@ const TweetContentStyles = {
     mb: hasText ? 2.5 : 0,
     mt: 1.5,
     display: 'flex',
-    flexDirection: 'column',
-    gap: 1.5,
-    borderRadius: 3,
-    overflow: 'hidden',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 1,
+    borderRadius: 1,
     width: '100%',
-    maxWidth: { xs: '100%', sm: '360px' },
-    background: (theme) => `linear-gradient(145deg, ${theme.palette.grey[50]}, ${theme.palette.grey[100]})`,
   }),
   image: (isSingle) => ({
     width: '100%',
@@ -190,8 +188,9 @@ const TweetContentStyles = {
   videoContainer: (hasTextOrImages) => ({
     mb: hasTextOrImages ? 2.5 : 0,
     mt: 1.5,
-    width: '100%',
-    maxWidth: { xs: '100%', sm: '360px' },
+    display: 'flex',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   }),
   videoInner: {
     position: 'relative',
@@ -232,8 +231,9 @@ const TweetContentStyles = {
   audioContainer: (hasTextOrMedia) => ({
     mb: hasTextOrMedia ? 2.5 : 0,
     mt: 1.5,
-    width: '100%',
-    maxWidth: { xs: '100%', sm: '360px' },
+    display: 'flex',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   }),
   audioInner: {
     display: 'flex',
