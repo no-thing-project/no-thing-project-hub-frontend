@@ -155,7 +155,7 @@ const TweetContent = ({
   }, [editForm, onEdit, tweet]);
 
   const canEdit = useMemo(() => {
-    if (bypassOwnership || ["moderator", "administrator"].includes(userRole))
+    if (bypassOwnership || ["moderator", "admin"].includes(userRole))
       return true;
     return (
       tweet.anonymous_id === currentUser?.anonymous_id ||

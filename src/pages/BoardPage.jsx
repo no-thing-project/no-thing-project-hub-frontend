@@ -34,10 +34,6 @@ import {
 import LoadingSpinner from "../components/Layout/LoadingSpinner";
 import Board from "../components/social-features/Board/Board";
 import useAuth from "../hooks/useAuth";
-import { useBoards } from "../hooks/useBoards";
-import { usePoints } from "../hooks/usePoints";
-import { useGates } from "../hooks/useGates";
-import { useClasses } from "../hooks/useClasses";
 import BoardFormDialog from "../components/Dialogs/BoardFormDialog";
 import MemberFormDialog from "../components/Dialogs/MemberFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
@@ -45,6 +41,10 @@ import { useNotification } from "../context/NotificationContext";
 import { actionButtonStyles, cancelButtonStyle } from "../styles/BaseStyles";
 import AnimatedPoints from "../components/AnimatedPoints/AnimatedPoints";
 import PointsDeductionAnimation from "../components/PointsDeductionAnimation/PointsDeductionAnimation";
+import { useBoards } from "../hooks/useBoards";
+import { usePoints } from "../hooks/usePoints";
+import { useGates } from "../hooks/useGates";
+import { useClasses } from "../hooks/useClasses";
 
 const BoardPage = memo(() => {
   const navigate = useNavigate();
@@ -52,36 +52,6 @@ const BoardPage = memo(() => {
   const theme = useTheme();
   const { board_id } = useParams();
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
-  const {
-    boardItem,
-    members,
-    availableBoards,
-    fetchBoard,
-    fetchBoardMembersList,
-    updateExistingBoard,
-    toggleFavoriteBoard,
-    deleteExistingBoard,
-    addMemberToBoard,
-    removeMemberFromBoard,
-    updateMemberRole,
-    loading: boardsLoading,
-    error: boardError,
-  } = useBoards(token, handleLogout, navigate);
-  const { pointsData, fetchPointsData, loading: pointsLoading, error: pointsError } = usePoints(
-    token,
-    handleLogout,
-    navigate
-  );
-  const { gates, fetchGatesList, loading: gatesLoading, error: gatesError } = useGates(
-    token,
-    handleLogout,
-    navigate
-  );
-  const { classes, fetchClassesList, loading: classesLoading, error: classesError } = useClasses(
-    token,
-    handleLogout,
-    navigate
-  );
 
   const [isFullyLoaded, setIsFullyLoaded] = useState(false);
   const [editingBoard, setEditingBoard] = useState(null);
@@ -91,108 +61,112 @@ const BoardPage = memo(() => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [inviteLink, setInviteLink] = useState("");
-  const [prevPoints, setPrevPoints] = useState(pointsData?.total_points || 0);
+  const [prevPoints, setPrevPoints] = useState(0);
   const [pointsSpent, setPointsSpent] = useState(0);
 
-  const debounce = useMemo(
-    () => (func, wait) => {
-      let timeout;
-      return (...args) => {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func(...args), wait);
-      };
-    },
-    []
-  );
+  // Initialize hooks
+  const {
+    boardItem: boardData,
+    members,
+    loading: boardLoading,
+    error: boardError,
+    fetchBoard,
+    updateExistingBoard,
+    toggleFavoriteBoard,
+    deleteExistingBoard,
+    addMemberToBoard,
+    removeMemberFromBoard,
+    updateMemberRole,
+  } = useBoards(token, handleLogout, navigate);
+
+  const {
+    pointsData,
+    loading: pointsLoading,
+    error: pointsError,
+    fetchPointsData,
+  } = usePoints(token, handleLogout, navigate);
 
   const userRole = useMemo(() => {
-    if (!boardItem || !authData) return "viewer";
-    return boardItem.creator_id === authData?.anonymous_id
+    if (!boardData || !authData) return "viewer";
+    return boardData.creator_id === authData?.anonymous_id
       ? "owner"
-      : boardItem.is_public
+      : boardData.is_public
       ? "viewer"
       : members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || "viewer";
-  }, [boardItem, authData, members]);
+  }, [boardData, authData, members]);
+
+  const {
+    gates,
+    loading: gatesLoading,
+    error: gatesError,
+    fetchGatesList,
+  } = useGates(token, handleLogout, navigate);
+
+  const {
+    classes,
+    loading: classesLoading,
+    error: classesError,
+    fetchClassesList,
+  } = useClasses(token, handleLogout, navigate);
 
   const isFavorited = useMemo(
-    () => boardItem?.favorited_by?.some((user) => user.anonymous_id === authData?.anonymous_id) ?? false,
-    [boardItem?.favorited_by, authData?.anonymous_id]
+    () => boardData?.favorited_by?.some((user) => user.anonymous_id === authData?.anonymous_id) ?? false,
+    [boardData?.favorited_by, authData?.anonymous_id]
   );
 
   const boardVisibility = useMemo(
-    () => boardItem?.visibility ?? (boardItem?.is_public ? "public" : "private"),
-    [boardItem?.visibility, boardItem?.is_public]
+    () => boardData?.visibility ?? (boardData?.is_public ? "public" : "private"),
+    [boardData?.visibility, boardData?.is_public]
   );
 
-  const loadData = useCallback(
-    async (signal) => {
-      if (!isAuthenticated || !token) {
-        showNotification("Please log in to view boards.", "error");
-        setIsFullyLoaded(true);
-        return;
-      }
-      setIsFullyLoaded(false);
-      try {
-        const boardData = await fetchBoard(board_id, signal);
-        if (!boardData) throw new Error("Board not found.");
-
-        await fetchPointsData(signal);
-
-        if (boardData.is_public === false && userRole === "viewer") {
-          throw new Error("Access denied to private board.");
-        }
-
-        const promises = [];
-        if (userRole === "owner" || userRole === "admin") {
-          promises.push(fetchGatesList({ visibility: "public" }, signal), fetchClassesList({}, signal));
-        }
-
-        await Promise.all(promises);
-        setIsFullyLoaded(true);
-      } catch (err) {
-        if (err.name === "AbortError") return;
-        const message = err.message.includes("Access denied")
-          ? "You do not have access to this private board."
-          : err.message.includes("not found")
-          ? "Board not found."
-          : `Failed to load board data: ${err.message}`;
-        showNotification(message, "error");
-        setTimeout(() => navigate("/boards"), 2000);
-        setIsFullyLoaded(true);
-      }
-    },
-    [
-      isAuthenticated,
-      token,
-      board_id,
-      fetchBoard,
-      fetchPointsData,
-      fetchGatesList,
-      fetchClassesList,
-      showNotification,
-      userRole,
-      navigate,
-    ]
-  );
-
-  const debouncedLoadData = useMemo(() => debounce(loadData, 300), [debounce, loadData]);
-
+  // Fetch data on mount or when dependencies change
   useEffect(() => {
+    if (!token || !board_id || !isAuthenticated) return;
+
     const controller = new AbortController();
-    debouncedLoadData(controller.signal);
-    return () => {
-      controller.abort();
-      setPointsSpent(0);
-    };
-  }, [debouncedLoadData]);
+    Promise.all([
+      fetchBoard(board_id, controller.signal),
+      fetchPointsData(controller.signal),
+      userRole === "owner" || userRole === "admin"
+        ? fetchGatesList({ visibility: "public" }, controller.signal)
+        : Promise.resolve(),
+      userRole === "owner" || userRole === "admin"
+        ? fetchClassesList({}, controller.signal)
+        : Promise.resolve(),
+    ]).catch((err) => {
+      if (err.name !== "AbortError") {
+        showNotification(err.message || "Failed to load data", "error");
+      }
+    });
 
+    return () => controller.abort();
+  }, [token, board_id, isAuthenticated, userRole, fetchBoard, fetchPointsData, fetchGatesList, fetchClassesList, showNotification]);
+
+  // Check if all data is loaded
   useEffect(() => {
-    const errors = [boardError, gatesError, classesError, pointsError].filter(Boolean);
-    if (errors.length) {
-      errors.forEach((err) => showNotification(err, "error"));
+    if (
+      boardData &&
+      pointsData &&
+      (!gatesLoading || userRole !== "owner" && userRole !== "admin") &&
+      (!classesLoading || userRole !== "owner" && userRole !== "admin")
+    ) {
+      setIsFullyLoaded(true);
     }
-  }, [boardError, gatesError, classesError, pointsError, showNotification]);
+  }, [boardData, pointsData, gatesLoading, classesLoading, userRole]);
 
+  // Handle errors
+  useEffect(() => {
+    const errors = [boardError, pointsError, gatesError, classesError].filter(Boolean);
+    if (errors.length) {
+      errors.forEach((err) => showNotification(err.message || "Error occurred", "error"));
+    }
+    if (boardError?.includes("Board not found")) {
+      showNotification("Board not found.", "error");
+      setTimeout(() => navigate("/boards"), 2000);
+    }
+  }, [boardError, pointsError, gatesError, classesError, showNotification, navigate]);
+
+  // Track points changes for animation
   useEffect(() => {
     if (pointsData?.total_points !== undefined && pointsData.total_points < prevPoints) {
       setPointsSpent(prevPoints - pointsData.total_points);
@@ -211,7 +185,7 @@ const BoardPage = memo(() => {
       if (s.favorite_cost < 0) return "Favorite cost must be non-negative";
       if (s.points_to_creator < 0 || s.points_to_creator > 100) return "Points to creator must be 0-100";
       if (s.max_members < 1 || s.max_members > 10000) return "Max members must be 1-10000";
-      if (data.visibility === "public" && !data.gate_id && !data.class_id && gates.length > 0) {
+      if (data.visibility === "public" && !data.gate_id && !data.class_id && gates?.length > 0) {
         return "Public boards require a gate or class";
       }
       return "";
@@ -231,7 +205,7 @@ const BoardPage = memo(() => {
       return;
     }
     try {
-      const updatedBoard = await updateExistingBoard(editingBoard.board_id, {
+      await updateExistingBoard(editingBoard.board_id, {
         name: editingBoard.name,
         description: editingBoard.description,
         is_public: editingBoard.visibility === "public",
@@ -242,13 +216,12 @@ const BoardPage = memo(() => {
         settings: editingBoard.settings,
         tags: editingBoard.tags,
       });
-      if (!updatedBoard) throw new Error("Failed to update board");
-      setEditingBoard(null);
       showNotification("Board updated successfully!", "success");
+      setEditingBoard(null);
     } catch (err) {
       showNotification(err.message || "Failed to update board", "error");
     }
-  }, [editingBoard, updateExistingBoard, showNotification, validateBoardData, userRole]);
+  }, [editingBoard, userRole, validateBoardData, updateExistingBoard, showNotification]);
 
   const handleFavorite = useCallback(async () => {
     try {
@@ -264,48 +237,40 @@ const BoardPage = memo(() => {
       showNotification("You do not have permission to edit this board.", "error");
       return;
     }
-    if (boardItem) {
+    if (boardData) {
       setEditingBoard({
-        board_id: boardItem.board_id,
-        name: boardItem.name || "",
-        description: boardItem.description || "",
-        is_public: boardItem.is_public || false,
-        visibility: boardItem.visibility || (boardItem.is_public ? "public" : "private"),
-        type: boardItem.type || "personal",
-        gate_id: boardItem.gate_id || "",
-        class_id: boardItem.class_id || "",
+        board_id: boardData.board_id,
+        name: boardData.name || "",
+        description: boardData.description || "",
+        is_public: boardData.is_public || false,
+        visibility: boardData.visibility || (boardData.is_public ? "public" : "private"),
+        type: boardData.type || "personal",
+        gate_id: boardData.gate_id || "",
+        class_id: boardData.class_id || "",
         settings: {
-          max_tweets: boardItem.settings?.max_tweets || 100,
-          tweet_cost: boardItem.settings?.tweet_cost || 1,
-          max_members: boardItem.settings?.max_members || 50,
-          favorite_cost: boardItem.settings?.favorite_cost || 1,
-          points_to_creator: boardItem.settings?.points_to_creator || 1,
-          allow_invites: boardItem.settings?.allow_invites !== false,
-          require_approval: boardItem.settings?.require_approval || false,
-          ai_moderation_enabled: boardItem.settings?.ai_moderation_enabled !== false,
-          auto_archive_after: boardItem.settings?.auto_archive_after || 30,
+          max_tweets: boardData.settings?.max_tweets || 100,
+          tweet_cost: boardData.settings?.tweet_cost || 1,
+          max_members: boardData.settings?.max_members || 50,
+          favorite_cost: boardData.settings?.favorite_cost || 1,
+          points_to_creator: boardData.settings?.points_to_creator || 1,
+          allow_invites: boardData.settings?.allow_invites !== false,
+          require_approval: boardData.settings?.require_approval || false,
+          ai_moderation_enabled: boardData.settings?.ai_moderation_enabled !== false,
+          auto_archive_after: boardData.settings?.auto_archive_after || 30,
         },
-        tags: boardItem.tags || [],
+        tags: boardData.tags || [],
         current_user: { anonymous_id: authData?.anonymous_id, role: userRole },
       });
     }
-  }, [boardItem, authData?.anonymous_id, userRole]);
+  }, [boardData, authData?.anonymous_id, userRole, showNotification]);
 
-  const handleManageMembers = useCallback(async () => {
+  const handleManageMembers = useCallback(() => {
     if (userRole !== "owner" && userRole !== "admin") {
       showNotification("You do not have permission to manage members.", "error");
       return;
     }
-    const controller = new AbortController();
-    try {
-      await fetchBoardMembersList(board_id, controller.signal);
-      setMembersDialogOpen(true);
-    } catch (err) {
-      if (err.name === "AbortError") return;
-      showNotification(`Failed to load members: ${err.message}`, "error");
-    }
-    return () => controller.abort();
-  }, [userRole, board_id, fetchBoardMembersList, showNotification]);
+    setMembersDialogOpen(true);
+  }, [userRole, showNotification]);
 
   const handleShare = useCallback(() => {
     const boardUrl = `${window.location.origin}/board/${board_id}`;
@@ -319,18 +284,17 @@ const BoardPage = memo(() => {
       return;
     }
     setDeleteDialogOpen(true);
-  }, [userRole]);
+  }, [userRole, showNotification]);
 
   const handleDelete = useCallback(async () => {
     try {
       await deleteExistingBoard(board_id);
-      setDeleteDialogOpen(false);
       showNotification("Board deleted successfully!", "success");
       navigate("/boards");
     } catch (err) {
       showNotification("Failed to delete board", "error");
-      setDeleteDialogOpen(false);
     }
+    setDeleteDialogOpen(false);
   }, [board_id, deleteExistingBoard, navigate, showNotification]);
 
   const handleCopyLink = useCallback(async () => {
@@ -352,7 +316,7 @@ const BoardPage = memo(() => {
   const handleMenuClose = useCallback(() => setAnchorEl(null), []);
 
   const childBoardMenuItems = useMemo(() => {
-    const uniqueChildIds = [...new Set(boardItem?.child_board_ids?.filter((id) => id) || [])];
+    const uniqueChildIds = [...new Set(boardData?.child_board_ids?.filter((id) => id) || [])];
     return uniqueChildIds.map((childId) => (
       <MenuItem
         key={childId}
@@ -365,9 +329,9 @@ const BoardPage = memo(() => {
         Go to Child Board {childId.slice(0, 8)}
       </MenuItem>
     ));
-  }, [boardItem?.child_board_ids, navigate, handleMenuClose]);
+  }, [boardData?.child_board_ids, navigate, handleMenuClose]);
 
-  if (authLoading || boardsLoading || pointsLoading || !isFullyLoaded) {
+  if (authLoading || boardLoading || pointsLoading || !isFullyLoaded) {
     return <LoadingSpinner />;
   }
 
@@ -440,9 +404,9 @@ const BoardPage = memo(() => {
                 <Tooltip title="Manage Members">
                   <IconButton
                     onClick={handleManageMembers}
-                    aria-label={`Manage members (current count: ${members.length})`}
+                    aria-label={`Manage members (current count: ${members?.length || 0})`}
                   >
-                    <Badge badgeContent={members.length} color="default">
+                    <Badge badgeContent={members?.length || 0} color="default">
                       <People />
                     </Badge>
                   </IconButton>
@@ -551,14 +515,14 @@ const BoardPage = memo(() => {
 
       <Board
         boardId={board_id}
-        boardTitle={boardItem?.name}
+        boardTitle={boardData?.name}
         token={token}
         currentUser={authData}
         userRole={userRole}
-        onPointsUpdate={fetchPointsData}
+        onPointsUpdate={() => fetchPointsData()}
         onLogout={handleLogout}
         navigate={navigate}
-        availableBoards={availableBoards}
+        availableBoards={[]}
       />
 
       {editingBoard && (
@@ -569,9 +533,9 @@ const BoardPage = memo(() => {
           setBoard={setEditingBoard}
           onSave={handleUpdateBoard}
           onCancel={() => setEditingBoard(null)}
-          disabled={boardsLoading || gatesLoading || classesLoading}
-          gates={gates}
-          classes={classes}
+          disabled={boardLoading || gatesLoading || classesLoading}
+          gates={gates || []}
+          classes={classes || []}
           token={token}
           userRole={userRole}
         />
@@ -583,15 +547,15 @@ const BoardPage = memo(() => {
         boardId={board_id}
         token={token}
         onSave={() => {
-          fetchBoardMembersList(board_id);
+          fetchBoard(board_id);
           setMembersDialogOpen(false);
         }}
         onCancel={() => setMembersDialogOpen(false)}
         disabled={userRole !== "owner" && userRole !== "admin"}
-        members={members}
-        addMember={addMemberToBoard}
-        removeMember={removeMemberFromBoard}
-        updateMemberRole={updateMemberRole}
+        members={members || []}
+        addMember={(boardId, memberData) => addMemberToBoard(boardId, memberData)}
+        removeMember={(boardId, username) => removeMemberFromBoard(boardId, username)}
+        updateMemberRole={(boardId, username, role) => updateMemberRole(boardId, username, role)}
       />
 
       <Dialog
@@ -637,7 +601,7 @@ const BoardPage = memo(() => {
         onClose={() => setClearDialogOpen(false)}
         onConfirm={() => setClearDialogOpen(false)}
         message="Are you sure you want to delete all tweets on this board? This action cannot be undone."
-        disabled={boardsLoading}
+        disabled={boardLoading}
       />
 
       <DeleteConfirmationDialog
@@ -645,7 +609,7 @@ const BoardPage = memo(() => {
         onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDelete}
         message="Are you sure you want to delete this board? This action cannot be undone."
-        disabled={boardsLoading}
+        disabled={boardLoading}
       />
     </Box>
   );

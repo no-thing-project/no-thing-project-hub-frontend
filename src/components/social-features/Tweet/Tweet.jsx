@@ -15,7 +15,6 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
   const [dragging, setDragging] = useState(false);
   const [hovered, setHovered] = useState(false);
 
-  // Sync local position with tweet.position when not dragging
   useEffect(() => {
     if (!dragging && !justDroppedRef.current) {
       const newX = Math.max(0, Math.min(tweet.position?.x ?? 0, BOARD_SIZE - 200));
@@ -27,10 +26,9 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
     }
   }, [tweet.position?.x, tweet.position?.y, dragging, localPosition]);
 
-  // Determine if the tweet is draggable
   const isDraggable = useMemo(() => {
     if (!tweet || tweet.is_pinned) return false;
-    if (bypassOwnership || ['moderator', 'administrator'].includes(userRole)) return true;
+    if (bypassOwnership || ['moderator', 'admin'].includes(userRole)) return true;
     return (
       tweet.anonymous_id === currentUser?.anonymous_id ||
       tweet.user_id === currentUser?.anonymous_id ||
@@ -44,7 +42,6 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
     currentUser?.username,
   ]);
 
-  // Debounced onStop handler
   const debouncedOnStop = useMemo(
     () =>
       debounce((e, data) => {
@@ -65,7 +62,6 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
     [onStop, tweet.tweet_id]
   );
 
-  // Cleanup debounce on unmount
   useEffect(() => () => debouncedOnStop.cancel(), [debouncedOnStop]);
 
   const handleStart = useCallback(() => {
@@ -84,7 +80,6 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
       setDragging(false);
       justDroppedRef.current = true;
 
-      // Ignore menu clicks
       if (e.target.closest('.tweet-menu')) return;
 
       setTimeout(() => (justDroppedRef.current = false), 100);
@@ -154,7 +149,7 @@ DraggableTweet.propTypes = {
     username: PropTypes.string,
   }).isRequired,
   userRole: PropTypes.string.isRequired,
-  bypassOwnership: PropTypes.bool
+  bypassOwnership: PropTypes.bool,
 };
 
 DraggableTweet.defaultProps = {
