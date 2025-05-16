@@ -391,6 +391,7 @@ const Board = ({
           relatedTweetIds={relatedTweetIds}
           availableBoards={editTweetModal?.availableBoards || cachedBoards}
           boardId={boardId}
+          isListView={isListView}
         />
       );
 

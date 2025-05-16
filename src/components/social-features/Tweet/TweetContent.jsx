@@ -62,6 +62,7 @@ const TweetContent = ({
   relatedTweetIds = [],
   availableBoards = [],
   boardId,
+  isListView = false,
 }) => {
   const [animate, setAnimate] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -430,7 +431,7 @@ const TweetContent = ({
         sx={{
           position: "relative",
           overflow: "visible",
-          ...TweetContentStyles.tweetCard(tweet.is_pinned),
+          ...TweetContentStyles.tweetCard(tweet.is_pinned, isListView),
           ...highlightStyle,
         }}
         role="article"

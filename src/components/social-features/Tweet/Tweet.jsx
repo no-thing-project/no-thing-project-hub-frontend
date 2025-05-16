@@ -154,7 +154,7 @@ DraggableTweet.propTypes = {
     username: PropTypes.string,
   }).isRequired,
   userRole: PropTypes.string.isRequired,
-  bypassOwnership: PropTypes.bool,
+  bypassOwnership: PropTypes.bool
 };
 
 DraggableTweet.defaultProps = {
