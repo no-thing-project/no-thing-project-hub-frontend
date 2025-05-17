@@ -40,14 +40,12 @@ const statusColorMap = {
   archived: 'default',
 };
 
-// Animation variants
 const mediaVariants = {
   initial: { opacity: 0, scale: 0.95 },
   animate: { opacity: 1, scale: 1, transition: { duration: 0.3, ease: 'easeOut' } },
   exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } },
 };
 
-// Circular Video Player
 const CircularVideoPlayer = memo(({ src, duration, ariaLabel }) => (
   <motion.div variants={mediaVariants} initial="initial" animate="animate" exit="exit">
     <Box sx={TweetContentStyles.mediaWrapper} role="region" aria-label={ariaLabel}>
@@ -70,7 +68,6 @@ CircularVideoPlayer.propTypes = {
   ariaLabel: PropTypes.string.isRequired,
 };
 
-// Standard Video Player
 const StandardVideoPlayer = memo(({ src, duration, ariaLabel }) => (
   <motion.div variants={mediaVariants} initial="initial" animate="animate" exit="exit">
     <Box sx={TweetContentStyles.mediaWrapper} role="region" aria-label={ariaLabel}>
@@ -93,25 +90,16 @@ StandardVideoPlayer.propTypes = {
   ariaLabel: PropTypes.string.isRequired,
 };
 
-// Audio Player
 const AudioPlayer = memo(({ src }) => (
-      <Box sx={TweetContentStyles.audioPlayer}>
-        <audio
-          src={src}
-          controls
-          style={{ width: '100%' }}
-          preload="metadata"
-        />
-      </Box>
+  <Box sx={TweetContentStyles.audioPlayer}>
+    <audio src={src} controls style={{ width: '100%' }} preload="metadata" />
+  </Box>
 ));
 
 AudioPlayer.propTypes = {
   src: PropTypes.string.isRequired,
-  isRecorded: PropTypes.bool,
-  ariaLabel: PropTypes.string.isRequired,
 };
 
-// File Item
 const FileItem = memo(({ file, index }) => (
   <motion.div
     variants={mediaVariants}
@@ -161,6 +149,7 @@ const TweetContent = ({
   availableBoards = [],
   boardId,
   isListView = false,
+  error = null, // New prop for error state
 }) => {
   const [animate, setAnimate] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -168,7 +157,6 @@ const TweetContent = ({
   const [openMediaModal, setOpenMediaModal] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Memoized derived data
   const tweetAuthor = useMemo(
     () => tweet.username || tweet.user?.username || 'Someone',
     [tweet.username, tweet.user?.username]
@@ -211,7 +199,6 @@ const TweetContent = ({
   const chipColor = statusColorMap[rawStatus] || 'default';
   const chipLabel = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
 
-  // Like animation
   useEffect(() => {
     if (tweet.stats?.like_count !== undefined) {
       setAnimate(true);
@@ -220,7 +207,6 @@ const TweetContent = ({
     }
   }, [tweet.stats?.like_count]);
 
-  // Event handlers
   const handleMouseEnter = useCallback(() => {
     setHovered(true);
     if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
@@ -266,7 +252,6 @@ const TweetContent = ({
 
   const handleToggleExpand = useCallback(() => setIsExpanded((prev) => !prev), []);
 
-  // Memoized highlight style
   const highlightStyle = useMemo(() => {
     if (hovered || isRelated || isParentHighlighted) {
       return {
@@ -279,7 +264,6 @@ const TweetContent = ({
     return {};
   }, [hovered, isRelated, isParentHighlighted]);
 
-  // Memoized text content
   const { previewText, remainderText } = useMemo(() => {
     const text = tweet.content?.value || '';
     const PREVIEW_LEN = 200;
@@ -294,171 +278,167 @@ const TweetContent = ({
     };
   }, [tweet.content?.value]);
 
-  // Memoized media content
-  const renderContent = useMemo(() => {
-    const files = tweet.content?.metadata?.files || [];
-    const hasText = !!tweet.content?.value;
-    const imageFiles = files.filter((f) => f.contentType?.startsWith('image'));
-    const videoFiles = files.filter((f) => f.contentType?.startsWith('video'));
-    const audioFiles = files.filter((f) => f.contentType?.startsWith('audio'));
-    const otherFiles = files.filter(
+  const renderImages = useMemo(() => {
+    const imageFiles = tweet.content?.metadata?.files?.filter((f) => f.contentType?.startsWith('image')) || [];
+    if (!imageFiles.length) return null;
+    return (
+      <Box sx={TweetContentStyles.imageContainer(!!tweet.content?.value)} role="region" aria-label="Images">
+        <Grid container spacing={1}>
+          {imageFiles.slice(0, 4).map((file, index) => (
+            <Grid
+              item
+              xs={imageFiles.length === 1 ? 12 : 6}
+              sm={imageFiles.length === 1 ? 12 : 3}
+              key={file.fileKey || `img-${index}`}
+            >
+              <motion.div variants={mediaVariants} initial="initial" animate="animate" exit="exit">
+                <LazyLoadImage
+                  src={file.url}
+                  alt={`Image ${index + 1}`}
+                  effect="blur"
+                  style={TweetContentStyles.image(imageFiles.length === 1)}
+                  onError={(e) => (e.target.src = '/fallback-image.png')}
+                  placeholder={
+                    <Box sx={TweetContentStyles.imagePlaceholder}>
+                      <CircularProgress size={24} />
+                    </Box>
+                  }
+                />
+              </motion.div>
+            </Grid>
+          ))}
+        </Grid>
+        {imageFiles.length > 4 && (
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Typography
+              variant="caption"
+              sx={TweetContentStyles.imageViewAll}
+              onClick={handleOpenMediaModal}
+              role="button"
+              tabIndex={0}
+              onKeyPress={(e) => e.key === 'Enter' && handleOpenMediaModal(e)}
+            >
+              View all images ({imageFiles.length})
+            </Typography>
+          </motion.div>
+        )}
+      </Box>
+    );
+  }, [tweet.content?.metadata?.files, handleOpenMediaModal]);
+
+  const renderVideos = useMemo(() => {
+    const videoFiles = tweet.content?.metadata?.files?.filter((f) => f.contentType?.startsWith('video')) || [];
+    if (!videoFiles.length) return null;
+    return (
+      <Box
+        sx={TweetContentStyles.videoContainer(!!tweet.content?.value || renderImages)}
+        role="region"
+        aria-label="Videos"
+      >
+        {videoFiles[0].contentType === 'video/webm' ? (
+          <CircularVideoPlayer
+            src={videoFiles[0].url}
+            duration={videoFiles[0].duration}
+            ariaLabel="Recorded tweet video"
+          />
+        ) : (
+          <StandardVideoPlayer
+            src={videoFiles[0].url}
+            duration={videoFiles[0].duration}
+            ariaLabel="Tweet video"
+          />
+        )}
+        {videoFiles.length > 1 && (
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Typography
+              variant="caption"
+              sx={TweetContentStyles.videoViewAll}
+              onClick={handleOpenMediaModal}
+              role="button"
+              tabIndex={0}
+              onKeyPress={(e) => e.key === 'Enter' && handleOpenMediaModal(e)}
+            >
+              View all videos ({videoFiles.length})
+            </Typography>
+          </motion.div>
+        )}
+      </Box>
+    );
+  }, [tweet.content?.metadata?.files, handleOpenMediaModal, renderImages]);
+
+  const renderAudio = useMemo(() => {
+    const audioFiles = tweet.content?.metadata?.files?.filter((f) => f.contentType?.startsWith('audio')) || [];
+    if (!audioFiles.length) return null;
+    return (
+      <Box
+        sx={TweetContentStyles.audioContainer(
+          !!tweet.content?.value || renderImages || renderVideos
+        )}
+        role="region"
+        aria-label="Audio"
+      >
+        <AudioPlayer src={audioFiles[0].url} />
+        {audioFiles.length > 1 && (
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Typography
+              variant="caption"
+              sx={TweetContentStyles.audioViewAll}
+              onClick={handleOpenMediaModal}
+              role="button"
+              tabIndex={0}
+              onKeyPress={(e) => e.key === 'Enter' && handleOpenMediaModal(e)}
+            >
+              View all audio ({audioFiles.length})
+            </Typography>
+          </motion.div>
+        )}
+      </Box>
+    );
+  }, [tweet.content?.metadata?.files, handleOpenMediaModal, renderImages, renderVideos]);
+
+  const renderOtherFiles = useMemo(() => {
+    const otherFiles = tweet.content?.metadata?.files?.filter(
       (f) =>
         !f.contentType?.startsWith('image') &&
         !f.contentType?.startsWith('video') &&
         !f.contentType?.startsWith('audio')
+    ) || [];
+    if (!otherFiles.length) return null;
+    return (
+      <Box sx={TweetContentStyles.otherFilesContainer(!!tweet.content?.value)} role="region" aria-label="Files">
+        {otherFiles.slice(0, 2).map((file, idx) => (
+          <FileItem file={file} index={idx} key={file.fileKey || `other-${idx}`} />
+        ))}
+        {otherFiles.length > 2 && (
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Typography
+              variant="caption"
+              sx={TweetContentStyles.otherFilesViewAll}
+              onClick={handleOpenMediaModal}
+              role="button"
+              tabIndex={0}
+              onKeyPress={(e) => e.key === 'Enter' && handleOpenMediaModal(e)}
+            >
+              View all files ({otherFiles.length})
+            </Typography>
+          </motion.div>
+        )}
+      </Box>
     );
-    const hasMedia = imageFiles.length || videoFiles.length || audioFiles.length || otherFiles.length;
+  }, [tweet.content?.metadata?.files, handleOpenMediaModal]);
 
-    const renderImages = () => {
-      if (!imageFiles.length) return null;
-      return (
-        <Box sx={TweetContentStyles.imageContainer(hasText)} role="region" aria-label="Images">
-          <Grid container spacing={1}>
-            {imageFiles.slice(0, 4).map((file, index) => (
-              <Grid
-                item
-                xs={imageFiles.length === 1 ? 12 : 6}
-                sm={imageFiles.length === 1 ? 12 : 3}
-                key={file.fileKey || `img-${index}`}
-              >
-                <motion.div variants={mediaVariants} initial="initial" animate="animate" exit="exit">
-                  <LazyLoadImage
-                    src={file.url}
-                    alt={`Image ${index + 1}`}
-                    effect="blur"
-                    style={TweetContentStyles.image(imageFiles.length === 1)}
-                    onError={(e) => (e.target.src = '/fallback-image.png')}
-                    placeholder={
-                      <Box sx={TweetContentStyles.imagePlaceholder}>
-                        <CircularProgress size={24} />
-                      </Box>
-                    }
-                  />
-                </motion.div>
-              </Grid>
-            ))}
-          </Grid>
-          {imageFiles.length > 4 && (
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Typography
-                variant="caption"
-                sx={TweetContentStyles.imageViewAll}
-                onClick={handleOpenMediaModal}
-                role="button"
-                tabIndex={0}
-                onKeyPress={(e) => e.key === 'Enter' && handleOpenMediaModal(e)}
-              >
-                View all images ({imageFiles.length})
-              </Typography>
-            </motion.div>
-          )}
-        </Box>
-      );
-    };
-
-    const renderVideos = () => {
-      if (!videoFiles.length) return null;
-      return (
-        <Box
-          sx={TweetContentStyles.videoContainer(hasText || imageFiles.length > 0)}
-          role="region"
-          aria-label="Videos"
-        >
-          {videoFiles[0].contentType === 'video/webm' ? (
-            <CircularVideoPlayer
-              src={videoFiles[0].url}
-              duration={videoFiles[0].duration}
-              ariaLabel="Recorded tweet video"
-            />
-          ) : (
-            <StandardVideoPlayer
-              src={videoFiles[0].url}
-              duration={videoFiles[0].duration}
-              ariaLabel="Tweet video"
-            />
-          )}
-          {videoFiles.length > 1 && (
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Typography
-                variant="caption"
-                sx={TweetContentStyles.videoViewAll}
-                onClick={handleOpenMediaModal}
-                role="button"
-                tabIndex={0}
-                onKeyPress={(e) => e.key === 'Enter' && handleOpenMediaModal(e)}
-              >
-                View all videos ({videoFiles.length})
-              </Typography>
-            </motion.div>
-          )}
-        </Box>
-      );
-    };
-
-    const renderAudio = () => {
-      if (!audioFiles.length) return null;
-      return (
-        <Box
-          sx={TweetContentStyles.audioContainer(hasText || imageFiles.length > 0 || videoFiles.length > 0)}
-          role="region"
-          aria-label="Audio"
-        >
-          <AudioPlayer
-            src={audioFiles[0].url}
-          />
-          {audioFiles.length > 1 && (
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Typography
-                variant="caption"
-                sx={TweetContentStyles.audioViewAll}
-                onClick={handleOpenMediaModal}
-                role="button"
-                tabIndex={0}
-                onKeyPress={(e) => e.key === 'Enter' && handleOpenMediaModal(e)}
-              >
-                View all audio ({audioFiles.length})
-              </Typography>
-            </motion.div>
-          )}
-        </Box>
-      );
-    };
-
-    const renderOtherFiles = () => {
-      if (!otherFiles.length) return null;
-      return (
-        <Box sx={TweetContentStyles.otherFilesContainer(hasText)} role="region" aria-label="Files">
-          {otherFiles.slice(0, 2).map((file, idx) => (
-            <FileItem file={file} index={idx} key={file.fileKey || `other-${idx}`} />
-          ))}
-          {otherFiles.length > 2 && (
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Typography
-                variant="caption"
-                sx={TweetContentStyles.otherFilesViewAll}
-                onClick={handleOpenMediaModal}
-                role="button"
-                tabIndex={0}
-                onKeyPress={(e) => e.key === 'Enter' && handleOpenMediaModal(e)}
-              >
-                View all files ({otherFiles.length})
-              </Typography>
-            </motion.div>
-          )}
-        </Box>
-      );
-    };
-
+  const renderContent = useMemo(() => {
+    const hasText = !!tweet.content?.value;
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
         {hasText && (
           <Box>
-            <Typography sx={TweetContentStyles.contentText(hasMedia)}>
+            <Typography sx={TweetContentStyles.contentText(!!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles)}>
               <Emoji text={previewText + (!isExpanded && remainderText ? '...' : '')} />
             </Typography>
             {remainderText && (
               <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                <Typography sx={TweetContentStyles.contentText(hasMedia)}>
+                <Typography sx={TweetContentStyles.contentText(!!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles)}>
                   <Emoji text={remainderText} />
                 </Typography>
               </Collapse>
@@ -478,15 +458,14 @@ const TweetContent = ({
             )}
           </Box>
         )}
-        {renderImages()}
-        {renderVideos()}
-        {renderAudio()}
-        {renderOtherFiles()}
+        {renderImages}
+        {renderVideos}
+        {renderAudio}
+        {renderOtherFiles}
       </motion.div>
     );
-  }, [tweet.content, previewText, remainderText, isExpanded, handleOpenMediaModal]);
+  }, [previewText, remainderText, isExpanded, renderImages, renderVideos, renderAudio, renderOtherFiles]);
 
-  // Memoized modal content
   const modalContent = useMemo(() => {
     const files = tweet.content?.metadata?.files || [];
     return (
@@ -525,9 +504,7 @@ const TweetContent = ({
                 ariaLabel={`Video ${idx + 1}`}
               />
             ) : file.contentType?.startsWith('audio') ? (
-              <AudioPlayer
-                src={file.url}
-              />
+              <AudioPlayer src={file.url} />
             ) : (
               <FileItem file={file} index={idx} />
             )}
@@ -537,7 +514,17 @@ const TweetContent = ({
     );
   }, [tweet.content?.metadata?.files]);
 
-  // Fallback rendering for invalid tweet
+  if (error) {
+    return (
+      <Paper sx={TweetContentStyles.tweetCard(false, isListView)} role="article">
+        <Typography sx={TweetContentStyles.tweetTitle}>Error</Typography>
+        <Typography variant="body2" color="error">
+          {error}
+        </Typography>
+      </Paper>
+    );
+  }
+
   if (!tweet.tweet_id || !tweet.content) {
     return (
       <Paper sx={TweetContentStyles.tweetCard(false, isListView)} role="article">
@@ -723,7 +710,6 @@ const TweetContent = ({
   );
 };
 
-// Custom comparison function for React.memo
 const arePropsEqual = (prevProps, nextProps) => {
   return (
     isEqual(prevProps.tweet, nextProps.tweet) &&
@@ -742,7 +728,8 @@ const arePropsEqual = (prevProps, nextProps) => {
     isEqual(prevProps.relatedTweetIds, nextProps.relatedTweetIds) &&
     isEqual(prevProps.availableBoards, nextProps.availableBoards) &&
     prevProps.boardId === nextProps.boardId &&
-    prevProps.isListView === nextProps.isListView
+    prevProps.isListView === nextProps.isListView &&
+    prevProps.error === nextProps.error
   );
 };
 
@@ -817,6 +804,7 @@ TweetContent.propTypes = {
   ),
   boardId: PropTypes.string,
   isListView: PropTypes.bool,
+  error: PropTypes.string, // New prop for error state
 };
 
 TweetContent.defaultProps = {
@@ -828,6 +816,7 @@ TweetContent.defaultProps = {
   availableBoards: [],
   boardId: '',
   isListView: false,
+  error: null,
 };
 
 export default memo(TweetContent, arePropsEqual);

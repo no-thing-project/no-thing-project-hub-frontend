@@ -15,16 +15,20 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
   const [dragging, setDragging] = useState(false);
   const [hovered, setHovered] = useState(false);
 
+  const clampPosition = useCallback((x, y) => ({
+    x: Math.max(0, Math.min(x, BOARD_SIZE - 200)),
+    y: Math.max(0, Math.min(y, BOARD_SIZE - 100)),
+  }), []);
+
   useEffect(() => {
     if (!dragging && !justDroppedRef.current) {
-      const newX = Math.max(0, Math.min(tweet.position?.x ?? 0, BOARD_SIZE - 200));
-      const newY = Math.max(0, Math.min(tweet.position?.y ?? 0, BOARD_SIZE - 100));
-      if (localPosition.x !== newX || localPosition.y !== newY) {
-        setLocalPosition({ x: newX, y: newY });
-        previousPosition.current = { x: newX, y: newY };
+      const newPos = clampPosition(tweet.position?.x ?? 0, tweet.position?.y ?? 0);
+      if (localPosition.x !== newPos.x || localPosition.y !== newPos.y) {
+        setLocalPosition(newPos);
+        previousPosition.current = newPos;
       }
     }
-  }, [tweet.position?.x, tweet.position?.y, dragging, localPosition]);
+  }, [tweet.position?.x, tweet.position?.y, dragging, localPosition, clampPosition]);
 
   const isDraggable = useMemo(() => {
     if (!tweet || tweet.is_pinned) return false;
@@ -34,32 +38,25 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
       tweet.user_id === currentUser?.anonymous_id ||
       (tweet.username && currentUser?.username && tweet.username === currentUser.username)
     );
-  }, [
-    tweet,
-    bypassOwnership,
-    userRole,
-    currentUser?.anonymous_id,
-    currentUser?.username,
-  ]);
+  }, [tweet, bypassOwnership, userRole, currentUser?.anonymous_id, currentUser?.username]);
 
   const debouncedOnStop = useMemo(
     () =>
       debounce((e, data) => {
-        const clampedX = Math.max(0, Math.min(data.x, BOARD_SIZE - 200));
-        const clampedY = Math.max(0, Math.min(data.y, BOARD_SIZE - 100));
+        const clampedPos = clampPosition(data.x, data.y);
         if (
-          clampedX !== previousPosition.current.x ||
-          clampedY !== previousPosition.current.y
+          clampedPos.x !== previousPosition.current.x ||
+          clampedPos.y !== previousPosition.current.y
         ) {
-          if (isNaN(clampedX) || isNaN(clampedY)) {
+          if (isNaN(clampedPos.x) || isNaN(clampedPos.y)) {
             console.error('Invalid position data:', data);
             return;
           }
-          previousPosition.current = { x: clampedX, y: clampedY };
-          onStop?.(e, { x: clampedX, y: clampedY, tweetId: tweet.tweet_id });
+          previousPosition.current = clampedPos;
+          onStop?.(e, { x: clampedPos.x, y: clampedPos.y, tweetId: tweet.tweet_id });
         }
       }, 150),
-    [onStop, tweet.tweet_id]
+    [onStop, tweet.tweet_id, clampPosition]
   );
 
   useEffect(() => () => debouncedOnStop.cancel(), [debouncedOnStop]);
@@ -111,11 +108,7 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
           position: 'absolute',
           transform: 'translate(-50%, -50%)',
           cursor: isDraggable ? (dragging ? 'grabbing' : 'grab') : 'default',
-          zIndex: dragging || hovered
-            ? 1000
-            : tweet.is_pinned
-            ? 1100
-            : 1,
+          zIndex: dragging || hovered ? 1000 : tweet.is_pinned ? 1100 : 1,
           transition: 'opacity 0.2s ease, transform 0.2s ease',
         }}
         role="region"

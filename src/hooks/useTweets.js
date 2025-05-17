@@ -4,7 +4,6 @@ import ReactDOM from 'react-dom';
 import {
   fetchTweetsApi,
   fetchTweetById,
-  getTweetCommentsApi,
   createTweetApi,
   updateTweetApi,
   toggleLikeApi,
@@ -19,22 +18,12 @@ import {
 } from '../api/tweetsApi';
 import { normalizeTweet } from '../utils/tweetUtils';
 
-// Cache configuration
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000;
 const CACHE_VERSION = 'v1';
-const tweetCache = new Map(); // In-memory cache for tweets, comments, and single tweet data
+const tweetCache = new Map();
 
-/**
- * Generates a cache key for API requests.
- * @param {string} endpoint
- * @param {Object} params
- * @returns {string}
- */
 const getCacheKey = (endpoint, params) => `${CACHE_VERSION}:${endpoint}:${JSON.stringify(params)}`;
 
-/**
- * Clears expired cache entries.
- */
 const clearExpiredCache = () => {
   const now = Date.now();
   for (const [key, { expiry }] of tweetCache.entries()) {
@@ -42,10 +31,6 @@ const clearExpiredCache = () => {
   }
 };
 
-/**
- * Invalidates cache entries by prefix.
- * @param {string} prefix
- */
 const invalidateCache = (prefix) => {
   for (const key of tweetCache.keys()) {
     if (key.startsWith(`${CACHE_VERSION}:${prefix}`)) tweetCache.delete(key);
@@ -55,13 +40,11 @@ const invalidateCache = (prefix) => {
 export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
   const [tweets, setTweets] = useState([]);
   const [tweet, setTweet] = useState(null);
-  const [comments, setComments] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0 });
   const [boardInfo, setBoardInfo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const lastValidTweets = useRef([]);
-  const lastValidComments = useRef([]);
 
   const handleAuthError = useCallback((err) => {
     if (err.name === 'AbortError') return;
@@ -85,20 +68,6 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       } finally {
         setLoading(false);
       }
-    },
-    []
-  );
-
-  const debouncedApiCall = useMemo(
-    () => (fn) => {
-      const debouncedFn = debounce(
-        (resolve, reject, ...args) => {
-          fn(...args).then(resolve).catch(reject);
-        },
-        300,
-        { leading: false, trailing: true }
-      );
-      return (...args) => new Promise((resolve, reject) => debouncedFn(resolve, reject, ...args));
     },
     []
   );
@@ -148,7 +117,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
   );
 
   const fetchTweets = useCallback(
-    debouncedApiCall(async (options = {}) => {
+    async (options = {}, signal) => {
       if (!boardId) {
         setError('Board ID is required to fetch tweets');
         return [];
@@ -172,10 +141,9 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         return cached.data.tweets;
       }
 
-      const controller = new AbortController();
-      try {
-        return await withLoading(async () => {
-          const data = await fetchTweetsApi(boardId, token, { ...options, limit: options.limit || 20 }, controller.signal);
+      return withLoading(async () => {
+        try {
+          const data = await fetchTweetsApi(boardId, token, { ...options, limit: options.limit || 20, include_parents: true }, signal);
           const normalizedTweets = data.tweets.map((tweet) => ({
             ...normalizeTweet(tweet, currentUser),
             children: tweet.children?.map((child) => normalizeTweet(child, currentUser)) || [],
@@ -197,19 +165,17 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
             });
           });
           return normalizedTweets;
-        });
-      } catch (err) {
-        handleAuthError(err);
-        return lastValidTweets.current;
-      } finally {
-        controller.abort();
-      }
-    }),
-    [boardId, token, currentUser, handleAuthError, withLoading, debouncedApiCall]
+        } catch (err) {
+          handleAuthError(err);
+          return lastValidTweets.current;
+        }
+      });
+    },
+    [boardId, token, currentUser, handleAuthError, withLoading]
   );
 
   const fetchTweet = useCallback(
-    debouncedApiCall(async (tweetId) => {
+    async (tweetId) => {
       if (!boardId || !tweetId) {
         setError('Board ID and Tweet ID are required');
         return null;
@@ -224,9 +190,9 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         return cached.data;
       }
 
-      const controller = new AbortController();
-      try {
-        return await withLoading(async () => {
+      return withLoading(async () => {
+        const controller = new AbortController();
+        try {
           const data = await fetchTweetById(boardId, tweetId, token, controller.signal);
           const normalizedTweet = normalizeTweet(data.tweets?.[0], currentUser);
           if (!normalizedTweet.tweet_id) {
@@ -241,73 +207,15 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
 
           setTweet(normalizedTweet);
           return normalizedTweet;
-        });
-      } catch (err) {
-        handleAuthError(err);
-        return null;
-      } finally {
-        controller.abort();
-      }
-    }),
-    [boardId, token, currentUser, handleAuthError, withLoading, debouncedApiCall]
-  );
-
-  const fetchTweetComments = useCallback(
-    debouncedApiCall(async (tweetId, options = {}) => {
-      if (!boardId || !tweetId) {
-        setError('Board ID and Tweet ID are required');
-        return [];
-      }
-
-      const cacheKey = getCacheKey(`comments:${boardId}:${tweetId}`, options);
-      clearExpiredCache();
-
-      const cached = tweetCache.get(cacheKey);
-      if (cached && cached.expiry > Date.now()) {
-        ReactDOM.unstable_batchedUpdates(() => {
-          setComments(cached.data.comments);
-          lastValidComments.current = cached.data.comments;
-          setPagination({
-            page: cached.data.pagination.page,
-            limit: cached.data.pagination.limit,
-            total: cached.data.pagination.total,
-          });
-        });
-        return cached.data.comments;
-      }
-
-      const controller = new AbortController();
-      try {
-        return await withLoading(async () => {
-          const data = await getTweetCommentsApi(boardId, tweetId, token, options, controller.signal);
-          const normalizedComments = data.tweets
-            .map((c) => normalizeTweet(c, currentUser))
-            .filter((c) => c.tweet_id);
-
-          tweetCache.set(cacheKey, {
-            data: { comments: normalizedComments, pagination: data.pagination },
-            expiry: Date.now() + CACHE_TTL,
-          });
-
-          ReactDOM.unstable_batchedUpdates(() => {
-            setComments(normalizedComments);
-            lastValidComments.current = normalizedComments;
-            setPagination({
-              page: data.pagination.page,
-              limit: data.pagination.limit,
-              total: data.pagination.total,
-            });
-          });
-          return normalizedComments;
-        });
-      } catch (err) {
-        handleAuthError(err);
-        return lastValidComments.current;
-      } finally {
-        controller.abort();
-      }
-    }),
-    [boardId, token, currentUser, handleAuthError, withLoading, debouncedApiCall]
+        } catch (err) {
+          handleAuthError(err);
+          return null;
+        } finally {
+          controller.abort();
+        }
+      });
+    },
+    [boardId, token, currentUser, handleAuthError, withLoading]
   );
 
   const createNewTweet = useCallback(
@@ -367,6 +275,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         scheduled_at: scheduledAt,
         reminder: reminder?.schedule ? reminder : null,
         is_pinned: false,
+        children: [],
       };
 
       ReactDOM.unstable_batchedUpdates(() => {
@@ -426,8 +335,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           throw new Error('Invalid tweet ID from server');
         }
 
-        invalidateCache(`tweets:${boardId}`);
-        invalidateCache(`comments:${boardId}`);
+        invalidateCache(`tweets:${boardId}:${parentTweetId || ''}`); // Specific invalidation
 
         ReactDOM.unstable_batchedUpdates(() => {
           setTweets((prev) => {
@@ -496,12 +404,8 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
 
   const updateExistingTweet = useCallback(
     async (tweetId, updates, files = [], onProgress) => {
-      if (!boardId) {
-        setError('Board ID is required');
-        return null;
-      }
-      if (!tweetId) {
-        setError('Tweet ID is required');
+      if (!boardId || !tweetId) {
+        setError('Board ID and Tweet ID are required');
         return null;
       }
       const currentTweet = tweets.find((t) => t.tweet_id === tweetId);
@@ -600,8 +504,6 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           throw new Error('Failed to update tweet: Invalid tweet ID');
         }
 
-        invalidateCache(`tweets:${boardId}`);
-        invalidateCache(`comments:${boardId}`);
         invalidateCache(`tweet:${boardId}:${tweetId}`);
 
         ReactDOM.unstable_batchedUpdates(() => {
@@ -655,8 +557,6 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
             throw new Error('Failed to update status: Invalid tweet ID');
           }
 
-          invalidateCache(`tweets:${boardId}`);
-          invalidateCache(`comments:${boardId}`);
           invalidateCache(`tweet:${boardId}:${tweetId}`);
 
           ReactDOM.unstable_batchedUpdates(() => {
@@ -721,8 +621,6 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           throw new Error('Failed to toggle like: Invalid tweet ID');
         }
 
-        invalidateCache(`tweets:`);
-        invalidateCache(`comments:`);
         invalidateCache(`tweet:${boardId}:${tweetId}`);
 
         ReactDOM.unstable_batchedUpdates(() => {
@@ -740,14 +638,14 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
                 ? {
                     ...t,
                     liked_by: isLiked
-                      ? [...t.liked_by, { anonymous_id: currentUser.anonymous_id, username: currentUser.username }]
-                      : t.liked_by.filter((l) => l.anonymous_id !== currentUser.anonymous_id),
+                    ? [...t.liked_by, { anonymous_id: currentUser.anonymous_id, username: currentUser.username }]
+                    : t.liked_by.filter((l) => l.anonymous_id !== currentUser.anonymous_id),
                     stats: {
                       ...t.stats,
                       like_count: isLiked ? t.stats.like_count + 1 : t.stats.like_count - 1,
                     },
                     is_liked: isLiked,
-                  }
+            }
                 : t
             )
           );
@@ -801,8 +699,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         try {
           await deleteTweetApi(boardId, tweetId, token);
 
-          invalidateCache(`tweets:${boardId}`);
-          invalidateCache(`comments:${boardId}`);
+          invalidateCache(`tweets:${boardId}:${parentTweetId || ''}`);
           invalidateCache(`tweet:${boardId}:${tweetId}`);
 
           ReactDOM.unstable_batchedUpdates(() => {
@@ -888,8 +785,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           throw new Error('Failed to move tweet: Invalid tweet ID');
         }
 
-        invalidateCache('tweets:');
-        invalidateCache('comments:');
+        invalidateCache(`tweets:${boardId}:${parentTweetId || ''}`);
         invalidateCache(`tweet:${boardId}:${tweetId}`);
 
         ReactDOM.unstable_batchedUpdates(() => {
@@ -955,8 +851,6 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           throw new Error('Failed to pin tweet: Invalid tweet ID');
         }
 
-        invalidateCache(`tweets:${boardId}`);
-        invalidateCache(`comments:${boardId}`);
         invalidateCache(`tweet:${boardId}:${tweetId}`);
 
         ReactDOM.unstable_batchedUpdates(() => {
@@ -1004,8 +898,6 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           throw new Error('Failed to unpin tweet: Invalid tweet ID');
         }
 
-        invalidateCache(`tweets:${boardId}`);
-        invalidateCache(`comments:${boardId}`);
         invalidateCache(`tweet:${boardId}:${tweetId}`);
 
         ReactDOM.unstable_batchedUpdates(() => {
@@ -1057,8 +949,6 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           throw new Error('Failed to set reminder: Invalid tweet ID');
         }
 
-        invalidateCache(`tweets:${boardId}`);
-        invalidateCache(`comments:${boardId}`);
         invalidateCache(`tweet:${boardId}:${tweetId}`);
 
         ReactDOM.unstable_batchedUpdates(() => {
@@ -1125,8 +1015,6 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           throw new Error('Failed to share tweet: Invalid tweet ID');
         }
 
-        invalidateCache(`tweets:${boardId}`);
-        invalidateCache(`comments:${boardId}`);
         invalidateCache(`tweet:${boardId}:${tweetId}`);
 
         ReactDOM.unstable_batchedUpdates(() => {
@@ -1153,8 +1041,9 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
 
   return {
     tweets,
+    setTweets,
     tweet,
-    comments,
+    setTweet,
     pagination,
     boardInfo,
     loading,
@@ -1166,7 +1055,6 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
     updateExistingTweet,
     toggleLikeTweet,
     deleteExistingTweet,
-    fetchTweetComments,
     updateTweetStatus,
     moveTweet,
     pinTweet,
