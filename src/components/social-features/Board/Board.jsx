@@ -18,7 +18,7 @@ import {
 } from '@mui/material';
 import { AnimatePresence, motion } from 'framer-motion';
 import PropTypes from 'prop-types';
-import { RestartAlt, Add, ArrowBack, Remove, ViewList, ViewModule } from '@mui/icons-material';
+import { RestartAlt, Add, ArrowBack, Remove, ViewList, ViewModule, Refresh } from '@mui/icons-material';
 import TweetContentStyles from '../Tweet/tweetContentStyles';
 import { BOARD_SIZE, useBoardInteraction } from '../../../hooks/useBoard';
 import LoadingSpinner from '../../Layout/LoadingSpinner';
@@ -29,6 +29,7 @@ import { useTweets } from '../../../hooks/useTweets';
 import { useBoards } from '../../../hooks/useBoards';
 import { useNotification } from '../../../context/NotificationContext';
 import throttle from 'lodash/throttle';
+import debounce from 'lodash/debounce';
 
 const MAX_TWEET_LENGTH = 1000;
 
@@ -59,6 +60,7 @@ const Board = ({
 
   const {
     tweets,
+    setTweets, // Assumed to be provided by useTweets
     loading,
     error,
     fetchTweets,
@@ -89,7 +91,32 @@ const Board = ({
     restoreBoardState,
   } = useBoardInteraction(boardMainRef);
 
-  // Fetch tweets on mount and page change
+  // Debounced refresh function
+  const debouncedRefresh = useMemo(
+    () =>
+      debounce(async () => {
+        if (isFetching.current) return;
+        isFetching.current = true;
+        try {
+          await fetchTweets({ include_parents: true, page: 1, limit: 20 * page });
+          setPage(1);
+          showNotification('Board refreshed successfully!', 'success');
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            showNotification(err.message || 'Failed to refresh board', 'error');
+            if (err.message?.includes('Board not found')) {
+              showNotification('Board not found, redirecting to boards list...', 'error');
+              setTimeout(() => navigate('/boards'), 2000);
+            }
+          }
+        } finally {
+          isFetching.current = false;
+        }
+      }, 1000),
+    [fetchTweets, showNotification, navigate, page]
+  );
+
+  // Fetch tweets only on mount
   useEffect(() => {
     if (!token || !boardId) return;
 
@@ -98,11 +125,12 @@ const Board = ({
       if (isFetching.current) return;
       isFetching.current = true;
       try {
-        await fetchTweets({ include_parents: true, page, limit: 20 }, controller.signal);
+        await fetchTweets({ include_parents: true, page: 1, limit: 20 }, controller.signal);
       } catch (err) {
         if (err.name !== 'AbortError') {
           showNotification(err.message || 'Failed to load tweets', 'error');
           if (err.message?.includes('Board not found')) {
+            showNotification('Board not found, redirecting to boards list...', 'error');
             setTimeout(() => navigate('/boards'), 2000);
           }
         }
@@ -112,10 +140,13 @@ const Board = ({
     };
 
     fetchData();
-    return () => controller.abort();
-  }, [token, boardId, page, fetchTweets, showNotification, navigate]);
+    return () => {
+      controller.abort();
+      debouncedRefresh.cancel();
+    };
+  }, []); // Empty deps for mount-only fetch
 
-  // Fetch boards list when editing tweet
+  // Fetch boards list only when editing tweet (cached)
   useEffect(() => {
     if (!editTweetModal || boards.length > 0) return;
 
@@ -143,32 +174,7 @@ const Board = ({
     }
   }, [loading, centerBoard, isListView]);
 
-  // Handle infinite scroll in list view
-  const handleScroll = useMemo(
-    () =>
-      throttle(() => {
-        if (!isListView || loading || isFetching.current) return;
-        const boardElement = boardMainRef.current;
-        if (
-          boardElement &&
-          boardElement.scrollTop + boardElement.clientHeight >= boardElement.scrollHeight - 100 &&
-          tweets.length < pagination.total
-        ) {
-          setPage((prev) => prev + 1);
-        }
-      }, 200),
-    [isListView, loading, tweets.length, pagination.total]
-  );
-
-  useEffect(() => {
-    const boardElement = boardMainRef.current;
-    if (isListView && boardElement) {
-      boardElement.addEventListener('scroll', handleScroll);
-      return () => boardElement.removeEventListener('scroll', handleScroll);
-    }
-  }, [isListView, handleScroll]);
-
-  // Tweet creation
+  // Tweet creation with optimistic update
   const handleTweetCreation = useCallback(
     async (content, x, y, scheduledAt, files, onProgress) => {
       if (content.value.length > MAX_TWEET_LENGTH) {
@@ -194,18 +200,17 @@ const Board = ({
         setReplyTweet(null);
         return newTweet;
       } catch (err) {
+        setTweets((prev) => prev.filter((t) => t.tweet_id));
         showNotification(err.message || 'Failed to create tweet', 'error');
         throw err;
       }
     },
-    [createNewTweet, onPointsUpdate, replyTweet, showNotification]
+    [createNewTweet, onPointsUpdate, replyTweet, showNotification, boardId, currentUser, setTweets]
   );
 
   // Handle reply
   const handleReply = useCallback(
     (tweet) => {
-      const tweetElement = document.getElementById(`tweet-${tweet.tweet_id}`);
-      // const parentTweetHeight = tweetElement ? tweetElement.getBoundingClientRect().height : 150;
       setReplyTweet(tweet);
       setTweetPopup({
         visible: true,
@@ -213,7 +218,7 @@ const Board = ({
         y: tweet.position.y,
       });
     },
-    [scale]
+    []
   );
 
   // Throttle popup
@@ -233,7 +238,6 @@ const Board = ({
 
   const handleMouseUpWithPopup = useCallback(
     (e) => {
-      // Prevent popup if clicking on interactive elements
       if (e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root')) {
         handleMouseUp(e);
         return;
@@ -245,7 +249,6 @@ const Board = ({
 
   const handleTouchEndWithPopup = useCallback(
     (e) => {
-      // Prevent popup if touching interactive elements
       if (e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root')) {
         handleTouchEnd(e);
         return;
@@ -265,21 +268,20 @@ const Board = ({
     [boards, boardId]
   );
 
-  // Pin toggle
-  const handlePinToggle = useCallback(
-    async (tweet) => {
-      try {
-        const action = tweet.is_pinned ? unpinTweet : pinTweet;
-        await action(tweet.tweet_id);
-        showNotification(`Tweet ${tweet.is_pinned ? 'unpinned' : 'pinned'} successfully!`, 'success');
-      } catch (err) {
-        showNotification('Failed to toggle pin status', 'error');
-      }
-    },
-    [pinTweet, unpinTweet, showNotification]
-  );
-
-  // Save edited tweet
+    // Pin toggle
+    const handlePinToggle = useCallback(
+      async (tweet) => {
+        try {
+          const action = tweet.is_pinned ? unpinTweet : pinTweet;
+          await action(tweet.tweet_id);
+          showNotification(`Tweet ${tweet.is_pinned ? 'unpinned' : 'pinned'} successfully!`, 'success');
+        } catch (err) {
+          showNotification('Failed to toggle pin status', 'error');
+        }
+      },
+      [pinTweet, unpinTweet, showNotification]
+    );
+  // Save edited tweet with optimistic update
   const handleSaveEditedTweet = useCallback(async () => {
     if (!editTweetModal) return;
     if (!editTweetModal.content?.value?.trim()) {
@@ -290,25 +292,54 @@ const Board = ({
       showNotification(`Tweet exceeds ${MAX_TWEET_LENGTH} character limit`, 'error');
       return;
     }
+
+    const updatedTweet = {
+      ...editTweetModal,
+      content: {
+        type: editTweetModal.content?.type || 'text',
+        value: editTweetModal.content?.value || '',
+        metadata: editTweetModal.content?.metadata || {},
+      },
+      status: newStatus,
+      board_id: selectedBoardId,
+    };
+
     try {
+      setTweets((prev) =>
+        prev.map((t) => (t.tweet_id === editTweetModal.tweet_id ? updatedTweet : t))
+      );
+
       await updateExistingTweet(editTweetModal.tweet_id, {
-        content: {
-          type: editTweetModal.content?.type || 'text',
-          value: editTweetModal.content?.value || '',
-          metadata: editTweetModal.content?.metadata || {},
-        },
+        content: updatedTweet.content,
         status: newStatus,
         position: editTweetModal.position,
       });
+
       if (editTweetModal.board_id !== selectedBoardId) {
         await moveTweet(editTweetModal.tweet_id, selectedBoardId);
+        setTweets((prev) => prev.filter((t) => t.tweet_id !== editTweetModal.tweet_id));
+        debouncedRefresh(); // Refetch only when moving to another board
       }
+
       setEditTweetModal(null);
       showNotification('Tweet updated successfully!', 'success');
     } catch (err) {
+      setTweets((prev) =>
+        prev.map((t) => (t.tweet_id === editTweetModal.tweet_id ? editTweetModal : t))
+      );
       showNotification('Failed to save tweet', 'error');
     }
-  }, [editTweetModal, updateExistingTweet, moveTweet, newStatus, selectedBoardId, showNotification]);
+  }, [editTweetModal, updateExistingTweet, moveTweet, newStatus, selectedBoardId, showNotification, setTweets, debouncedRefresh]);
+
+  // Toggle like with optimistic update
+
+
+  // Pin toggle with optimistic update
+  // Load more tweets in list view
+  const handleLoadMore = useCallback(() => {
+    setPage((prev) => prev + 1);
+    debouncedRefresh();
+  }, [debouncedRefresh]);
 
   // Get related tweet IDs
   const getRelatedTweetIds = useCallback(
@@ -342,12 +373,6 @@ const Board = ({
     });
     setPage(1);
   }, [scale, offset, boardState, restoreBoardState, centerBoard]);
-
-  // Calculate title font size
-  const titleFontSize = useMemo(
-    () => `${Math.min(16, 100 / (boardTitle.length || 1))}vw`,
-    [boardTitle]
-  );
 
   // Filter and sort valid tweets
   const validTweets = useMemo(() => {
@@ -453,7 +478,6 @@ const Board = ({
           key={`tweet-${tweet.tweet_id}`}
           tweet={tweet}
           onStop={(e, data) => {
-            // Prevent position update if interacting with tweet content
             if (e.target.closest('.MuiIconButton-root, .MuiTypography-root, .MuiChip-root')) return;
             updateExistingTweet(tweet.tweet_id, { position: { x: data.x, y: data.y } });
           }}
@@ -484,7 +508,7 @@ const Board = ({
         <Typography sx={TweetContentStyles.boardErrorText}>{error}</Typography>
         <Button
           variant="contained"
-          onClick={() => fetchTweets({ include_parents: true })}
+          onClick={debouncedRefresh}
           sx={TweetContentStyles.boardErrorButton}
           aria-label="Retry fetching tweets"
         >
@@ -492,7 +516,7 @@ const Board = ({
         </Button>
       </Box>
     ),
-    [error, fetchTweets]
+    [error, debouncedRefresh]
   );
 
   // Render loading state
@@ -553,6 +577,16 @@ const Board = ({
                 >
                   {renderedTweets}
                   {loading && <LoadingSpinner />}
+                  {tweets.length < pagination.total && (
+                    <Button
+                      variant="outlined"
+                      onClick={handleLoadMore}
+                      sx={{ mt: 2, alignSelf: 'center' }}
+                      aria-label="Load more tweets"
+                    >
+                      Load More
+                    </Button>
+                  )}
                 </motion.div>
               )}
             </Box>
@@ -586,7 +620,7 @@ const Board = ({
             </Box>
           )}
 
-          {/* View Toggle and Zoom Controls */}
+          {/* View Toggle, Zoom Controls, and Refresh Button */}
           <Box sx={TweetContentStyles.boardControlsContainer}>
             <Tooltip title={isListView ? 'Switch to board view' : 'Switch to list view'}>
               <Button
@@ -598,6 +632,17 @@ const Board = ({
               >
                 {isListView ? 'Board' : 'List'}
               </Button>
+            </Tooltip>
+            <Tooltip title="Refresh board">
+              <IconButton
+                onClick={debouncedRefresh}
+                size="small"
+                aria-label="Refresh board"
+                sx={TweetContentStyles.boardZoomButton}
+                disabled={loading}
+              >
+                <Refresh fontSize="small" />
+              </IconButton>
             </Tooltip>
             {!isListView && (
               <>

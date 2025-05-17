@@ -161,7 +161,7 @@ export const toggleLikeApi = (tweetId, isLiked, token) => {
 export const deleteTweetApi = (boardId, tweetId, token) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
-  return apiRequest('delete', `/api/v1/tweets/${boardId}/${tweetId}`, token, {}).then(response => response);
+  return apiRequest('delete', `/api/v1/tweets/${boardId}/${tweetId}`, token, {}).then(response => response.tweets?.[0]);
 };
 
 // Move a tweet to another board

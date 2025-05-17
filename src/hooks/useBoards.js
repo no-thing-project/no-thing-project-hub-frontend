@@ -787,7 +787,6 @@ export const useBoards = (token, onLogout, navigate) => {
       classInfo,
       loading,
       error,
-      debouncedFetchBoardsList,
       debouncedFetchBoardsByGate,
       debouncedFetchBoardsByClass,
       fetchBoard,
