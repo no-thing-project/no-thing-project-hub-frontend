@@ -14,88 +14,35 @@ import {
 } from '@mui/material';
 import { PhotoCamera, Mic, VideoCall, Delete } from '@mui/icons-material';
 import { actionButtonStyles, cancelButtonStyle, inputStyles } from '../../../styles/BaseStyles';
-import { SUPPORTED_MIME_TYPES, MAX_FILE_SIZE, MAX_FILES } from '../../../constants/validations';
+import { useFileUpload } from '../../../hooks/useFileUpload';
+import { SUPPORTED_MIME_TYPES } from '../../../constants/validations';
 
 const MAX_TWEET_LENGTH = 1000;
 
 const TweetPopup = ({ x, y, onSubmit, onClose }) => {
-  const [form, setForm] = useState({
-    draft: '',
-    scheduledAt: '',
-    files: [],
-  });
+  const [form, setForm] = useState({ draft: '', scheduledAt: '' });
   const [recording, setRecording] = useState(null);
   const [recordingType, setRecordingType] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const mediaRecorderRef = useRef(null);
   const fileInputRef = useRef(null);
-  const fileUrlsRef = useRef(new Map());
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [error, setError] = useState(null);
+  const mediaRecorderRef = useRef(null);
   const dialogRef = useRef(null);
+  const { files, handleFileChange, removeFile, cleanup, fileUrlsRef } = useFileUpload();
 
-  // Focus dialog and manage file URLs
   useEffect(() => {
     dialogRef.current?.focus();
     return () => {
-      fileUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-      fileUrlsRef.current.clear();
+      cleanup();
       if (mediaRecorderRef.current) {
         mediaRecorderRef.current.stop();
-        mediaRecorderRef.current = null;
       }
       if (recording) {
         recording.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [recording]);
-
-  // File validation
-  const validateFile = useCallback(
-    (file) => {
-      if (!file) return false;
-      if (!SUPPORTED_MIME_TYPES.includes(file.type)) {
-        setError(`Unsupported file type: ${file.type}. Supported types: images, videos, audio.`);
-        return false;
-      }
-      if (file.size > MAX_FILE_SIZE) {
-        setError('File size exceeds 50MB limit');
-        return false;
-      }
-      return true;
-    },
-    []
-  );
-
-  // Handle file selection
-  const handleFileChange = useCallback(
-    (e) => {
-      const newFiles = Array.from(e.target.files).filter(validateFile);
-      if (newFiles.length + form.files.length > MAX_FILES) {
-        setError(`Maximum ${MAX_FILES} files allowed`);
-        return;
-      }
-      setForm((prev) => ({ ...prev, files: [...prev.files, ...newFiles] }));
-      setError(null);
-    },
-    [form.files, validateFile]
-  );
-
-  // Remove file
-  const removeFile = useCallback(
-    (index) => {
-      setForm((prev) => {
-        const fileToRemove = prev.files[index];
-        const url = fileUrlsRef.current.get(fileToRemove);
-        if (url) {
-          URL.revokeObjectURL(url);
-          fileUrlsRef.current.delete(fileToRemove);
-        }
-        return { ...prev, files: prev.files.filter((_, i) => i !== index) };
-      });
-    },
-    []
-  );
+  }, [recording, cleanup]);
 
   // Start recording
   const startRecording = useCallback(
@@ -109,30 +56,19 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
         mediaRecorder.onstop = () => {
           const blob = new Blob(chunks, { type: type === 'voice' ? 'audio/webm' : 'video/webm' });
-          if (blob.size > MAX_FILE_SIZE) {
-            setError('Recorded file exceeds 50MB limit');
-            stream.getTracks().forEach((track) => track.stop());
-            return;
-          }
           const file = new File([blob], `${type}_${Date.now()}.webm`, { type: blob.type });
-          if (!validateFile(file)) {
-            stream.getTracks().forEach((track) => track.stop());
-            return;
-          }
-          setForm((prev) => ({ ...prev, files: [...prev.files, file] }));
+          handleFileChange({ target: { files: [file] } });
           stream.getTracks().forEach((track) => track.stop());
         };
         mediaRecorder.start();
         mediaRecorderRef.current = mediaRecorder;
         setRecording(stream);
         setRecordingType(type);
-        setError(null);
       } catch (err) {
-        setError('Failed to start recording. Please check microphone or camera permissions.');
-        console.error('Recording failed:', err);
+        setError('Failed to start recording. Please check permissions.');
       }
     },
-    [validateFile]
+    [handleFileChange]
   );
 
   // Stop recording
@@ -151,7 +87,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   // Submit handler
   const handleSubmit = useCallback(
     async () => {
-      if (!form.draft.trim() && !form.files.length) {
+      if (!form.draft.trim() && !files.length) {
         setError('Please add text or files to submit');
         return;
       }
@@ -164,9 +100,8 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         return;
       }
       setLoading(true);
-      setError(null);
       try {
-        const contentType = form.files.length ? form.files[0].type.split('/')[0] : 'text';
+        const contentType = files.length ? files[0].type.split('/')[0] : 'text';
         const content = {
           type: contentType,
           value: form.draft.trim() || '',
@@ -181,23 +116,18 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
             embed_data: null,
           },
         };
-        await onSubmit(content, x, y, form.scheduledAt || null, form.files, setUploadProgress);
-        setForm({ draft: '', files: [], scheduledAt: '' });
-        setUploadProgress(0);
-        fileUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-        fileUrlsRef.current.clear();
-        onClose();
+        await onSubmit(content, x, y, form.scheduledAt || null, files, setUploadProgress);
+        setForm({ draft: '', scheduledAt: '' });
+        cleanup();
       } catch (err) {
         setError(err.message || 'Failed to submit tweet');
-        console.error('Tweet submission failed:', err);
       } finally {
         setLoading(false);
       }
     },
-    [form, x, y, onSubmit, onClose]
+    [form, files, x, y, onSubmit, cleanup]
   );
 
-  // Key press handler
   const handleKeyPress = useCallback(
     (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -208,13 +138,11 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
     [handleSubmit]
   );
 
-  // Memoized submit button state
   const isSubmitDisabled = useMemo(
-    () => loading || (!form.draft.trim() && !form.files.length) || form.draft.length > MAX_TWEET_LENGTH,
-    [loading, form.draft, form.files]
+    () => loading || (!form.draft.trim() && !files.length) || form.draft.length > MAX_TWEET_LENGTH,
+    [loading, form.draft, files]
   );
 
-  // File preview renderer
   const renderFilePreview = useCallback(
     (file, index) => {
       const fileUrl = fileUrlsRef.current.get(file) || URL.createObjectURL(file);
@@ -230,21 +158,11 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         <Grid item xs={6} key={`file-${index}`}>
           <Box sx={{ position: 'relative' }}>
             {file.type.startsWith('image') ? (
-              <img
-                src={fileUrl}
-                alt={`Preview ${index + 1}`}
-                style={previewStyle}
-                onError={() => setError('Failed to load image preview')}
-              />
+              <img src={fileUrl} alt={`Preview ${index + 1}`} style={previewStyle} />
             ) : file.type.startsWith('video') ? (
-              <video src={fileUrl} style={previewStyle} controls onError={() => setError('Failed to load video preview')} />
+              <video src={fileUrl} style={previewStyle} controls />
             ) : file.type.startsWith('audio') ? (
-              <audio
-                src={fileUrl}
-                controls
-                style={{ width: '100%', height: '80px' }}
-                onError={() => setError('Failed to load audio preview')}
-              />
+              <audio src={fileUrl} controls style={{ width: '100%', height: '80px' }} />
             ) : (
               <Box sx={{ p: 1, bgcolor: 'grey.200', borderRadius: 4, textAlign: 'center' }}>
                 <Typography variant="caption">File</Typography>
@@ -261,28 +179,9 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
                 color: 'white',
                 '&:hover': { bgcolor: 'error.dark' },
               }}
-              aria-label={`Remove file ${index + 1}`}
             >
               <Delete fontSize="small" />
             </IconButton>
-            {index === 3 && form.files.length > 4 && (
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  background: 'rgba(0,0,0,0.5)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: 4,
-                }}
-              >
-                <Typography sx={{ color: 'white' }}>+{form.files.length - 4}</Typography>
-              </Box>
-            )}
           </Box>
         </Grid>
       );
@@ -307,25 +206,13 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
       }}
       role="dialog"
       aria-labelledby="tweet-popup-title"
-      aria-describedby={error ? 'tweet-popup-error' : undefined}
-      tabIndex={-1}
       ref={dialogRef}
     >
       <Typography id="tweet-popup-title" sx={{ display: 'none' }}>
         Create a new tweet
       </Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        {error && (
-          <Alert
-            id="tweet-popup-error"
-            severity="error"
-            onClose={() => setError(null)}
-            role="alert"
-            sx={{ borderRadius: 2 }}
-          >
-            {error}
-          </Alert>
-        )}
+        {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
         <TextField
           placeholder="What's on your mind?"
           value={form.draft}
@@ -337,12 +224,9 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
           maxRows={4}
           margin="dense"
           variant="outlined"
-          sx={{
-            ...inputStyles,
-            '& .MuiInputBase-root': { borderRadius: '20px', padding: '8px 16px' },
-          }}
-          aria-label="Tweet message input"
+          sx={{ ...inputStyles, '& .MuiInputBase-root': { borderRadius: '20px', padding: '8px 16px' } }}
           inputProps={{ maxLength: MAX_TWEET_LENGTH }}
+          aria-label="Tweet content"
         />
         <Typography
           variant="caption"
@@ -353,10 +237,10 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         >
           {form.draft.length}/{MAX_TWEET_LENGTH}
         </Typography>
-        {form.files.length > 0 && (
+        {files.length > 0 && (
           <Box sx={{ mt: 1 }}>
             <Grid container spacing={1}>
-              {form.files.slice(0, 4).map((file, index) => renderFilePreview(file, index))}
+              {files.slice(0, 4).map((file, index) => renderFilePreview(file, index))}
             </Grid>
           </Box>
         )}
@@ -376,12 +260,11 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
             onChange={handleFileChange}
             style={{ display: 'none' }}
             ref={fileInputRef}
-            aria-hidden="true"
           />
           <IconButton
             onClick={() => fileInputRef.current.click()}
             sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
-            aria-label="Upload image, video, or audio"
+            aria-label="Upload media"
           >
             <PhotoCamera />
           </IconButton>
@@ -392,7 +275,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
               color: recordingType === 'voice' ? 'primary.main' : 'text.secondary',
               '&:hover': { color: 'primary.main' },
             }}
-            aria-label="Record voice message"
+            aria-label="Record audio"
           >
             <Mic />
           </IconButton>
@@ -403,7 +286,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
               color: recordingType === 'video_message' ? 'primary.main' : 'text.secondary',
               '&:hover': { color: 'primary.main' },
             }}
-            aria-label="Record video message"
+            aria-label="Record video"
           >
             <VideoCall />
           </IconButton>
@@ -429,35 +312,20 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
           margin="dense"
           InputLabelProps={{ shrink: true }}
           sx={inputStyles}
+          inputProps={{ min: new Date().toISOString().slice(0, 16) }}
           aria-label="Schedule tweet"
-          inputProps={{
-            min: new Date().toISOString().slice(0, 16),
-          }}
         />
         <Box sx={{ display: 'flex', justifyContent: 'space-evenly', mt: 2, gap: 1 }}>
           <Button
             onClick={handleSubmit}
             variant="contained"
-            sx={{
-              ...actionButtonStyles,
-              borderRadius: 2,
-              '&:hover': { transform: 'scale(1.03)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' },
-            }}
+            sx={actionButtonStyles}
             disabled={isSubmitDisabled}
             aria-label="Submit tweet"
           >
             {loading ? <CircularProgress size={24} /> : 'Add Post'}
           </Button>
-          <Button
-            onClick={onClose}
-            variant="contained"
-            sx={{
-              ...cancelButtonStyle,
-              borderRadius: 2,
-              '&:hover': { transform: 'scale(1.03)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' },
-            }}
-            aria-label="Cancel tweet"
-          >
+          <Button onClick={onClose} variant="contained" sx={cancelButtonStyle} aria-label="Cancel tweet creation">
             Cancel
           </Button>
         </Box>

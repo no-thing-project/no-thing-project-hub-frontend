@@ -28,7 +28,6 @@ import TweetPopup from '../Tweet/TweetPopup';
 import { useTweets } from '../../../hooks/useTweets';
 import { useBoards } from '../../../hooks/useBoards';
 import { useNotification } from '../../../context/NotificationContext';
-import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 
 const MAX_TWEET_LENGTH = 1000;
@@ -41,9 +40,9 @@ const Board = ({
   userRole,
   onPointsUpdate,
   onLogout,
-  navigate,
   availableBoards = [],
 }) => {
+  const navigate = useNavigate();
   const { showNotification } = useNotification();
   const boardMainRef = useRef(null);
   const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0 });
@@ -52,7 +51,7 @@ const Board = ({
   const [editTweetModal, setEditTweetModal] = useState(null);
   const [newStatus, setNewStatus] = useState('');
   const [selectedBoardId, setSelectedBoardId] = useState('');
-  const [boards, setBoards] = useState(availableBoards); // Замість cachedBoards використовуємо boards
+  const [boards, setBoards] = useState(availableBoards);
   const [isListView, setIsListView] = useState(false);
   const [page, setPage] = useState(1);
   const [boardState, setBoardState] = useState(null);
@@ -70,6 +69,8 @@ const Board = ({
     moveTweet,
     pinTweet,
     unpinTweet,
+    pagination,
+    pinnedTweets,
   } = useTweets(token, boardId, currentUser, onLogout, navigate);
 
   const { fetchBoardsList } = useBoards(token, onLogout, navigate);
@@ -89,7 +90,7 @@ const Board = ({
     restoreBoardState,
   } = useBoardInteraction(boardMainRef);
 
-  // Fetch tweets on mount
+  // Fetch tweets on mount and page change
   useEffect(() => {
     if (!token || !boardId) return;
 
@@ -124,7 +125,7 @@ const Board = ({
       try {
         const boardsData = await fetchBoardsList({}, controller.signal);
         const validBoards = boardsData?.boards.filter((b) => b.board_id) || [];
-        setBoards(validBoards); // Оновлюємо boards напряму
+        setBoards(validBoards);
       } catch (err) {
         if (err.name !== 'AbortError') {
           showNotification('Failed to load boards', 'error');
@@ -134,7 +135,7 @@ const Board = ({
 
     fetchBoards();
     return () => controller.abort();
-  }, [editTweetModal, boards, fetchBoardsList, token, showNotification]);
+  }, [editTweetModal, boards, fetchBoardsList, showNotification]);
 
   // Center board after loading
   useEffect(() => {
@@ -152,12 +153,12 @@ const Board = ({
         if (
           boardElement &&
           boardElement.scrollTop + boardElement.clientHeight >= boardElement.scrollHeight - 100 &&
-          tweets.length >= page * 20
+          tweets.length < pagination.total
         ) {
           setPage((prev) => prev + 1);
         }
       }, 200),
-    [isListView, loading, tweets.length, page]
+    [isListView, loading, tweets.length, pagination.total]
   );
 
   useEffect(() => {
@@ -316,10 +317,8 @@ const Board = ({
   const handleViewToggle = useCallback(() => {
     setIsListView((prev) => {
       if (!prev) {
-        // Switching to list view: save board state
         setBoardState({ scale, offset });
       } else {
-        // Switching to board view: restore board state
         if (boardState) {
           restoreBoardState(boardState);
         } else {
@@ -340,7 +339,7 @@ const Board = ({
   // Filter and sort valid tweets
   const validTweets = useMemo(() => {
     if (!Array.isArray(tweets)) {
-      console.warn('Tweets is not an array:', tweets);
+      console.error('Tweets is not an array:', tweets);
       return [];
     }
     const seenIds = new Set();
@@ -362,7 +361,7 @@ const Board = ({
           tweet.content.type &&
           tweet.content.value !== undefined &&
           tweet.content.metadata;
-        if (!isValid) console.warn('Invalid tweet:', tweet);
+        if (!isValid) console.error('Invalid tweet:', tweet);
         seenIds.add(tweet.tweet_id);
         return isValid;
       })
@@ -372,10 +371,11 @@ const Board = ({
   // Render single tweet
   const renderTweet = useCallback(
     (tweet) => {
-      const replyCount = validTweets.filter((t) => t.parent_tweet_id === tweet.tweet_id).length;
+      const replyCount = tweet.child_tweet_ids?.length || 0;
       const relatedTweetIds = highlightedTweetId ? getRelatedTweetIds(highlightedTweetId) : [];
       const tweetContent = (
         <TweetContent
+          key={`content-${tweet.tweet_id}`}
           tweet={tweet}
           currentUser={currentUser}
           userRole={userRole}
@@ -436,7 +436,6 @@ const Board = ({
       );
     },
     [
-      validTweets,
       highlightedTweetId,
       getRelatedTweetIds,
       tweets,
@@ -456,341 +455,372 @@ const Board = ({
     ]
   );
 
-  // Render tweets
+  // Memoize rendered tweets
   const renderedTweets = useMemo(() => {
     if (!validTweets.length) return null;
-    return validTweets.map(renderTweet);
+    return (
+      <AnimatePresence>
+        {validTweets.map((tweet) => renderTweet(tweet))}
+      </AnimatePresence>
+    );
   }, [validTweets, renderTweet]);
 
   // Render error state
-  const renderError = () => (
-    <Box sx={{ p: 3, textAlign: 'center' }}>
-      <Typography color="error" sx={{ mb: 2, fontWeight: 500, fontSize: '1rem' }}>
-        {error}
-      </Typography>
-      <Button
-        variant="contained"
-        onClick={() => fetchTweets({ include_parents: true })}
-        sx={{
-          borderRadius: 2,
-          textTransform: 'none',
-          px: 3,
-          py: 1,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-          '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transform: 'scale(1.03)', bgcolor: 'primary.light' },
-        }}
-        aria-label="Retry fetching tweets"
-      >
-        Retry
-      </Button>
-    </Box>
+  const renderError = useCallback(
+    () => (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography color="error" sx={{ mb: 2, fontWeight: 500, fontSize: '1rem' }}>
+          {error}
+        </Typography>
+        <Button
+          variant="contained"
+          onClick={() => fetchTweets({ include_parents: true })}
+          sx={{
+            borderRadius: 2,
+            textTransform: 'none',
+            px: 3,
+            py: 1,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transform: 'scale(1.03)', bgcolor: 'primary.light' },
+          }}
+          aria-label="Retry fetching tweets"
+        >
+          Retry
+        </Button>
+      </Box>
+    ),
+    [error, fetchTweets]
   );
 
   // Render loading state
   if (loading && page === 1) return <LoadingSpinner />;
 
-  // Render main UI
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.4 }}
-        style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}
-      >
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-          {/* Back Button */}
-          <Box sx={{ position: 'absolute', top: 16, left: 16, zIndex: 1100 }}>
-            <Tooltip title="Go back">
-              <IconButton
-                onClick={() => navigate(-1)}
-                aria-label="Go back to previous page"
-                sx={{
-                  fontSize: { xs: '1.25rem', sm: '1.5rem' },
-                  bgcolor: 'background.paper',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                  '&:hover': { bgcolor: 'grey.100', transform: 'scale(1.1)' },
-                }}
-              >
-                <ArrowBack fontSize="inherit" />
-              </IconButton>
-            </Tooltip>
-          </Box>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.4 }}
+      style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}
+    >
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        {/* Back Button */}
+        <Box sx={{ position: 'absolute', top: 16, left: 16, zIndex: 1100 }}>
+          <Tooltip title="Go back">
+            <IconButton
+              onClick={() => navigate(-1)}
+              aria-label="Go back to previous page"
+              sx={{
+                fontSize: { xs: '1.25rem', sm: '1.5rem' },
+                bgcolor: 'background.paper',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                '&:hover': { bgcolor: 'grey.100', transform: 'scale(1.1)' },
+              }}
+            >
+              <ArrowBack fontSize="inherit" />
+            </IconButton>
+          </Tooltip>
+        </Box>
 
-          {/* Main Board Area */}
-          <Box
-            ref={boardMainRef}
-            sx={{
-              flex: 1,
-              position: 'relative',
-              overflow: isListView ? 'auto' : 'hidden',
-              cursor: isListView ? 'default' : dragging ? 'grabbing' : 'grab',
-              touchAction: isListView ? 'auto' : 'none',
-              bgcolor: isListView ? 'grey.50' : 'background.paper',
-            }}
-            onMouseDown={isListView ? undefined : handleMouseDown}
-            onMouseMove={isListView ? undefined : handleMouseMove}
-            onMouseUp={isListView ? undefined : handleMouseUpWithPopup}
-            onWheel={isListView ? undefined : handleWheel}
-            onTouchStart={isListView ? undefined : handleTouchStart}
-            onTouchMove={isListView ? undefined : handleTouchMove}
-            onTouchEnd={isListView ? undefined : handleTouchEndWithPopup}
-            role="region"
-            aria-label={isListView ? 'Tweet list view' : 'Interactive board canvas'}
-            aria-live="polite"
-            tabIndex={0}
-          >
-            {error && renderError()}
+        {/* Main Board Area */}
+        <Box
+          ref={boardMainRef}
+          sx={{
+            flex: 1,
+            position: 'relative',
+            overflow: isListView ? 'auto' : 'hidden',
+            cursor: isListView ? 'default' : dragging ? 'grabbing' : 'grab',
+            touchAction: isListView ? 'auto' : 'none',
+            bgcolor: isListView ? 'grey.50' : 'background.paper',
+          }}
+          onMouseDown={isListView ? undefined : handleMouseDown}
+          onMouseMove={isListView ? undefined : handleMouseMove}
+          onMouseUp={isListView ? undefined : handleMouseUpWithPopup}
+          onWheel={isListView ? undefined : handleWheel}
+          onTouchStart={isListView ? undefined : handleTouchStart}
+          onTouchMove={isListView ? undefined : handleTouchMove}
+          onTouchEnd={isListView ? undefined : handleTouchEndWithPopup}
+          role="region"
+          aria-label={isListView ? 'Tweet list view' : 'Interactive board canvas'}
+          aria-live="polite"
+          tabIndex={0}
+        >
+          {error && renderError()}
 
-            {isListView ? (
-              <Box
-                sx={{
-                  p: { xs: 2, sm: 3 },
-                  maxWidth: { xs: '95vw', sm: '680px' },
-                  mx: 'auto',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  minHeight: '100%',
-                }}
-              >
-                {validTweets.length === 0 ? (
-                  <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
-                    No tweets yet. Create one to get started!
-                  </Typography>
-                ) : (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 20 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    {renderedTweets}
-                    {loading && <LoadingSpinner />}
-                  </motion.div>
-                )}
-              </Box>
-            ) : (
+          {isListView ? (
+            <Box
+              sx={{
+                p: { xs: 2, sm: 3 },
+                maxWidth: { xs: '95vw', sm: '680px' },
+                mx: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: '100%',
+              }}
+            >
+              {validTweets.length === 0 ? (
+                <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
+                  No tweets yet. Create one to get started!
+                </Typography>
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {renderedTweets}
+                  {loading && <LoadingSpinner />}
+                </motion.div>
+              )}
+            </Box>
+          ) : (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: BOARD_SIZE,
+                height: BOARD_SIZE,
+                backgroundColor: 'background.paper',
+                backgroundImage: 'radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)',
+                backgroundSize: '20px 20px',
+                transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+                transformOrigin: 'top left',
+              }}
+            >
               <Box
                 sx={{
                   position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: BOARD_SIZE,
-                  height: BOARD_SIZE,
-                  backgroundColor: 'background.paper',
-                  backgroundImage: 'radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)',
-                  backgroundSize: '20px 20px',
-                  transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-                  transformOrigin: 'top left',
+                  top: '50%',
+                  left: '50%',
+                  transform: `translate(-50%, -50%) scale(${1 / scale})`,
+                  pointerEvents: 'none',
+                  maxWidth: '80vw',
+                  textAlign: 'center',
                 }}
               >
-                <Box
+                <Typography
+                  variant="h1"
                   sx={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: `translate(-50%, -50%) scale(${1 / scale})`,
-                    pointerEvents: 'none',
-                    maxWidth: '80vw',
-                    textAlign: 'center',
+                    color: 'grey.300',
+                    fontSize: titleFontSize,
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    '@media (max-width: 600px)': { fontSize: `calc(${titleFontSize} * 0.8)` },
                   }}
                 >
-                  <Typography
-                    variant="h1"
-                    sx={{
-                      color: 'grey.300',
-                      fontSize: titleFontSize,
-                      fontWeight: 700,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      '@media (max-width: 600px)': { fontSize: `calc(${titleFontSize} * 0.8)` },
-                    }}
-                  >
-                    {boardTitle}
+                  {boardTitle}
+                </Typography>
+              </Box>
+              {validTweets.length === 0 ? (
+                <Box sx={{ position: 'absolute', top: '60%', left: '50%', transform: 'translate(-50%, -50%)' }}>
+                  <Typography variant="body1" color="text.secondary">
+                    No tweets yet. Click or tap anywhere to create one!
                   </Typography>
                 </Box>
-                {validTweets.length === 0 ? (
-                  <Box sx={{ position: 'absolute', top: '60%', left: '50%', transform: 'translate(-50%, -50%)' }}>
-                    <Typography variant="body1" color="text.secondary">
-                      No tweets yet. Click or tap anywhere to create one!
-                    </Typography>
-                  </Box>
-                ) : (
-                  renderedTweets
-                )}
-                {tweetPopup.visible && (
-                  <Box onClick={(e) => e.stopPropagation()}>
-                    <TweetPopup
-                      x={tweetPopup.x}
-                      y={tweetPopup.y}
-                      onSubmit={handleTweetCreation}
-                      onClose={() => {
-                        setTweetPopup({ visible: false });
-                        setReplyTweet(null);
-                      }}
-                    />
-                  </Box>
-                )}
-              </Box>
-            )}
-
-            {/* View Toggle and Zoom Controls */}
-            <Box
-              sx={{
-                position: 'fixed',
-                bottom: 16,
-                right: 16,
-                zIndex: 1100,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.5,
-                bgcolor: 'background.paper',
-                borderRadius: 2,
-                p: 0.75,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                '&:hover': { transform: 'scale(1.03)' },
-                '@media (max-width: 600px)': { transform: 'scale(0.9)', gap: 1 },
-              }}
-            >
-              <Tooltip title={isListView ? 'Switch to board view' : 'Switch to list view'}>
-                <Button
-                  variant="contained"
-                  startIcon={isListView ? <ViewModule /> : <ViewList />}
-                  onClick={handleViewToggle}
-                  aria-label={isListView ? 'Show as board' : 'Show as list'}
-                  sx={{
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    px: { xs: 1.5, sm: 2 },
-                    py: 0.5,
-                    bgcolor: 'grey.100',
-                    color: 'text.primary',
-                    '&:hover': {
-                      bgcolor: 'primary.light',
-                      transform: 'scale(1.03)',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                    },
-                    '@media (max-width: 600px)': { fontSize: '0.75rem', px: 1 },
-                  }}
-                >
-                  {isListView ? 'Board' : 'List'}
-                </Button>
-              </Tooltip>
-              {!isListView && (
-                <>
-                  <AnimatePresence>
-                    {Math.abs(scale - 1) > 0.01 && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <Tooltip title="Reset zoom">
-                          <IconButton
-                            onClick={() => handleZoomButton('reset')}
-                            size="small"
-                            aria-label="Reset board zoom to 100%"
-                            sx={{
-                              bgcolor: 'grey.100',
-                              '&:hover': { bgcolor: 'grey.200', transform: 'scale(1.1)' },
-                            }}
-                          >
-                            <RestartAlt fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  <Tooltip title="Zoom out">
-                    <IconButton
-                      onClick={() => handleZoomButton('out')}
-                      size="small"
-                      aria-label="Zoom out board"
-                      sx={{
-                        bgcolor: 'grey.100',
-                        '&:hover': { bgcolor: 'grey.200', transform: 'scale(1.1)' },
-                      }}
-                    >
-                      <Remove fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Typography
-                    variant="body2"
-                    sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' }, color: 'text.secondary', fontWeight: 500 }}
-                  >
-                    {Math.round(scale * 100)}%
-                  </Typography>
-                  <Tooltip title="Zoom in">
-                    <IconButton
-                      onClick={() => handleZoomButton('in')}
-                      size="small"
-                      aria-label="Zoom in board"
-                      sx={{
-                        bgcolor: 'grey.100',
-                        '&:hover': { bgcolor: 'grey.200', transform: 'scale(1.1)' },
-                      }}
-                    >
-                      <Add fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </>
+              ) : (
+                renderedTweets
+              )}
+              {tweetPopup.visible && (
+                <Box onClick={(e) => e.stopPropagation()}>
+                  <TweetPopup
+                    x={tweetPopup.x}
+                    y={tweetPopup.y}
+                    onSubmit={handleTweetCreation}
+                    onClose={() => {
+                      setTweetPopup({ visible: false });
+                      setReplyTweet(null);
+                    }}
+                  />
+                </Box>
               )}
             </Box>
-          </Box>
+          )}
 
-          {/* Edit Tweet Modal */}
-          {editTweetModal && (
-            <Dialog
-              open
-              onClose={() => setEditTweetModal(null)}
-              maxWidth="sm"
-              fullWidth
-              sx={{ '& .MuiDialog-paper': { borderRadius: 2, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', p: 2 } }}
-            >
-              <DialogTitle sx={{ fontWeight: 500, fontSize: { xs: '1.1rem', sm: '1.25rem' }, pb: 1 }}>
-                Edit Tweet
-              </DialogTitle>
-              <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-                <TextField
-                  multiline
-                  fullWidth
-                  label="Tweet Content"
-                  value={editTweetModal.content?.value || ''}
-                  onChange={(e) =>
-                    setEditTweetModal((prev) => ({
-                      ...prev,
-                      content: { ...prev.content, value: e.target.value },
-                    }))
-                  }
-                  minRows={3}
-                  inputProps={{ maxLength: MAX_TWEET_LENGTH }}
-                  error={(editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH}
-                  helperText={
-                    (editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH
-                      ? `Tweet exceeds ${MAX_TWEET_LENGTH} characters`
-                      : `${editTweetModal.content?.value?.length || 0}/${MAX_TWEET_LENGTH}`
-                  }
+          {/* View Toggle and Zoom Controls */}
+          <Box
+            sx={{
+              position: 'fixed',
+              bottom: 16,
+              right: 16,
+              zIndex: 1100,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              bgcolor: 'background.paper',
+              borderRadius: 2,
+              p: 0.75,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              '&:hover': { transform: 'scale(1.03)' },
+              '@media (max-width: 600px)': { transform: 'scale(0.9)', gap: 1 },
+            }}
+          >
+            <Tooltip title={isListView ? 'Switch to board view' : 'Switch to list view'}>
+              <Button
+                variant="contained"
+                startIcon={isListView ? <ViewModule /> : <ViewList />}
+                onClick={handleViewToggle}
+                aria-label={isListView ? 'Show as board' : 'Show as list'}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  px: { xs: 1.5, sm: 2 },
+                  py: 0.5,
+                  bgcolor: 'grey.100',
+                  color: 'text.primary',
+                  '&:hover': {
+                    bgcolor: 'primary.light',
+                    transform: 'scale(1.03)',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  },
+                  '@media (max-width: 600px)': { fontSize: '0.75rem', px: 1 },
+                }}
+              >
+                {isListView ? 'Board' : 'List'}
+              </Button>
+            </Tooltip>
+            {!isListView && (
+              <>
+                <AnimatePresence>
+                  {Math.abs(scale - 1) > 0.01 && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Tooltip title="Reset zoom">
+                        <IconButton
+                          onClick={() => handleZoomButton('reset')}
+                          size="small"
+                          aria-label="Reset board zoom to 100%"
+                          sx={{
+                            bgcolor: 'grey.100',
+                            '&:hover': { bgcolor: 'grey.200', transform: 'scale(1.1)' },
+                          }}
+                        >
+                          <RestartAlt fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <Tooltip title="Zoom out">
+                  <IconButton
+                    onClick={() => handleZoomButton('out')}
+                    size="small"
+                    aria-label="Zoom out board"
+                    sx={{
+                      bgcolor: 'grey.100',
+                      '&:hover': { bgcolor: 'grey.200', transform: 'scale(1.1)' },
+                    }}
+                  >
+                    <Remove fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Typography
+                  variant="body2"
+                  sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' }, color: 'text.secondary', fontWeight: 500 }}
+                >
+                  {Math.round(scale * 100)}%
+                </Typography>
+                <Tooltip title="Zoom in">
+                  <IconButton
+                    onClick={() => handleZoomButton('in')}
+                    size="small"
+                    aria-label="Zoom in board"
+                    sx={{
+                      bgcolor: 'grey.100',
+                      '&:hover': { bgcolor: 'grey.200', transform: 'scale(1.1)' },
+                    }}
+                  >
+                    <Add fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </>
+            )}
+          </Box>
+        </Box>
+
+        {/* Edit Tweet Modal */}
+        {editTweetModal && (
+          <Dialog
+            open
+            onClose={() => setEditTweetModal(null)}
+            maxWidth="sm"
+            fullWidth
+            sx={{ '& .MuiDialog-paper': { borderRadius: 2, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', p: 2 } }}
+          >
+            <DialogTitle sx={{ fontWeight: 500, fontSize: { xs: '1.1rem', sm: '1.25rem' }, pb: 1 }}>
+              Edit Tweet
+            </DialogTitle>
+            <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+              <TextField
+                multiline
+                fullWidth
+                label="Tweet Content"
+                value={editTweetModal.content?.value || ''}
+                onChange={(e) =>
+                  setEditTweetModal((prev) => ({
+                    ...prev,
+                    content: { ...prev.content, value: e.target.value },
+                  }))
+                }
+                minRows={3}
+                inputProps={{ maxLength: MAX_TWEET_LENGTH }}
+                error={(editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH}
+                helperText={
+                  (editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH
+                    ? `Tweet exceeds ${MAX_TWEET_LENGTH} characters`
+                    : `${editTweetModal.content?.value?.length || 0}/${MAX_TWEET_LENGTH}`
+                }
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2,
+                    '&:hover fieldset': { borderColor: 'primary.main' },
+                    '&.Mui-focused fieldset': {
+                      boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.1)}`,
+                    },
+                  },
+                }}
+                aria-label="Tweet content"
+              />
+              <FormControl fullWidth>
+                <InputLabel id="status-label">Tweet Status</InputLabel>
+                <Select
+                  labelId="status-label"
+                  value={newStatus}
+                  label="Tweet Status"
+                  onChange={(e) => setNewStatus(e.target.value)}
                   sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2,
-                      '&:hover fieldset': { borderColor: 'primary.main' },
-                      '&.Mui-focused fieldset': {
-                        boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.1)}`,
-                      },
+                    borderRadius: 2,
+                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'primary.main' },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.1)}`,
                     },
                   }}
-                  aria-label="Tweet content"
-                />
+                  aria-label="Tweet status"
+                >
+                  {['pending', 'approved', 'rejected', 'announcement', 'reminder', 'pinned', 'archived'].map(
+                    (status) => (
+                      <MenuItem key={status} value={status}>
+                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                      </MenuItem>
+                    )
+                  )}
+                </Select>
+              </FormControl>
+              {boards.length > 0 && (
                 <FormControl fullWidth>
-                  <InputLabel id="status-label">Tweet Status</InputLabel>
+                  <InputLabel id="board-label">Move to Board</InputLabel>
                   <Select
-                    labelId="status-label"
-                    value={newStatus}
-                    label="Tweet Status"
-                    onChange={(e) => setNewStatus(e.target.value)}
+                    labelId="board-label"
+                    value={selectedBoardId}
+                    label="Move to Board"
+                    onChange={(e) => setSelectedBoardId(e.target.value)}
                     sx={{
                       borderRadius: 2,
                       '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'primary.main' },
@@ -798,86 +828,59 @@ const Board = ({
                         boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.1)}`,
                       },
                     }}
-                    aria-label="Tweet status"
+                    aria-label="Move to board"
                   >
-                    {['pending', 'approved', 'rejected', 'announcement', 'reminder', 'pinned', 'archived'].map(
-                      (status) => (
-                        <MenuItem key={status} value={status}>
-                          {status.charAt(0).toUpperCase() + status.slice(1)}
-                        </MenuItem>
-                      )
-                    )}
+                    {boards.map((board) => (
+                      <MenuItem key={board.board_id} value={board.board_id}>
+                        {board.title || board.name || 'Untitled Board'}
+                      </MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
-                {boards.length > 0 && (
-                  <FormControl fullWidth>
-                    <InputLabel id="board-label">Move to Board</InputLabel>
-                    <Select
-                      labelId="board-label"
-                      value={selectedBoardId}
-                      label="Move to Board"
-                      onChange={(e) => setSelectedBoardId(e.target.value)}
-                      sx={{
-                        borderRadius: 2,
-                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'primary.main' },
-                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                          boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.1)}`,
-                        },
-                      }}
-                      aria-label="Move to board"
-                    >
-                      {boards.map((board) => (
-                        <MenuItem key={board.board_id} value={board.board_id}>
-                          {board.title || board.name || 'Untitled Board'}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                )}
-              </DialogContent>
-              <DialogActions sx={{ p: 2, gap: 1 }}>
-                <Button
-                  onClick={() => setEditTweetModal(null)}
-                  sx={{
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    px: 3,
-                    color: 'text.secondary',
-                    '&:hover': { bgcolor: 'grey.100', transform: 'scale(1.03)' },
-                  }}
-                  aria-label="Cancel edit tweet"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSaveEditedTweet}
-                  variant="contained"
-                  disabled={
-                    !editTweetModal.content?.value?.trim() ||
-                    (editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH
-                  }
-                  sx={{
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    px: 3,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                    '&:hover': {
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      transform: 'scale(1.03)',
-                      bgcolor: 'primary.light',
-                    },
-                    '&:disabled': { bgcolor: 'grey.300', color: 'grey.500', boxShadow: 'none' },
-                  }}
-                  aria-label="Save edited tweet"
-                >
-                  Save
-                </Button>
-              </DialogActions>
-            </Dialog>
-          )}
-        </Box>
-      </motion.div>
-    </AnimatePresence>
+              )}
+            </DialogContent>
+            <DialogActions sx={{ p: 2, gap: 1 }}>
+              <Button
+                onClick={() => setEditTweetModal(null)}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  px: 3,
+                  color: 'text.secondary',
+                  '&:hover': { bgcolor: 'grey.100', transform: 'scale(1.03)' },
+                }}
+                aria-label="Cancel edit tweet"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveEditedTweet}
+                variant="contained"
+                disabled={
+                  !editTweetModal.content?.value?.trim() ||
+                  (editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH
+                }
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  px: 3,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  '&:hover': {
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    transform: 'scale(1.03)',
+                    bgcolor: 'primary.light',
+                  },
+                  '&:disabled': { bgcolor: 'grey.300', color: 'grey.500', boxShadow: 'none' },
+                }}
+                aria-label="Save edited tweet"
+              >
+                Save
+              </Button>
+            </DialogActions>
+          </Dialog>
+        )}
+      </Box>
+    </motion.div>
   );
 };
 
@@ -892,7 +895,6 @@ Board.propTypes = {
   userRole: PropTypes.string.isRequired,
   onPointsUpdate: PropTypes.func.isRequired,
   onLogout: PropTypes.func.isRequired,
-  navigate: PropTypes.func.isRequired,
   availableBoards: PropTypes.arrayOf(
     PropTypes.shape({
       board_id: PropTypes.string.isRequired,
