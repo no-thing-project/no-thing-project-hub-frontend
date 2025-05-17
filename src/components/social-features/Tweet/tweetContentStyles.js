@@ -29,7 +29,6 @@ const TweetContentStyles = {
     borderRadius: 2,
     zIndex: 1400,
     boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
     '&:hover': {
       transform: 'translateY(-2px)',
       boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
@@ -64,7 +63,6 @@ const TweetContentStyles = {
     bgcolor: 'grey.100',
     borderRadius: 2,
     p: 1,
-    transition: 'background-color 0.2s ease',
     '&:hover': { bgcolor: 'grey.200' },
   },
   popupPreviewMedia: {
@@ -74,7 +72,16 @@ const TweetContentStyles = {
     borderRadius: 4,
     border: '1px solid',
     borderColor: 'grey.300',
-    transition: 'transform 0.2s ease',
+    '&:hover': { transform: 'scale(1.02)' },
+  },
+  popupCirclePreviewMedia: {
+    width: '80px',
+    height: '80px',
+    objectFit: 'cover',
+    borderRadius: '50%',
+    border: '1px solid',
+    borderColor: 'grey.300',
+    backgroundColor: 'black',
     '&:hover': { transform: 'scale(1.02)' },
   },
   popupPreviewPlaceholder: {
@@ -117,7 +124,6 @@ const TweetContentStyles = {
   popupMediaButton: (isActive) => ({
     p: 1,
     borderRadius: '50%',
-    transition: 'all 0.2s ease',
     ...dynamicMediaButtonColor(isActive),
     '&:hover': { color: 'primary.main' },
   }),
@@ -136,14 +142,15 @@ const TweetContentStyles = {
     gap: 0.5,
   },
   popupLivePreview: {
-    width: '100%',
+    width: '120px',
     height: '120px',
-    borderRadius: 4,
+    borderRadius: '50%',
     border: '1px solid',
     borderColor: 'grey.300',
     bgcolor: 'black',
     display: 'block',
     mt: 1,
+    objectFit: 'cover',
   },
   popupAudioVisualizer: {
     width: '100%',
@@ -161,13 +168,26 @@ const TweetContentStyles = {
     height: '100%',
     bgcolor: 'primary.main',
     mx: '1px',
-    transition: 'height 0.1s ease',
     animation: `pulse${index} 0.5s ease-in-out infinite alternate`,
     [`@keyframes pulse${index}`]: {
       '0%': { transform: 'scaleY(0.3)' },
       '100%': { transform: 'scaleY(1)' },
     },
   }),
+  popupAudioPlayer: {
+    width: '100%',
+    height: '48px',
+    bgcolor: 'grey.100',
+    borderRadius: '10px',
+    p: 1,
+    '& audio': {
+      width: '100%',
+      height: '100%',
+      '&::-webkit-media-controls-panel': {
+        backgroundColor: 'transparent',
+      },
+    },
+  },
 
   // ===============================
   // TweetContent Styles
@@ -181,7 +201,6 @@ const TweetContentStyles = {
     minWidth: { xs: '60vw', sm: '360px' },
     maxWidth: isListView ? { xs: '90vw', sm: '900px' } : { xs: '90vw', sm: '360px' },
     boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-    transition: 'all 0.3s ease-in-out',
     position: 'relative',
     opacity: 0.97,
     border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
@@ -213,7 +232,6 @@ const TweetContentStyles = {
   pinnedIcon: {
     fontSize: '1.1rem',
     color: '#FFD700',
-    transition: 'color 0.3s ease, transform 0.2s ease',
     '&:hover': {
       color: '#FFC107',
       transform: 'scale(1.15)',
@@ -229,7 +247,6 @@ const TweetContentStyles = {
     fontStyle: 'italic',
     color: 'text.secondary',
     fontSize: { xs: '0.9rem', sm: '0.95rem' },
-    transition: 'background-color 0.3s ease',
   },
   replyToCaption: {
     fontWeight: 600,
@@ -268,7 +285,6 @@ const TweetContentStyles = {
     objectPosition: 'center',
     borderRadius: '20px',
     border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
-    transition: 'transform 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease',
     opacity: 0.97,
     '&:hover': {
       transform: 'scale(1.03)',
@@ -299,7 +315,6 @@ const TweetContentStyles = {
     fontSize: { xs: '0.85rem', sm: '0.9rem' },
     fontWeight: 600,
     textAlign: 'right',
-    transition: 'color 0.3s ease',
     '&:hover': {
       textDecoration: 'underline',
       color: 'primary.dark',
@@ -318,18 +333,37 @@ const TweetContentStyles = {
   }),
   videoInner: {
     position: 'relative',
-    borderRadius: '10px',
+    borderRadius: 2,
     overflow: 'hidden',
     background: (theme) => `linear-gradient(145deg, ${theme.palette.grey[50]}, ${theme.palette.grey[100]})`,
   },
   video: (duration) => ({
     width: '100%',
-    maxHeight: duration && duration < 15 ? '140px' : '260px',
-    borderRadius: duration && duration < 15 ? '18px' : '10px',
+    height: duration && duration < 15 ? '140px' : '260px',
+    borderRadius: 10,
     objectFit: 'cover',
     objectPosition: 'center',
     backgroundColor: 'black',
-    transition: 'transform 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease',
+    opacity: 0.97,
+    '&:hover': {
+      transform: 'scale(1.03)',
+      opacity: 1,
+      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+    },
+  }),
+  circleVideoContainer: {
+    position: 'relative',
+    borderRadius: '50%',
+    overflow: 'hidden',
+    background: (theme) => `linear-gradient(145deg, ${theme.palette.grey[50]}, ${theme.palette.grey[100]})`,
+  },
+  circleVideo: (duration) => ({
+    width: duration && duration < 15 ? '140px' : '260px',
+    height: duration && duration < 15 ? '140px' : '260px',
+    borderRadius: '50%',
+    objectFit: 'cover',
+    objectPosition: 'center',
+    backgroundColor: 'black',
     opacity: 0.97,
     '&:hover': {
       transform: 'scale(1.03)',
@@ -344,7 +378,6 @@ const TweetContentStyles = {
     fontSize: { xs: '0.85rem', sm: '0.9rem' },
     fontWeight: 600,
     textAlign: 'right',
-    transition: 'color 0.3s ease',
     '&:hover': {
       textDecoration: 'underline',
       color: 'primary.dark',
@@ -357,15 +390,18 @@ const TweetContentStyles = {
     flexDirection: 'row',
     flexWrap: 'wrap',
   }),
-  audio: {
+  audioPlayer: {
     width: '100%',
-    maxHeight: '48px',
-    opacity: 0.97,
-    '&::-webkit-media-controls-panel': {
-      backgroundColor: 'transparent',
-    },
-    '&:hover': {
-      opacity: 1,
+    height: '48px',
+    bgcolor: 'grey.100',
+    borderRadius: '10px',
+    p: 1,
+    '& audio': {
+      width: '100%',
+      height: '100%',
+      '&::-webkit-media-controls-panel': {
+        backgroundColor: 'transparent',
+      },
     },
   },
   audioViewAll: {
@@ -375,7 +411,6 @@ const TweetContentStyles = {
     fontSize: { xs: '0.85rem', sm: '0.9rem' },
     fontWeight: 600,
     textAlign: 'right',
-    transition: 'color 0.3s ease',
     '&:hover': {
       textDecoration: 'underline',
       color: 'primary.dark',
@@ -394,7 +429,6 @@ const TweetContentStyles = {
     mt: index > 0 ? 1.5 : 0,
     p: 1,
     borderRadius: 2,
-    transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
     '&:hover': {
       bgcolor: 'grey.100',
       boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
@@ -408,7 +442,6 @@ const TweetContentStyles = {
     color: 'primary.main',
     textDecoration: 'none',
     fontSize: { xs: '0.9rem', sm: '0.95rem' },
-    transition: 'color 0.3s ease',
     '&:hover': {
       textDecoration: 'underline',
       color: 'primary.dark',
@@ -421,7 +454,15 @@ const TweetContentStyles = {
     fontSize: { xs: '0.85rem', sm: '0.9rem' },
     fontWeight: 600,
     textAlign: 'right',
-    transition: 'color 0.3s ease',
+    '&:hover': {
+      textDecoration: 'underline',
+      color: 'primary.dark',
+    },
+  },
+  readMoreButton: {
+    color: 'primary.main',
+    textTransform: 'none',
+    fontSize: { xs: '0.85rem', sm: '0.9rem' },
     '&:hover': {
       textDecoration: 'underline',
       color: 'primary.dark',
@@ -443,7 +484,6 @@ const TweetContentStyles = {
     p: { xs: 0.75, sm: 1 },
     minWidth: 0,
     borderRadius: '50%',
-    transition: 'all 0.3s ease',
     '&:hover': {
       bgcolor: (theme) => alpha(theme.palette.primary.light, 0.2),
       transform: 'scale(1.15)',
@@ -456,20 +496,17 @@ const TweetContentStyles = {
   likeIcon: (isLiked) => ({
     color: isLiked ? 'primary.main' : 'text.secondary',
     fontSize: { xs: '1.2rem', sm: '1.3rem' },
-    transition: 'color 0.3s ease, transform 0.2s ease',
   }),
   likeCount: (isLiked, animate) => ({
     color: isLiked ? 'primary.main' : 'text.secondary',
     fontSize: { xs: '0.8rem', sm: '0.9rem' },
     transform: animate ? 'scale(1.25)' : 'scale(1)',
-    transition: 'transform 0.3s ease, color 0.3s ease',
     ml: 0.75,
   }),
   replyButton: {
     p: { xs: 0.75, sm: 1 },
     minWidth: 0,
     borderRadius: '50%',
-    transition: 'all 0.3s ease',
     '&:hover': {
       bgcolor: (theme) => alpha(theme.palette.primary.light, 0.2),
       transform: 'scale(1.15)',
@@ -482,18 +519,22 @@ const TweetContentStyles = {
   replyIcon: {
     color: 'text.secondary',
     fontSize: { xs: '1.2rem', sm: '1.3rem' },
-    transition: 'color 0.3s ease, transform 0.2s ease',
   },
   replyCount: {
     color: 'text.secondary',
     fontSize: { xs: '0.8rem', sm: '0.9rem' },
     ml: 0.75,
   },
+  statusContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1.5,
+    mt: 2,
+  },
   menuButton: {
     p: { xs: 0.75, sm: 1 },
     minWidth: 0,
     borderRadius: '50%',
-    transition: 'all 0.3s ease',
     '&:hover': {
       bgcolor: 'grey.100',
       transform: 'scale(1.15)',
@@ -506,7 +547,6 @@ const TweetContentStyles = {
   menuIcon: {
     color: 'text.secondary',
     fontSize: { xs: '1.2rem', sm: '1.3rem' },
-    transition: 'color 0.3s ease, transform 0.2s ease',
   },
   menuPaper: {
     boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
@@ -516,7 +556,6 @@ const TweetContentStyles = {
   },
   deleteMenuItem: {
     color: 'error.main',
-    transition: 'background-color 0.3s ease',
     '&:hover': {
       bgcolor: (theme) => alpha(theme.palette.error.main, 0.15),
     },
@@ -534,7 +573,7 @@ const TweetContentStyles = {
     overflowY: 'auto',
     borderRadius: 3,
     outline: 'none',
-    animation: 'fadeIn 0.3s ease',
+    animation: 'fadeIn 0.3s ease-in-out',
     '@keyframes fadeIn': {
       from: { opacity: 0, transform: 'translate(-50%, -48%) scale(0.98)' },
       to: { opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
@@ -558,8 +597,7 @@ const TweetContentStyles = {
     objectFit: 'contain',
     objectPosition: 'center',
     borderRadius: '10px',
-    border: (theme) => ` over 1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
-    transition: 'opacity 0.3s ease, box-shadow 0.3s ease',
+    border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
     '&:hover': {
       boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
     },
@@ -581,16 +619,23 @@ const TweetContentStyles = {
     backgroundColor: 'black',
     objectFit: 'contain',
     objectPosition: 'center',
-    transition: 'box-shadow 0.3s ease',
     '&:hover': {
       boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
     },
   },
-  modalAudio: {
+  modalAudioPlayer: {
     width: '100%',
-    maxHeight: '48px',
+    height: '48px',
     bgcolor: 'grey.100',
     borderRadius: '10px',
+    p: 1,
+    '& audio': {
+      width: '100%',
+      height: '100%',
+      '&::-webkit-media-controls-panel': {
+        backgroundColor: 'transparent',
+      },
+    },
   },
   modalOtherFile: {
     display: 'flex',
@@ -598,7 +643,6 @@ const TweetContentStyles = {
     gap: 1.5,
     p: 1.5,
     borderRadius: 2,
-    transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
     '&:hover': {
       bgcolor: 'grey.100',
       boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
@@ -612,7 +656,6 @@ const TweetContentStyles = {
     color: 'primary.main',
     textDecoration: 'none',
     fontSize: { xs: '0.9rem', sm: '0.95rem' },
-    transition: 'color 0.3s ease',
     '&:hover': {
       textDecoration: 'underline',
       color: 'primary.dark',

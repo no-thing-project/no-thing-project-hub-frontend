@@ -12,8 +12,9 @@ import {
   Alert,
   LinearProgress,
   Chip,
+  Collapse,
 } from '@mui/material';
-import { PhotoCamera, Mic, Videocam, Stop } from '@mui/icons-material';
+import { PhotoCamera, Mic, Videocam, Stop, Schedule } from '@mui/icons-material';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import { isEqual } from 'lodash';
 import TweetContentStyles from './tweetContentStyles';
@@ -22,10 +23,10 @@ import { SUPPORTED_MIME_TYPES } from '../../../constants/validations';
 
 // Constants
 const MAX_TWEET_LENGTH = 1000;
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const RECORDING_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-const POPUP_WIDTH = 320; // Approximate popup width in pixels
-const POPUP_HEIGHT = 400; // Approximate popup height in pixels
+const POPUP_WIDTH = 320;
+const POPUP_HEIGHT = 400;
 
 const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   const [form, setForm] = useState({ draft: '', scheduledAt: '' });
@@ -35,13 +36,13 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [showSchedule, setShowSchedule] = useState(false);
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const dialogRef = useRef(null);
   const videoPreviewRef = useRef(null);
   const recordingTimerRef = useRef(null);
   const { files, handleFileChange, removeFile, cleanup, fileUrlsRef } = useFileUpload();
-
 
   // Cleanup on unmount
   useEffect(() => {
@@ -102,13 +103,14 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
           const fileName = `${type}_${Date.now()}.webm`;
           const file = new File([blob], fileName, { type: mimeType });
           if (blob.size > MAX_FILE_SIZE) {
-            setError('Recorded file exceeds 10MB limit.');
+            setError('Recorded file exceeds 50MB limit.');
             return;
           }
+          // Add isRecorded flag for video_message
           handleFileChange({ target: { files: [file] } });
           stream.getTracks().forEach((track) => track.stop());
         };
-        mediaRecorder.start(1000); // Timeslice for progress updates
+        mediaRecorder.start(1000);
         mediaRecorderRef.current = mediaRecorder;
         setRecording(stream);
         setRecordingType(type);
@@ -150,7 +152,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
           return false;
         }
         if (file.size > MAX_FILE_SIZE) {
-          setError(`File too large: ${file.name} exceeds 10MB limit`);
+          setError(`File too large: ${file.name} exceeds 50MB limit`);
           return false;
         }
         return true;
@@ -159,7 +161,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         handleFileChange({ target: { files: validFiles } });
         setError(null);
       }
-      fileInputRef.current.value = null; // Reset input
+      fileInputRef.current.value = null;
     },
     [handleFileChange]
   );
@@ -191,7 +193,8 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
               fileKey: file.name,
               url: fileUrlsRef.current.get(file) || URL.createObjectURL(file),
               contentType: file.type,
-              duration: file.type.startsWith('video') ? 0 : undefined, // Placeholder
+              duration: file.type.startsWith('video') ? 0 : undefined,
+              isRecorded: file.isRecorded || false, // Include isRecorded flag
             })),
             style: {},
             hashtags: [],
@@ -260,18 +263,18 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
             ) : file.type.startsWith('video') ? (
               <video
                 src={fileUrl}
-                style={TweetContentStyles.popupPreviewMedia}
+                style={TweetContentStyles.popupCirclePreviewMedia}
                 controls
                 preload="metadata"
                 poster={fileUrl + '#t=0.1'}
                 aria-label={`Video preview ${index + 1}`}
               />
             ) : file.type.startsWith('audio') ? (
-              <Box sx={{ position: 'relative', width: '100%', height: '80px' }}>
+              <Box sx={TweetContentStyles.popupAudioPlayer}>
                 <audio
                   src={fileUrl}
                   controls
-                  style={{ width: '100%', height: '100%' }}
+                  style={{ width: '100%' }}
                   preload="metadata"
                   aria-label={`Audio preview ${index + 1}`}
                 />
@@ -382,6 +385,8 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         ...TweetContentStyles.popupPaper,
         top: y,
         left: x,
+        // width: { xs: '90vw', sm: POPUP_WIDTH },
+        // maxWidth: '95vw',
       }}
       role="dialog"
       aria-labelledby="tweet-popup-title"
@@ -391,7 +396,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
       <Typography id="tweet-popup-title" sx={TweetContentStyles.popupTitle}>
         Create a new tweet
       </Typography>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: { xs: 1.5, sm: 2 } }}>
         {error && (
           <Alert severity="error" onClose={() => setError(null)} sx={{ borderRadius: 2 }}>
             {error}
@@ -440,18 +445,34 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
           </Box>
         )}
         {renderMediaButtons}
-        <TextField
-          label="Schedule (optional)"
-          type="datetime-local"
-          value={form.scheduledAt}
-          onChange={(e) => setForm((prev) => ({ ...prev, scheduledAt: e.target.value }))}
-          fullWidth
-          InputLabelProps={{ shrink: true }}
-          sx={TweetContentStyles.popupTextField}
-          inputProps={{ min: new Date().toISOString().slice(0, 16) }}
-          aria-label="Schedule tweet"
-          disabled={loading || recording}
-        />
+        <Button
+          onClick={() => setShowSchedule((prev) => !prev)}
+          startIcon={<Schedule />}
+          variant="text"
+          size="small"
+          sx={{
+            alignSelf: 'flex-start',
+            textTransform: 'none',
+            color: 'primary.main',
+          }}
+          aria-label={showSchedule ? 'Hide schedule' : 'Show schedule'}
+        >
+          {showSchedule ? 'Hide Schedule' : 'Schedule Post'}
+        </Button>
+        <Collapse in={showSchedule} timeout="auto">
+          <TextField
+            label="Schedule (optional)"
+            type="datetime-local"
+            value={form.scheduledAt}
+            onChange={(e) => setForm((prev) => ({ ...prev, scheduledAt: e.target.value }))}
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+            sx={TweetContentStyles.popupTextField}
+            inputProps={{ min: new Date().toISOString().slice(0, 16) }}
+            aria-label="Schedule tweet"
+            disabled={loading || recording}
+          />
+        </Collapse>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2, gap: 1 }}>
           <Button
             onClick={handleSubmit}

@@ -45,7 +45,7 @@ const Board = ({
   const navigate = useNavigate();
   const { showNotification } = useNotification();
   const boardMainRef = useRef(null);
-  const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0 });
+  const [tweetPopup, setTweetPopup] = useState({ visible: false });
   const [replyTweet, setReplyTweet] = useState(null);
   const [highlightedTweetId, setHighlightedTweetId] = useState(null);
   const [editTweetModal, setEditTweetModal] = useState(null);
@@ -205,12 +205,12 @@ const Board = ({
   const handleReply = useCallback(
     (tweet) => {
       const tweetElement = document.getElementById(`tweet-${tweet.tweet_id}`);
-      const parentTweetHeight = tweetElement ? tweetElement.getBoundingClientRect().height : 150;
+      // const parentTweetHeight = tweetElement ? tweetElement.getBoundingClientRect().height : 150;
       setReplyTweet(tweet);
       setTweetPopup({
         visible: true,
         x: tweet.position.x,
-        y: tweet.position.y + (parentTweetHeight + 10) / scale,
+        y: tweet.position.y,
       });
     },
     [scale]
