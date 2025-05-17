@@ -1,18 +1,182 @@
 import { alpha } from '@mui/material';
 
+// Constants for reuse
 const MAX_TWEET_LENGTH = 1000;
+const POPUP_WIDTH = 320;
+const POPUP_HEIGHT = 400;
+const BOARD_SIZE = 10000;
+
+// Reusable utility functions for dynamic styles
+const dynamicCharCountColor = (isError) => ({
+  color: isError ? 'error.main' : 'text.secondary',
+});
+
+const dynamicMediaButtonColor = (isActive) => ({
+  color: isActive ? 'primary.main' : 'text.secondary',
+  bgcolor: isActive ? 'primary.light' : 'transparent',
+});
 
 const TweetContentStyles = {
-  // Tweet Card (Paper)
-  tweetCard: (isPinned, isParentHighlighted, isListView) => ({
+  // ===============================
+  // TweetPopup Styles
+  // ===============================
+  popupPaper: {
+    position: 'absolute',
+    p: 2,
+    minWidth: { xs: '280px', sm: '320px' },
+    maxWidth: { xs: '90vw', sm: '400px' },
+    bgcolor: 'background.paper',
+    borderRadius: 2,
+    zIndex: 1400,
+    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+    '&:hover': {
+      transform: 'translateY(-2px)',
+      boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
+    },
+  },
+  popupTitle: {
+    display: 'none', // Hidden for accessibility
+  },
+  popupTextField: {
+    '& .MuiInputBase-root': {
+      borderRadius: '20px',
+      padding: '8px 16px',
+      bgcolor: 'background.default',
+    },
+    '& .MuiOutlinedInput-notchedOutline': {
+      borderColor: 'grey.300',
+    },
+    '&:hover .MuiOutlinedInput-notchedOutline': {
+      borderColor: 'primary.main',
+    },
+    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+      boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.1)}`,
+    },
+  },
+  popupCharCount: (isError) => ({
+    alignSelf: 'flex-end',
+    fontSize: '0.75rem',
+    ...dynamicCharCountColor(isError),
+  }),
+  popupFilePreviewContainer: {
+    mt: 1,
+    bgcolor: 'grey.100',
+    borderRadius: 2,
+    p: 1,
+    transition: 'background-color 0.2s ease',
+    '&:hover': { bgcolor: 'grey.200' },
+  },
+  popupPreviewMedia: {
+    width: '100%',
+    height: '80px',
+    objectFit: 'cover',
+    borderRadius: 4,
+    border: '1px solid',
+    borderColor: 'grey.300',
+    transition: 'transform 0.2s ease',
+    '&:hover': { transform: 'scale(1.02)' },
+  },
+  popupPreviewPlaceholder: {
+    width: '100%',
+    height: '80px',
+    bgcolor: 'grey.200',
+    borderRadius: 4,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '0.75rem',
+    color: 'text.secondary',
+  },
+  popupDeleteFileButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    bgcolor: 'error.main',
+    color: 'white',
+    '&:hover': { bgcolor: 'error.dark' },
+    p: 0.5,
+  },
+  popupActionButton: {
+    borderRadius: 2,
+    textTransform: 'none',
+    px: 3,
+    py: 1,
+    fontWeight: 500,
+    '&:hover': { bgcolor: 'primary.dark' },
+  },
+  popupCancelButton: {
+    borderRadius: 2,
+    textTransform: 'none',
+    px: 3,
+    py: 1,
+    bgcolor: 'grey.300',
+    color: 'text.primary',
+    '&:hover': { bgcolor: 'grey.400' },
+  },
+  popupMediaButton: (isActive) => ({
+    p: 1,
+    borderRadius: '50%',
+    transition: 'all 0.2s ease',
+    ...dynamicMediaButtonColor(isActive),
+    '&:hover': { color: 'primary.main' },
+  }),
+  popupRecordingChip: {
+    bgcolor: 'error.main',
+    color: 'white',
+    fontWeight: 500,
+    borderRadius: 1,
+    px: 1,
+    py: 0.5,
+  },
+  popupProgressContainer: {
+    mt: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 0.5,
+  },
+  popupLivePreview: {
+    width: '100%',
+    height: '120px',
+    borderRadius: 4,
+    border: '1px solid',
+    borderColor: 'grey.300',
+    bgcolor: 'black',
+    display: 'block',
+    mt: 1,
+  },
+  popupAudioVisualizer: {
+    width: '100%',
+    height: '60px',
+    borderRadius: 4,
+    bgcolor: 'grey.900',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    mt: 1,
+    overflow: 'hidden',
+  },
+  popupVisualizerBar: (index) => ({
+    width: '4px',
+    height: '100%',
+    bgcolor: 'primary.main',
+    mx: '1px',
+    transition: 'height 0.1s ease',
+    animation: `pulse${index} 0.5s ease-in-out infinite alternate`,
+    [`@keyframes pulse${index}`]: {
+      '0%': { transform: 'scaleY(0.3)' },
+      '100%': { transform: 'scaleY(1)' },
+    },
+  }),
+
+  // ===============================
+  // TweetContent Styles
+  // ===============================
+  tweetCard: (isPinned, isListView) => ({
     p: 4,
     mb: 1,
     bgcolor: (theme) =>
-    isPinned
-      ? alpha(theme.palette.warning.light, 0.25)
-      : isParentHighlighted
-      ? alpha(theme.palette.primary.light, 0.15)
-      : theme.palette.background.paper,
+      isPinned ? alpha(theme.palette.warning.light, 0.25) : theme.palette.background.paper,
     borderRadius: 3,
     minWidth: { xs: '60vw', sm: '360px' },
     maxWidth: isListView ? { xs: '90vw', sm: '900px' } : { xs: '90vw', sm: '360px' },
@@ -20,10 +184,7 @@ const TweetContentStyles = {
     transition: 'all 0.3s ease-in-out',
     position: 'relative',
     opacity: 0.97,
-    border: (theme) =>
-    isParentHighlighted
-      ? `2px solid ${theme.palette.primary.main}`
-      : `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
+    border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
     '&:hover': {
       transform: 'translateY(-4px)',
       boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
@@ -40,19 +201,10 @@ const TweetContentStyles = {
       outlineOffset: 2,
       opacity: 1,
     },
-    '&.list-view': {
-      maxWidth: { xs: '95vw', sm: '680px' },
-      margin: '0 auto',
-      mb: 3
-    },
   }),
-
-  // Hidden Tweet Title
   tweetTitle: {
     display: 'none',
   },
-
-  // Pinned Icon
   pinnedIconContainer: {
     position: 'absolute',
     top: 12,
@@ -67,8 +219,6 @@ const TweetContentStyles = {
       transform: 'scale(1.15)',
     },
   },
-
-  // Reply To Section
   replyToContainer: {
     borderLeft: (theme) => `4px solid ${theme.palette.primary.main}`,
     pl: 2,
@@ -91,8 +241,6 @@ const TweetContentStyles = {
     fontSize: { xs: '0.9rem', sm: '0.95rem' },
     lineHeight: 1.5,
   },
-
-  // Tweet Content
   contentText: (hasMedia) => ({
     mb: hasMedia ? 2.5 : 0,
     color: 'text.primary',
@@ -102,8 +250,6 @@ const TweetContentStyles = {
     lineHeight: 1.6,
     letterSpacing: '0.01em',
   }),
-
-  // Image Grid
   imageContainer: (hasText) => ({
     position: 'relative',
     mb: hasText ? 2.5 : 0,
@@ -146,26 +292,6 @@ const TweetContentStyles = {
     color: 'grey.500',
     fontSize: { xs: '0.85rem', sm: '0.9rem' },
   },
-  imageOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    background: 'rgba(0,0,0,0.5)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: '10px',
-    opacity: 0,
-    transition: 'opacity 0.3s ease',
-    '&:hover': { opacity: 1 },
-  },
-  imageOverlayText: {
-    color: 'white',
-    fontWeight: 600,
-    fontSize: { xs: '0.85rem', sm: '0.9rem' },
-  },
   imageViewAll: {
     color: 'primary.main',
     cursor: 'pointer',
@@ -183,8 +309,6 @@ const TweetContentStyles = {
       textDecoration: 'underline',
     },
   },
-
-  // Video
   videoContainer: (hasTextOrImages) => ({
     mb: hasTextOrImages ? 2.5 : 0,
     mt: 1.5,
@@ -226,8 +350,6 @@ const TweetContentStyles = {
       color: 'primary.dark',
     },
   },
-
-  // Audio
   audioContainer: (hasTextOrMedia) => ({
     mb: hasTextOrMedia ? 2.5 : 0,
     mt: 1.5,
@@ -235,18 +357,6 @@ const TweetContentStyles = {
     flexDirection: 'row',
     flexWrap: 'wrap',
   }),
-  audioInner: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 1,
-    bgcolor: 'grey.100',
-    p: 1.5,
-    borderRadius: '10px',
-    transition: 'background-color 0.3s ease, box-shadow 0.3s ease',
-    '&:hover': {
-      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-    },
-  },
   audio: {
     width: '100%',
     maxHeight: '48px',
@@ -271,10 +381,8 @@ const TweetContentStyles = {
       color: 'primary.dark',
     },
   },
-
-  // Other Files
-  otherFilesContainer: (hasTextOrMedia) => ({
-    mb: hasTextOrMedia ? 2.5 : 0,
+  otherFilesContainer: (hasText) => ({
+    mb: hasText ? 2.5 : 0,
     mt: 1.5,
     width: '100%',
     maxWidth: { xs: '100%', sm: '360px' },
@@ -319,29 +427,6 @@ const TweetContentStyles = {
       color: 'primary.dark',
     },
   },
-
-  // Metadata
-  metadataContainer: {
-    mt: 2,
-    borderTop: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
-    pt: 1.5,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 0.75,
-  },
-  authorText: {
-    color: 'text.secondary',
-    fontSize: { xs: '0.9rem', sm: '0.95rem' },
-    lineHeight: 1.5,
-    fontWeight: 500,
-  },
-  statusText: {
-    color: 'text.secondary',
-    fontSize: { xs: '0.8rem', sm: '0.85rem' },
-    fontStyle: 'italic',
-  },
-
-  // Actions
   actionsContainer: {
     display: 'flex',
     alignItems: 'center',
@@ -436,8 +521,6 @@ const TweetContentStyles = {
       bgcolor: (theme) => alpha(theme.palette.error.main, 0.15),
     },
   },
-
-  // Media Modal
   mediaModalBox: {
     position: 'absolute',
     top: '50%',
@@ -475,7 +558,7 @@ const TweetContentStyles = {
     objectFit: 'contain',
     objectPosition: 'center',
     borderRadius: '10px',
-    border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
+    border: (theme) => ` over 1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
     transition: 'opacity 0.3s ease, box-shadow 0.3s ease',
     '&:hover': {
       boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
@@ -536,48 +619,197 @@ const TweetContentStyles = {
     },
   },
 
-  // Edit Dialog
-  editDialogContent: {
-    mt: 2.5,
+  // ===============================
+  // Board Styles
+  // ===============================
+  boardContainer: {
+    display: 'flex',
+    width: '100%',
+    height: '100%',
+    overflow: 'hidden',
+  },
+  boardMain: (isListView, dragging) => ({
+    flex: 1,
+    position: 'relative',
+    overflow: isListView ? 'auto' : 'hidden',
+    cursor: isListView ? 'default' : dragging ? 'grabbing' : 'grab',
+    touchAction: isListView ? 'auto' : 'none',
+    bgcolor: isListView ? 'grey.50' : 'background.paper',
+  }),
+  boardCanvas: (scale, offset) => ({
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: BOARD_SIZE,
+    height: BOARD_SIZE,
+    backgroundColor: 'background.paper',
+    backgroundImage: 'radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)',
+    backgroundSize: '20px 20px',
+    transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+    transformOrigin: 'top left',
+  }),
+  boardTitleContainer: (scale) => ({
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: `translate(-50%, -50%) scale(${1 / scale})`,
+    pointerEvents: 'none',
+    maxWidth: '80vw',
+    textAlign: 'center',
+  }),
+  boardTitle: (titleLength) => ({
+    color: 'grey.300',
+    fontSize: `${Math.min(16, 100 / (titleLength || 1))}vw`,
+    fontWeight: 700,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    '@media (max-width: 600px)': { fontSize: `calc(${Math.min(16, 100 / (titleLength || 1))}vw * 0.8)` },
+  }),
+  boardEmptyMessage: {
+    position: 'absolute',
+    top: '60%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    color: 'text.secondary',
+    fontSize: '1rem',
+  },
+  boardBackButtonContainer: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    zIndex: 1100,
+  },
+  boardBackButton: {
+    fontSize: { xs: '1.25rem', sm: '1.5rem' },
+    bgcolor: 'background.paper',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    '&:hover': { bgcolor: 'grey.100', transform: 'scale(1.1)' },
+  },
+  boardControlsContainer: {
+    position: 'fixed',
+    bottom: 16,
+    right: 16,
+    zIndex: 1100,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1.5,
+    bgcolor: 'background.paper',
+    borderRadius: 2,
+    p: 0.75,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    '&:hover': { transform: 'scale(1.03)' },
+    '@media (max-width: 600px)': { transform: 'scale(0.9)', gap: 1 },
+  },
+  boardViewToggleButton: {
+    borderRadius: 2,
+    textTransform: 'none',
+    px: { xs: 1.5, sm: 2 },
+    py: 0.5,
+    bgcolor: 'grey.100',
+    color: 'text.primary',
+    '&:hover': {
+      bgcolor: 'primary.light',
+      transform: 'scale(1.03)',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+    },
+    '@media (max-width: 600px)': { fontSize: '0.75rem', px: 1 },
+  },
+  boardZoomButton: {
+    bgcolor: 'grey.100',
+    '&:hover': { bgcolor: 'grey.200', transform: 'scale(1.1)' },
+  },
+  boardZoomText: {
+    fontSize: { xs: '0.8rem', sm: '0.875rem' },
+    color: 'text.secondary',
+    fontWeight: 500,
+  },
+  boardListViewContainer: {
+    p: { xs: 2, sm: 3 },
+    maxWidth: { xs: '95vw', sm: '680px' },
+    mx: 'auto',
     display: 'flex',
     flexDirection: 'column',
-    gap: 2.5,
+    minHeight: '100%',
   },
-  editTextField: {
-    '& .MuiOutlinedInput-root': {
-      borderRadius: 2,
-      transition: 'all 0.3s ease',
-      '&:hover fieldset': {
-        borderColor: 'primary.main',
-      },
-      '&.Mui-focused fieldset': {
-        boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.15)}`,
-      },
-    },
-  },
-  editCharCount: (charCount) => ({
-    display: 'block',
-    mt: 0.75,
-    fontSize: { xs: '0.8rem', sm: '0.85rem' },
-    color:
-      charCount > MAX_TWEET_LENGTH
-        ? 'error.main'
-        : charCount > MAX_TWEET_LENGTH * 0.9
-        ? 'warning.main'
-        : 'text.secondary',
-    transition: 'color 0.3s ease',
+  boardListViewTweet: (isReply) => ({
+    width: '100%',
+    maxWidth: { xs: '95vw', sm: '600px' },
+    mx: 'auto',
+    mb: 2,
+    pl: isReply ? 4 : 0,
+    borderLeft: isReply
+      ? (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.3)}`
+      : 'none',
   }),
-  editFormControl: {
+  boardErrorContainer: {
+    p: 3,
+    textAlign: 'center',
+  },
+  boardErrorText: {
+    color: 'error.main',
+    mb: 2,
+    fontWeight: 500,
+    fontSize: '1rem',
+  },
+  boardErrorButton: {
+    borderRadius: 2,
+    textTransform: 'none',
+    px: 3,
+    py: 1,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transform: 'scale(1.03)', bgcolor: 'primary.light' },
+  },
+  boardEditDialog: {
+    '& .MuiDialog-paper': { borderRadius: 2, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', p: 2 },
+  },
+  boardEditDialogTitle: {
+    fontWeight: 500,
+    fontSize: { xs: '1.1rem', sm: '1.25rem' },
+    pb: 1,
+  },
+  boardEditDialogContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+    pt: 1,
+  },
+  boardEditTextField: {
     '& .MuiOutlinedInput-root': {
       borderRadius: 2,
-      transition: 'all 0.3s ease',
-      '&:hover fieldset': {
-        borderColor: 'primary.main',
-      },
+      '&:hover fieldset': { borderColor: 'primary.main' },
       '&.Mui-focused fieldset': {
-        boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.15)}`,
+        boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.1)}`,
       },
     },
+  },
+  boardEditFormControl: {
+    '& .MuiOutlinedInput-root': {
+      borderRadius: 2,
+      '&:hover fieldset': { borderColor: 'primary.main' },
+      '&.Mui-focused fieldset': {
+        boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.1)}`,
+      },
+    },
+  },
+  boardEditCancelButton: {
+    borderRadius: 2,
+    textTransform: 'none',
+    px: 3,
+    color: 'text.secondary',
+    '&:hover': { bgcolor: 'grey.100', transform: 'scale(1.03)' },
+  },
+  boardEditSaveButton: {
+    borderRadius: 2,
+    textTransform: 'none',
+    px: 3,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    '&:hover': {
+      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+      transform: 'scale(1.03)',
+      bgcolor: 'primary.light',
+    },
+    '&:disabled': { bgcolor: 'grey.300', color: 'grey.500', boxShadow: 'none' },
   },
 };
 

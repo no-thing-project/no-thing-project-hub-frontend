@@ -24,6 +24,7 @@ import PropTypes from 'prop-types';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import Emoji from 'react-emoji-render';
 import TweetContentStyles from './tweetContentStyles';
+import { isEqual } from 'lodash';
 
 const MAX_TWEET_LENGTH = 1000;
 
@@ -62,6 +63,7 @@ const TweetContent = ({
   const [openMediaModal, setOpenMediaModal] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // Memoized derived data
   const tweetAuthor = useMemo(
     () => tweet.username || tweet.user?.username || 'Someone',
     [tweet.username, tweet.user?.username]
@@ -72,6 +74,33 @@ const TweetContent = ({
     [tweet.liked_by, currentUser?.anonymous_id]
   );
 
+  const canEdit = useMemo(() => {
+    if (bypassOwnership || ['moderator', 'admin'].includes(userRole)) return true;
+    return (
+      tweet.anonymous_id === currentUser?.anonymous_id ||
+      tweet.user_id === currentUser?.anonymous_id ||
+      (tweet.username &&
+        currentUser?.username &&
+        tweet.username.toLowerCase() === currentUser.username.toLowerCase())
+    );
+  }, [bypassOwnership, userRole, tweet, currentUser]);
+
+  const isRelated = useMemo(
+    () => relatedTweetIds.includes(tweet.tweet_id),
+    [relatedTweetIds, tweet.tweet_id]
+  );
+
+  const hasReplies = useMemo(() => replyCount > 0 || tweet.child_tweet_ids?.length > 0, [replyCount, tweet.child_tweet_ids]);
+  const replyLabel = useMemo(
+    () => (hasReplies ? `${replyCount || tweet.child_tweet_ids?.length} ${replyCount === 1 ? 'Reply' : 'Replies'}` : ''),
+    [hasReplies, replyCount, tweet.child_tweet_ids]
+  );
+
+  const rawStatus = tweet.status || 'unknown';
+  const chipColor = statusColorMap[rawStatus] || 'default';
+  const chipLabel = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+
+  // Like animation
   useEffect(() => {
     if (tweet.stats?.like_count !== undefined) {
       setAnimate(true);
@@ -80,6 +109,7 @@ const TweetContent = ({
     }
   }, [tweet.stats?.like_count]);
 
+  // Event handlers
   const handleMouseEnter = useCallback(() => {
     setHovered(true);
     if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
@@ -123,22 +153,9 @@ const TweetContent = ({
     handleMenuClose();
   }, [onDelete, tweet.tweet_id, handleMenuClose]);
 
-  const canEdit = useMemo(() => {
-    if (bypassOwnership || ['moderator', 'admin'].includes(userRole)) return true;
-    return (
-      tweet.anonymous_id === currentUser?.anonymous_id ||
-      tweet.user_id === currentUser?.anonymous_id ||
-      (tweet.username &&
-        currentUser?.username &&
-        tweet.username === currentUser.username)
-    );
-  }, [bypassOwnership, userRole, tweet, currentUser]);
+  const handleToggleExpand = useCallback(() => setIsExpanded((prev) => !prev), []);
 
-  const isRelated = useMemo(
-    () => relatedTweetIds.includes(tweet.tweet_id),
-    [relatedTweetIds, tweet.tweet_id]
-  );
-
+  // Memoized highlight style
   const highlightStyle = useMemo(() => {
     if (hovered || isRelated || isParentHighlighted) {
       return {
@@ -152,6 +169,22 @@ const TweetContent = ({
     return {};
   }, [hovered, isRelated, isParentHighlighted]);
 
+  // Memoized text content
+  const { previewText, remainderText } = useMemo(() => {
+    const text = tweet.content?.value || '';
+    const PREVIEW_LEN = 200;
+    if (text.length <= PREVIEW_LEN) {
+      return { previewText: text, remainderText: '' };
+    }
+    const cutoff = text.slice(0, PREVIEW_LEN);
+    const lastSpace = cutoff.lastIndexOf(' ') > -1 ? cutoff.lastIndexOf(' ') : PREVIEW_LEN;
+    return {
+      previewText: cutoff.slice(0, lastSpace),
+      remainderText: text.slice(lastSpace),
+    };
+  }, [tweet.content?.value]);
+
+  // Memoized media content
   const renderContent = useMemo(() => {
     const files = tweet.content?.metadata?.files || [];
     const hasText = !!tweet.content?.value;
@@ -184,7 +217,7 @@ const TweetContent = ({
                   effect="blur"
                   style={TweetContentStyles.image(imageFiles.length === 1)}
                   onError={(e) => (e.target.src = '/fallback-image.png')}
-                  placeholder={<Box sx={TweetContentStyles.imagePlaceholder} />}
+                  placeholder={<Box sx={TweetContentStyles.imagePlaceholder}>Loading...</Box>}
                 />
               </Grid>
             ))}
@@ -296,70 +329,89 @@ const TweetContent = ({
 
     return (
       <>
-        {hasText &&
-          (() => {
-            const text = tweet.content.value;
-            const PREVIEW_LEN = 200;
-
-            let previewText = text;
-            let remainderText = '';
-            if (text.length > PREVIEW_LEN) {
-              const cutoff = text.slice(0, PREVIEW_LEN);
-              const lastSpace = cutoff.lastIndexOf(' ');
-              previewText = cutoff.slice(0, lastSpace);
-              remainderText = text.slice(lastSpace);
-            }
-
-            return (
-              <Box>
-                <Typography variant="body1" sx={TweetContentStyles.contentText(hasMedia)}>
-                  <Emoji text={previewText + (!isExpanded && remainderText ? '...' : '')} />
+        {hasText && (
+          <Box>
+            <Typography sx={TweetContentStyles.contentText(hasMedia)}>
+              <Emoji text={previewText + (!isExpanded && remainderText ? '...' : '')} />
+            </Typography>
+            {remainderText && (
+              <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                <Typography sx={TweetContentStyles.contentText(hasMedia)}>
+                  <Emoji text={remainderText} />
                 </Typography>
-
-                {remainderText && (
-                  <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                    <Typography variant="body1" sx={TweetContentStyles.contentText(hasMedia)}>
-                      <Emoji text={remainderText} />
-                    </Typography>
-                  </Collapse>
-                )}
-
-                {remainderText && (
-                  <Button
-                    onClick={() => setIsExpanded((prev) => !prev)}
-                    size="small"
-                    variant="text"
-                    sx={{
-                      textTransform: 'none',
-                      mt: 1,
-                      p: 0,
-                      color: 'text.secondary',
-                    }}
-                    aria-label={isExpanded ? 'Show less text' : 'Read more text'}
-                  >
-                    {isExpanded ? 'Show less' : 'Read more'}
-                  </Button>
-                )}
-              </Box>
-            );
-          })()}
+              </Collapse>
+            )}
+            {remainderText && (
+              <Button
+                onClick={handleToggleExpand}
+                size="small"
+                variant="text"
+                sx={TweetContentStyles.readMoreButton}
+                aria-label={isExpanded ? 'Show less text' : 'Read more text'}
+              >
+                {isExpanded ? 'Show less' : 'Read more'}
+              </Button>
+            )}
+          </Box>
+        )}
         {renderImages()}
         {renderVideos()}
         {renderAudio()}
         {renderOtherFiles()}
       </>
     );
-  }, [tweet.content, isExpanded, handleOpenMediaModal]);
+  }, [tweet.content, previewText, remainderText, isExpanded, handleOpenMediaModal]);
 
-  const hasReplies = useMemo(() => tweet.child_tweet_ids?.length > 0 || replyCount > 0, [tweet.child_tweet_ids, replyCount]);
-  const replyLabel = useMemo(
-    () => (hasReplies ? `${replyCount || tweet.child_tweet_ids.length} ${replyCount === 1 ? 'Reply' : 'Replies'}` : ''),
-    [hasReplies, replyCount, tweet.child_tweet_ids]
-  );
+  // Memoized modal content
+  const modalContent = useMemo(() => {
+    const files = tweet.content?.metadata?.files || [];
+    return (
+      <Box sx={TweetContentStyles.mediaModalContent}>
+        {files.map((file, idx) => (
+          <Box key={file.fileKey || `media-${idx}`}>
+            {file.contentType?.startsWith('image') ? (
+              <LazyLoadImage
+                src={file.url}
+                alt={`Media ${idx + 1}`}
+                effect="blur"
+                style={TweetContentStyles.modalImage}
+                onError={(e) => (e.target.src = '/fallback-image.png')}
+                placeholder={<Box sx={TweetContentStyles.modalImagePlaceholder}>Loading...</Box>}
+              />
+            ) : file.contentType?.startsWith('video') ? (
+              <video src={file.url} controls style={TweetContentStyles.modalVideo} aria-label={`Video ${idx + 1}`} />
+            ) : file.contentType?.startsWith('audio') ? (
+              <audio src={file.url} controls style={TweetContentStyles.modalAudio} aria-label={`Audio ${idx + 1}`} />
+            ) : (
+              <Box sx={TweetContentStyles.modalOtherFile}>
+                <InsertDriveFileIcon sx={TweetContentStyles.modalOtherFileIcon} />
+                <Link
+                  href={file.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={TweetContentStyles.modalOtherFileLink}
+                >
+                  {file.fileKey || `File ${idx + 1}`}
+                </Link>
+              </Box>
+            )}
+          </Box>
+        ))}
+      </Box>
+    );
+  }, [tweet.content?.metadata?.files]);
 
-  const rawStatus = tweet.status || 'unknown';
-  const chipColor = statusColorMap[rawStatus] || 'default';
-  const chipLabel = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+  // Fallback rendering for invalid tweet
+  if (!tweet.tweet_id || !tweet.content) {
+    return (
+      <Paper sx={TweetContentStyles.tweetCard(false, isListView)} role="article">
+        <Typography sx={TweetContentStyles.tweetTitle}>Invalid Tweet</Typography>
+        <Typography variant="body2" color="error">
+          This tweet is missing required data.
+        </Typography>
+      </Paper>
+    );
+  }
 
   return (
     <>
@@ -397,8 +449,8 @@ const TweetContent = ({
           </Box>
         )}
         {renderContent}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2, mb: 2 }}>
-          <Chip label={chipLabel} color={chipColor} size="small" />
+        <Box sx={TweetContentStyles.statusContainer}>
+          <Chip label={chipLabel} color={chipColor} size="small" aria-label={`Tweet status: ${chipLabel}`} />
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             Author: {tweetAuthor}
           </Typography>
@@ -406,7 +458,7 @@ const TweetContent = ({
         <Box sx={TweetContentStyles.actionsContainer}>
           <Box sx={TweetContentStyles.actionButtons}>
             <IconButton
-              size="small"
+              size="medium"
               onClick={(e) => {
                 e.stopPropagation();
                 onLike(tweet.tweet_id, isLiked);
@@ -414,13 +466,13 @@ const TweetContent = ({
               aria-label={isLiked ? 'Unlike tweet' : 'Like tweet'}
               sx={TweetContentStyles.likeButton}
             >
-              <ThumbUpIcon fontSize="small" sx={TweetContentStyles.likeIcon(isLiked)} />
+              <ThumbUpIcon sx={TweetContentStyles.likeIcon(isLiked)} />
             </IconButton>
             <Typography variant="caption" sx={TweetContentStyles.likeCount(isLiked, animate)}>
               {tweet.stats?.like_count || 0}
             </Typography>
             <IconButton
-              size="small"
+              size="medium"
               onClick={(e) => {
                 e.stopPropagation();
                 onReply(tweet);
@@ -428,7 +480,7 @@ const TweetContent = ({
               aria-label="Reply to tweet"
               sx={TweetContentStyles.replyButton}
             >
-              <ChatBubbleOutlineIcon fontSize="small" sx={TweetContentStyles.replyIcon} />
+              <ChatBubbleOutlineIcon sx={TweetContentStyles.replyIcon} />
             </IconButton>
             {hasReplies && (
               <Typography variant="caption" sx={TweetContentStyles.replyCount}>
@@ -439,7 +491,7 @@ const TweetContent = ({
           {canEdit && (
             <Box>
               <IconButton
-                size="small"
+                size="medium"
                 onClick={handleMenuOpen}
                 className="tweet-menu"
                 aria-label="Tweet options"
@@ -447,7 +499,7 @@ const TweetContent = ({
                 aria-haspopup="true"
                 sx={TweetContentStyles.menuButton}
               >
-                <MoreVertIcon fontSize="small" sx={TweetContentStyles.menuIcon} />
+                <MoreVertIcon sx={TweetContentStyles.menuIcon} />
               </IconButton>
               <Menu
                 id={`tweet-menu-${tweet.tweet_id}`}
@@ -456,11 +508,17 @@ const TweetContent = ({
                 onClose={handleMenuClose}
                 slotProps={{ paper: { sx: TweetContentStyles.menuPaper } }}
               >
-                <MenuItem onClick={handleEdit}>Edit Tweet</MenuItem>
-                <MenuItem onClick={handlePin}>
+                <MenuItem onClick={handleEdit} aria-label="Edit tweet">
+                  Edit Tweet
+                </MenuItem>
+                <MenuItem onClick={handlePin} aria-label={tweet.is_pinned ? 'Unpin tweet' : 'Pin tweet'}>
                   {tweet.is_pinned ? 'Unpin Tweet' : 'Pin Tweet'}
                 </MenuItem>
-                <MenuItem onClick={handleDelete} sx={TweetContentStyles.deleteMenuItem}>
+                <MenuItem
+                  onClick={handleDelete}
+                  sx={TweetContentStyles.deleteMenuItem}
+                  aria-label="Delete tweet"
+                >
                   Delete
                 </MenuItem>
               </Menu>
@@ -479,45 +537,37 @@ const TweetContent = ({
       >
         <Fade in={openMediaModal}>
           <Box sx={TweetContentStyles.mediaModalBox} role="dialog" aria-labelledby="media-modal-title">
-            <Typography id="media-modal-title" variant="h6" sx={TweetContentStyles.mediaModalTitle}>
+            <Typography id="media-modal-title" sx={TweetContentStyles.mediaModalTitle}>
               All Media
             </Typography>
-            <Box sx={TweetContentStyles.mediaModalContent}>
-              {(tweet.content?.metadata?.files || []).map((file, idx) => (
-                <Box key={file.fileKey || `media-${idx}`}>
-                  {file.contentType?.startsWith('image') ? (
-                    <LazyLoadImage
-                      src={file.url}
-                      alt={`Media ${idx + 1}`}
-                      effect="blur"
-                      style={TweetContentStyles.modalImage}
-                      onError={(e) => (e.target.src = '/fallback-image.png')}
-                      placeholder={<Box sx={TweetContentStyles.modalImagePlaceholder} />}
-                    />
-                  ) : file.contentType?.startsWith('video') ? (
-                    <video src={file.url} controls style={TweetContentStyles.modalVideo} aria-label={`Video ${idx + 1}`} />
-                  ) : file.contentType?.startsWith('audio') ? (
-                    <audio src={file.url} controls style={TweetContentStyles.modalAudio} aria-label={`Audio ${idx + 1}`} />
-                  ) : (
-                    <Box sx={TweetContentStyles.modalOtherFile}>
-                      <InsertDriveFileIcon sx={TweetContentStyles.modalOtherFileIcon} />
-                      <Link
-                        href={file.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        sx={TweetContentStyles.modalOtherFileLink}
-                      >
-                        {file.fileKey || `File ${idx + 1}`}
-                      </Link>
-                    </Box>
-                  )}
-                </Box>
-              ))}
-            </Box>
+            {modalContent}
           </Box>
         </Fade>
       </Modal>
     </>
+  );
+};
+
+// Custom comparison function for React.memo
+const arePropsEqual = (prevProps, nextProps) => {
+  return (
+    isEqual(prevProps.tweet, nextProps.tweet) &&
+    isEqual(prevProps.currentUser, nextProps.currentUser) &&
+    prevProps.userRole === nextProps.userRole &&
+    prevProps.onLike === nextProps.onLike &&
+    prevProps.onDelete === nextProps.onDelete &&
+    prevProps.onReply === nextProps.onReply &&
+    prevProps.onReplyHover === nextProps.onReplyHover &&
+    prevProps.onEdit === nextProps.onEdit &&
+    prevProps.onPinToggle === nextProps.onPinToggle &&
+    prevProps.isParentHighlighted === nextProps.isParentHighlighted &&
+    prevProps.replyCount === nextProps.replyCount &&
+    prevProps.parentTweetText === nextProps.parentTweetText &&
+    prevProps.bypassOwnership === nextProps.bypassOwnership &&
+    isEqual(prevProps.relatedTweetIds, nextProps.relatedTweetIds) &&
+    isEqual(prevProps.availableBoards, nextProps.availableBoards) &&
+    prevProps.boardId === nextProps.boardId &&
+    prevProps.isListView === nextProps.isListView
   );
 };
 
@@ -605,4 +655,4 @@ TweetContent.defaultProps = {
   isListView: false,
 };
 
-export default memo(TweetContent);
+export default memo(TweetContent, arePropsEqual);
