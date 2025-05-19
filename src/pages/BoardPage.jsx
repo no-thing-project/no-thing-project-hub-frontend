@@ -49,6 +49,13 @@ import { useClasses } from '../hooks/useClasses';
 import { useNotification } from '../context/NotificationContext';
 import { debounce } from 'lodash';
 
+// Animation variants for buttons
+const buttonVariants = {
+  initial: { opacity: 0, scale: 0.8 },
+  animate: { opacity: 1, scale: 1, transition: { duration: 0.2 } },
+  exit: { opacity: 0, scale: 0.8, transition: { duration: 0.2 } },
+};
+
 const BoardPage = memo(() => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
@@ -155,7 +162,7 @@ const BoardPage = memo(() => {
     [fetchPointsData, showNotification]
   );
 
-  // Initial data fetch
+  // Fetch board data only
   useEffect(() => {
     if (!token || !board_id || !isAuthenticated) return;
 
@@ -169,7 +176,6 @@ const BoardPage = memo(() => {
     };
   }, [token, board_id, isAuthenticated, debouncedFetchBoard]);
 
-  // Points fetch on visibility or tweet action
   useEffect(() => {
     if (!token || !isAuthenticated || !pointsVisible) return;
 
@@ -216,7 +222,7 @@ const BoardPage = memo(() => {
     return () => controller.abort();
   }, [editingBoard, token, isAuthenticated, userRole, fetchGatesList, fetchClassesList, showNotification]);
 
-  // Handle errors
+  // Handle board errors
   useEffect(() => {
     if (boardError) {
       showNotification(boardError || 'An error occurred', 'error');
@@ -265,7 +271,7 @@ const BoardPage = memo(() => {
     } catch (err) {
       showNotification(err.message || 'Failed to update board', 'error');
     }
-  }, [editingBoard, userRole, updateExistingBoard, showNotification]);
+  }, [editingBoard, userRole, updateExistingBoard, showNotification, board_id]);
 
   const handleFavorite = useCallback(async () => {
     if (!boardData) return;
@@ -377,10 +383,6 @@ const BoardPage = memo(() => {
     [gates]
   );
 
-  const handleTweetAction = useCallback(() => {
-    debouncedFetchPoints();
-  }, [debouncedFetchPoints]);
-
   const childBoardMenuItems = useMemo(() => {
     const uniqueChildIds = [...new Set(boardData?.child_board_ids?.filter((id) => id) || [])];
     return uniqueChildIds.map((childId) => (
@@ -420,132 +422,88 @@ const BoardPage = memo(() => {
           {boardLoading ? (
             <>
               <Skeleton variant="circular" width={40} height={40} />
-              <Skeleton variant="circular" width={40} height={40} />
-              <Skeleton variant="circular" width={40} height={40} />
             </>
           ) : (
-            boardData && (
-              <>
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Tooltip title={`Board visibility: ${boardVisibility}`}>
-                    <IconButton aria-label={`Board visibility: ${boardVisibility}`}>
-                      {boardVisibility === 'public' ? <Public /> : <Lock />}
-                    </IconButton>
-                  </Tooltip>
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Tooltip title={isFavorited ? 'Unfavorite Board' : 'Favorite Board'}>
-                    <IconButton
-                      onClick={handleFavorite}
-                      aria-label={isFavorited ? 'Unfavorite board' : 'Favorite board'}
-                    >
-                      {isFavorited ? <Favorite color="error" /> : <FavoriteBorder />}
-                    </IconButton>
-                  </Tooltip>
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Tooltip title="Share Board">
-                    <IconButton onClick={handleShare} aria-label="Share board">
-                      <Share />
-                    </IconButton>
-                  </Tooltip>
-                </motion.div>
-                {(userRole === 'owner' || userRole === 'admin') && (
-                  <>
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <Tooltip title="Manage Members">
-                        <IconButton
-                          onClick={handleManageMembers}
-                          aria-label={`Manage members (current count: ${members?.length || 0})`}
-                        >
-                          <Badge badgeContent={members?.length || 0} color="default">
-                            <People />
-                          </Badge>
-                        </IconButton>
-                      </Tooltip>
-                    </motion.div>
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <Tooltip title="Edit Board">
-                        <IconButton onClick={handleEdit} aria-label="Edit board">
-                          <Edit />
-                        </IconButton>
-                      </Tooltip>
-                    </motion.div>
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <Tooltip title="Clear Board Tweets">
-                        <IconButton onClick={() => setClearDialogOpen(true)} aria-label="Clear board tweets">
-                          <Brush color="error" />
-                        </IconButton>
-                      </Tooltip>
-                    </motion.div>
-                  </>
-                )}
-                {userRole === 'owner' && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                    transition={{ duration: 0.2 }}
+            <>
+              <motion.div variants={buttonVariants} initial="initial" animate="animate" exit="exit">
+                <Tooltip title={`Board visibility: ${boardVisibility}`}>
+                  <IconButton aria-label={`Board visibility: ${boardVisibility}`}>
+                    {boardVisibility === 'public' ? <Public /> : <Lock />}
+                  </IconButton>
+                </Tooltip>
+              </motion.div>
+              <motion.div variants={buttonVariants} initial="initial" animate="animate" exit="exit">
+                <Tooltip title={isFavorited ? 'Unfavorite Board' : 'Favorite Board'}>
+                  <IconButton
+                    onClick={handleFavorite}
+                    aria-label={isFavorited ? 'Unfavorite board' : 'Favorite board'}
                   >
-                    <Tooltip title="Delete Board">
-                      <IconButton onClick={handleOpenDeleteDialog} aria-label="Delete board">
-                        <Delete color="error" />
-                      </IconButton>
-                    </Tooltip>
-                  </motion.div>
-                )}
-                {boardData?.child_board_ids?.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <Tooltip title="Child Boards">
+                    {isFavorited ? <Favorite color="error" /> : <FavoriteBorder />}
+                  </IconButton>
+                </Tooltip>
+              </motion.div>
+              <motion.div variants={buttonVariants} initial="initial" animate="animate" exit="exit">
+                <Tooltip title="Share Board">
+                  <IconButton onClick={handleShare} aria-label="Share board">
+                    <Share />
+                  </IconButton>
+                </Tooltip>
+              </motion.div>
+              {(userRole === 'owner' || userRole === 'admin') && (
+                <>
+                  <motion.div variants={buttonVariants} initial="initial" animate="animate" exit="exit">
+                    <Tooltip title="Manage Members">
                       <IconButton
-                        aria-controls="board-menu"
-                        aria-haspopup="true"
-                        onClick={handleMenuOpen}
-                        sx={{ bgcolor: 'background.paper', '&:hover': { bgcolor: 'action.hover' } }}
-                        aria-label="Open child boards menu"
+                        onClick={handleManageMembers}
+                        aria-label={`Manage members (current count: ${members?.length || 0})`}
                       >
-                        <MoreVert />
+                        <Badge badgeContent={members?.length || 0} color="default">
+                          <People />
+                        </Badge>
                       </IconButton>
                     </Tooltip>
                   </motion.div>
-                )}
-              </>
-            )
+                  <motion.div variants={buttonVariants} initial="initial" animate="animate" exit="exit">
+                    <Tooltip title="Edit Board">
+                      <IconButton onClick={handleEdit} aria-label="Edit board">
+                        <Edit />
+                      </IconButton>
+                    </Tooltip>
+                  </motion.div>
+                  <motion.div variants={buttonVariants} initial="initial" animate="animate" exit="exit">
+                    <Tooltip title="Clear Board Tweets">
+                      <IconButton onClick={() => setClearDialogOpen(true)} aria-label="Clear board tweets">
+                        <Brush color="error" />
+                      </IconButton>
+                    </Tooltip>
+                  </motion.div>
+                </>
+              )}
+              {userRole === 'owner' && (
+                <motion.div variants={buttonVariants} initial="initial" animate="animate" exit="exit">
+                  <Tooltip title="Delete Board">
+                    <IconButton onClick={handleOpenDeleteDialog} aria-label="Delete board">
+                      <Delete color="error" />
+                    </IconButton>
+                  </Tooltip>
+                </motion.div>
+              )}
+              {boardData?.child_board_ids?.length > 0 && (
+                <motion.div variants={buttonVariants} initial="initial" animate="animate" exit="exit">
+                  <Tooltip title="Child Boards">
+                    <IconButton
+                      aria-controls="board-menu"
+                      aria-haspopup="true"
+                      onClick={handleMenuOpen}
+                      sx={{ bgcolor: 'background.paper', '&:hover': { bgcolor: 'action.hover' } }}
+                      aria-label="Open child boards menu"
+                    >
+                      <MoreVert />
+                    </IconButton>
+                  </Tooltip>
+                </motion.div>
+              )}
+            </>
           )}
         </AnimatePresence>
         <Menu
@@ -576,23 +534,30 @@ const BoardPage = memo(() => {
           '@media (max-width: 600px)': { transform: 'scale(0.8)' },
         }}
       >
-        {pointsVisible ? (
-          pointsLoading ? (
-            <Skeleton variant="circular" width={40} height={40} />
+        <AnimatePresence>
+          {pointsVisible ? (
+            pointsLoading ? (
+              <Skeleton variant="circular" width={40} height={40} />
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Tooltip title="Available points">
+                  <IconButton size="small" aria-label={`Available points: ${pointsData?.total_points || 0}`}>
+                    <Toll />
+                  </IconButton>
+                </Tooltip>
+                <AnimatedPoints points={pointsData?.total_points || 0} />
+                {pointsSpent > 0 && <PointsDeductionAnimation pointsSpent={pointsSpent} />}
+              </motion.div>
+            )
           ) : (
-            <>
-              <Tooltip title="Available points">
-                <IconButton size="small" aria-label="Available points">
-                  <Toll />
-                </IconButton>
-              </Tooltip>
-              <AnimatedPoints points={pointsData?.total_points || 0} />
-              {pointsSpent > 0 && <PointsDeductionAnimation pointsSpent={pointsSpent} />}
-            </>
-          )
-        ) : (
-          <Skeleton variant="circular" width={40} height={40} />
-        )}
+            <Skeleton variant="circular" width={40} height={40} />
+          )}
+        </AnimatePresence>
       </Box>
 
       <Board
@@ -603,7 +568,6 @@ const BoardPage = memo(() => {
         userRole={userRole}
         onLogout={handleLogout}
         availableBoards={[]}
-        onTweetAction={handleTweetAction}
       />
 
       {editingBoard && (
@@ -647,8 +611,9 @@ const BoardPage = memo(() => {
         maxWidth="sm"
         fullWidth
         sx={{ '& .MuiDialog-paper': { borderRadius: theme.shape.borderRadiusMedium } }}
+        aria-labelledby="share-dialog-title"
       >
-        <DialogTitle>Share Board</DialogTitle>
+        <DialogTitle id="share-dialog-title">Share Board</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>
             Copy the link below to share this board:
