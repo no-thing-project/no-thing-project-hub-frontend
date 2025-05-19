@@ -39,7 +39,6 @@ const Board = ({
   token,
   currentUser,
   userRole,
-  onTweetAction,
   onLogout,
   availableBoards = [],
 }) => {
@@ -194,7 +193,6 @@ const Board = ({
           files,
           onProgress
         );
-        await onTweetAction();
         showNotification('Tweet created successfully!', 'success');
         setTweetPopup({ visible: false });
         setReplyTweet(null);
@@ -205,7 +203,7 @@ const Board = ({
         throw err;
       }
     },
-    [createNewTweet, onTweetAction, replyTweet, showNotification, boardId, currentUser, setTweets]
+    [createNewTweet, replyTweet, showNotification, boardId, currentUser, setTweets]
   );
 
   // Handle reply
@@ -804,7 +802,6 @@ Board.propTypes = {
     username: PropTypes.string,
   }).isRequired,
   userRole: PropTypes.string.isRequired,
-  onTweetAction: PropTypes.func.isRequired,
   onLogout: PropTypes.func.isRequired,
   availableBoards: PropTypes.arrayOf(
     PropTypes.shape({
