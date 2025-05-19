@@ -12,7 +12,17 @@ import {
   Tooltip,
   Button,
 } from '@mui/material';
-import { MoreVert, Reply, Edit, Delete, Forward, Done, DoneAll, EmojiEmotions, InsertDriveFile } from '@mui/icons-material';
+import {
+  MoreVert,
+  Reply,
+  Edit,
+  Delete,
+  Forward,
+  Done,
+  DoneAll,
+  EmojiEmotions,
+  InsertDriveFile,
+} from '@mui/icons-material';
 import { format, isToday, isYesterday } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import EmojiPicker from 'emoji-picker-react';
@@ -172,18 +182,33 @@ const MessageBubble = ({
     }
   }, [onContextMenu, message]);
 
-  const renderDeliveryStatus = () => {
+  const renderDeliveryStatus = useCallback(() => {
     if (!isSentByCurrentUser) return null;
     if (message.is_read) {
-      return <DoneAll sx={{ fontSize: 14, color: theme.palette.primary.main }} />;
+      return (
+        <DoneAll
+          sx={{ fontSize: 14, color: theme.palette.primary.main }}
+          aria-label="Message read"
+        />
+      );
     }
     if (message.delivery_status === 'delivered') {
-      return <Done sx={{ fontSize: 14, color: theme.palette.grey[600] }} />;
+      return (
+        <Done
+          sx={{ fontSize: 14, color: theme.palette.grey[600] }}
+          aria-label="Message delivered"
+        />
+      );
     }
-    return <Done sx={{ fontSize: 14, color: theme.palette.grey[400] }} />;
-  };
+    return (
+      <Done
+        sx={{ fontSize: 14, color: theme.palette.grey[400] }}
+        aria-label="Message sent"
+      />
+    );
+  }, [isSentByCurrentUser, message.is_read, message.delivery_status, theme]);
 
-  const getVideoStyle = () => {
+  const getVideoStyle = useCallback(() => {
     switch (chatSettings?.videoShape) {
       case 'circle':
         return { borderRadius: '50%', overflow: 'hidden' };
@@ -193,7 +218,7 @@ const MessageBubble = ({
       default:
         return { borderRadius: '8px', aspectRatio: '16/9' };
     }
-  };
+  }, [chatSettings?.videoShape]);
 
   return (
     <motion.div
@@ -265,22 +290,35 @@ const MessageBubble = ({
                   },
                 }}
                 onClick={() => {
-                  const element = document.getElementById(`message-${repliedMessage.message_id}`);
+                  const element = document.getElementById(
+                    `message-${repliedMessage.message_id}`
+                  );
                   element?.scrollIntoView({ behavior: 'smooth' });
                   setHighlightedMessage(repliedMessage.message_id);
-                  setTimeout(() => setHighlightedMessage(null), MESSAGE_CONSTANTS.HIGHLIGHT_DURATION);
+                  setTimeout(
+                    () => setHighlightedMessage(null),
+                    MESSAGE_CONSTANTS.HIGHLIGHT_DURATION
+                  );
                 }}
                 role="button"
                 tabIndex={0}
                 onKeyPress={(e) => e.key === 'Enter' && e.target.click()}
-                aria-label={`Replied message preview from ${getSenderName(repliedMessage.sender_id)}`}
+                aria-label={`Replied message preview from ${getSenderName(
+                  repliedMessage.sender_id
+                )}`}
               >
                 <Typography
                   variant="caption"
-                  sx={{ color: theme.palette.text.secondary, display: 'block', fontWeight: 'bold' }}
+                  sx={{
+                    color: theme.palette.text.secondary,
+                    display: 'block',
+                    fontWeight: 'bold',
+                  }}
                 >
-                  {message.isTextReply ? 'Replying to selected text' : 'Replying to message'} by{' '}
-                  {getSenderName(repliedMessage.sender_id)}
+                  {message.isTextReply
+                    ? 'Replying to selected text'
+                    : 'Replying to message'}{' '}
+                  by {getSenderName(repliedMessage.sender_id)}
                 </Typography>
                 <Typography
                   variant="body2"
@@ -302,7 +340,9 @@ const MessageBubble = ({
               sx={{
                 display: 'flex',
                 width: '100%',
-                bgcolor: isSentByCurrentUser ? theme.palette.primary.light : theme.palette.grey[200],
+                bgcolor: isSentByCurrentUser
+                  ? theme.palette.primary.light
+                  : theme.palette.grey[200],
                 borderRadius: 2,
                 borderTopLeftRadius: isSentByCurrentUser ? 16 : 0,
                 borderTopRightRadius: isSentByCurrentUser ? 0 : 16,
@@ -319,7 +359,10 @@ const MessageBubble = ({
                     sx={{
                       whiteSpace: 'pre-wrap',
                       wordBreak: 'break-word',
-                      ...getFontStyles(chatSettings?.fontSize, chatSettings?.fontStyle),
+                      ...getFontStyles(
+                        chatSettings?.fontSize,
+                        chatSettings?.fontStyle
+                      ),
                     }}
                   >
                     {message.content}
@@ -341,7 +384,9 @@ const MessageBubble = ({
                           maxHeight: '300px',
                           objectFit: 'contain',
                         }}
-                        onError={() => setMediaError(`Failed to load image ${index + 1}`)}
+                        onError={() =>
+                          setMediaError(`Failed to load image ${index + 1}`)
+                        }
                         loading="lazy"
                       />
                     )}
@@ -355,7 +400,9 @@ const MessageBubble = ({
                           display: 'block',
                           ...getVideoStyle(),
                         }}
-                        onError={() => setMediaError(`Failed to load video ${index + 1}`)}
+                        onError={() =>
+                          setMediaError(`Failed to load video ${index + 1}`)
+                        }
                         loading="lazy"
                       />
                     )}
@@ -365,7 +412,10 @@ const MessageBubble = ({
                         <a
                           href={media.url}
                           download
-                          style={{ color: theme.palette.primary.main, textDecoration: 'none' }}
+                          style={{
+                            color: theme.palette.primary.main,
+                            textDecoration: 'none',
+                          }}
                         >
                           {media.fileKey || 'Download File'}
                         </a>
@@ -375,7 +425,9 @@ const MessageBubble = ({
                 ))}
                 {message.poll && (
                   <Box sx={{ mt: 1 }}>
-                    <Typography variant="subtitle2">{message.poll.question}</Typography>
+                    <Typography variant="subtitle2">
+                      {message.poll.question}
+                    </Typography>
                     {message.poll.options.map((option, index) => (
                       <Box
                         key={index}
@@ -396,19 +448,27 @@ const MessageBubble = ({
                             variant="outlined"
                             onClick={() => onVotePoll(message.message_id, index)}
                             disabled={message.poll.voted}
+                            aria-label={`Vote for ${option.text}`}
                           >
                             Vote
                           </Button>
                         </Box>
                       </Box>
                     ))}
-                    <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+                    <Typography
+                      variant="caption"
+                      sx={{ mt: 1, display: 'block' }}
+                    >
                       Total votes: {totalPollVotes}
                     </Typography>
                   </Box>
                 )}
                 {mediaError && (
-                  <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
+                  <Typography
+                    variant="caption"
+                    color="error"
+                    sx={{ mt: 1, display: 'block' }}
+                  >
                     {mediaError}
                   </Typography>
                 )}
@@ -419,7 +479,9 @@ const MessageBubble = ({
                 sx={{
                   alignSelf: 'flex-start',
                   p: 0.5,
-                  color: isSentByCurrentUser ? theme.palette.grey[600] : theme.palette.grey[700],
+                  color: isSentByCurrentUser
+                    ? theme.palette.grey[600]
+                    : theme.palette.grey[700],
                 }}
                 aria-label="Message options"
               >
@@ -439,7 +501,10 @@ const MessageBubble = ({
             {message.reactions?.length > 0 && (
               <Box sx={{ display: 'flex', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
                 {Object.entries(reactionCounts).map(([emoji, count]) => (
-                  <Tooltip key={emoji} title={`${count} reaction${count > 1 ? 's' : ''}`}>
+                  <Tooltip
+                    key={emoji}
+                    title={`${count} reaction${count > 1 ? 's' : ''}`}
+                  >
                     <Chip
                       label={`${emoji} ${count}`}
                       size="small"
@@ -452,6 +517,7 @@ const MessageBubble = ({
                           : theme.palette.grey[300],
                         cursor: 'pointer',
                       }}
+                      aria-label={`${count} reactions with ${emoji}`}
                     />
                   </Tooltip>
                 ))}
@@ -461,36 +527,40 @@ const MessageBubble = ({
         </Box>
       </Box>
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
-        <MenuItem onClick={handleReply}>
+        <MenuItem onClick={handleReply} aria-label="Reply to message">
           <Reply fontSize="small" sx={{ mr: 1 }} /> Reply
         </MenuItem>
         {isSentByCurrentUser && message.content && (
-          <MenuItem onClick={handleEdit}>
+          <MenuItem onClick={handleEdit} aria-label="Edit message">
             <Edit fontSize="small" sx={{ mr: 1 }} /> Edit
           </MenuItem>
         )}
         {isSentByCurrentUser && (
-          <MenuItem onClick={handleDelete}>
+          <MenuItem onClick={handleDelete} aria-label="Delete message">
             <Delete fontSize="small" sx={{ mr: 1 }} /> Delete
           </MenuItem>
         )}
-        <MenuItem onClick={handleForward}>
+        <MenuItem onClick={handleForward} aria-label="Forward message">
           <Forward fontSize="small" sx={{ mr: 1 }} /> Forward
         </MenuItem>
-        <MenuItem onClick={handleEmojiOpen}>
+        <MenuItem onClick={handleEmojiOpen} aria-label="Add reaction">
           <EmojiEmotions fontSize="small" sx={{ mr: 1 }} /> Add Reaction
         </MenuItem>
         {message.pinned ? (
-          <MenuItem onClick={handleUnpin}>
+          <MenuItem onClick={handleUnpin} aria-label="Unpin message">
             <Delete fontSize="small" sx={{ mr: 1 }} /> Unpin
           </MenuItem>
         ) : (
-          <MenuItem onClick={handlePin}>
+          <MenuItem onClick={handlePin} aria-label="Pin message">
             <Delete fontSize="small" sx={{ mr: 1 }} /> Pin
           </MenuItem>
         )}
       </Menu>
-      <Menu anchorEl={emojiAnchorEl} open={Boolean(emojiAnchorEl)} onClose={handleEmojiClose}>
+      <Menu
+        anchorEl={emojiAnchorEl}
+        open={Boolean(emojiAnchorEl)}
+        onClose={handleEmojiClose}
+      >
         <MenuItem sx={{ p: 0 }}>
           <EmojiPicker onEmojiClick={handleReaction} />
         </MenuItem>

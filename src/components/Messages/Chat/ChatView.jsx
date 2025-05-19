@@ -10,6 +10,7 @@ import ChatFooter from './ChatFooter';
 import ChatSettingsModal from '../ChatSettingsModal';
 import { isSameDay } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
+import { useNotification } from '../../../context/NotificationContext';
 
 const ChatView = ({
   currentUserId,
@@ -21,9 +22,6 @@ const ChatView = ({
   onForwardMessage,
   token,
   fetchMessagesList,
-  pendingMediaList,
-  setPendingMediaFile,
-  clearPendingMedia,
   friends,
   messages,
   setMessages,
@@ -32,9 +30,11 @@ const ChatView = ({
   onVotePoll,
   onPinMessage,
   onUnpinMessage,
+  onTyping,
   socket,
 }) => {
   const theme = useTheme();
+  const { showNotification } = useNotification();
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
@@ -53,15 +53,15 @@ const ChatView = ({
   const conversationId = conversation?.conversation_id || null;
   const isGroupChat = conversation?.type === 'group' || false;
 
+  // Clear error after timeout
   useEffect(() => {
     if (error) {
-      const timer = setTimeout(() => {
-        setError(null);
-      }, 5000);
+      const timer = setTimeout(() => setError(null), 5000);
       return () => clearTimeout(timer);
     }
   }, [error]);
 
+  // Filter and sort messages
   const filteredMessages = useMemo(() => {
     if (!conversationId) return [];
     const validMessages = (messages || []).filter(
@@ -72,6 +72,7 @@ const ChatView = ({
     ).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   }, [messages, conversationId, isGroupChat]);
 
+  // Fetch messages for pagination
   const fetchMessagesForPage = useCallback(
     async (targetPage, reset = false) => {
       if (!conversationId || isFetching || !hasMore) return;
@@ -104,30 +105,32 @@ const ChatView = ({
         setHasMore(newMessages.length === 20);
         setPage(targetPage + 1);
       } catch (err) {
-        console.error(`[ChatView] Fetch messages error: ${err.message}`);
-        setError('Failed to load messages.');
+        const errorMsg = err.message || 'Failed to load messages.';
+        setError(errorMsg);
+        showNotification(errorMsg, 'error');
       } finally {
         setIsFetching(false);
       }
     },
-    [conversationId, fetchMessagesList, isGroupChat, setMessages, hasMore, isFetching]
+    [conversationId, fetchMessagesList, isGroupChat, setMessages, hasMore, isFetching, showNotification]
   );
 
+  // Initial message fetch
   useEffect(() => {
     if (conversationId) {
       fetchMessagesForPage(1, true);
     }
   }, [conversationId, fetchMessagesForPage]);
 
+  // Real-time message updates
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !conversationId) return;
 
     const handleNewMessage = (newMessage) => {
-      console.log('[ChatView] Received new message:', newMessage);
       if (
         !newMessage?.message_id ||
-        ((isGroupChat && newMessage.group_id !== conversationId) ||
-         (!isGroupChat && newMessage.conversation_id !== conversationId))
+        (isGroupChat && newMessage.group_id !== conversationId) ||
+        (!isGroupChat && newMessage.conversation_id !== conversationId)
       ) {
         return;
       }
@@ -146,17 +149,25 @@ const ChatView = ({
           (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
         );
       });
+
+      if (newMessage.sender_id !== currentUserId) {
+        onMarkRead(newMessage.message_id).catch((err) =>
+          showNotification('Failed to mark message as read', 'error')
+        );
+      }
     };
 
     socket.on(`new_message_${socketListenerId.current}`, handleNewMessage);
     return () => {
       socket.off(`new_message_${socketListenerId.current}`, handleNewMessage);
     };
-  }, [socket, isGroupChat, conversationId, setMessages]);
+  }, [socket, isGroupChat, conversationId, setMessages, currentUserId, onMarkRead, showNotification]);
 
+  // Send message
   const handleSendMessage = useCallback(
     async (messageData) => {
       if (!conversationId || (!messageData.content?.trim() && !messageData.media?.length)) {
+        showNotification('Message content or media is required', 'error');
         return false;
       }
 
@@ -209,39 +220,51 @@ const ChatView = ({
         setReplyToMessage(null);
         return true;
       } catch (err) {
-        console.error(`[ChatView] Send message error: ${err.message}`);
-        setError('Failed to send message.');
+        const errorMsg = err.message || 'Failed to send message.';
+        setError(errorMsg);
+        showNotification(errorMsg, 'error');
         setMessages((prev) => prev.filter((m) => m.client_message_id !== clientMessageId));
         return false;
       }
     },
-    [conversationId, currentUserId, onSendMediaMessage, setMessages, setReplyToMessage]
+    [conversationId, currentUserId, onSendMediaMessage, setMessages, setReplyToMessage, showNotification]
   );
 
+  // Retry failed message
   const handleRetrySend = useCallback(
     async (messageData) => {
       try {
         await handleSendMessage(messageData);
         setError(null);
       } catch (err) {
-        console.error(`[ChatView] Retry send error: ${err.message}`);
-        setError('Failed to retry sending message.');
+        const errorMsg = err.message || 'Failed to retry sending message.';
+        setError(errorMsg);
+        showNotification(errorMsg, 'error');
       }
     },
-    [handleSendMessage]
+    [handleSendMessage, showNotification]
   );
 
+  // Placeholder for clearPendingMedia (to be removed if not needed)
+  const clearPendingMedia = useCallback(() => {
+    // No-op function to prevent errors in ChatFooter
+    // TODO: Verify if ChatFooter requires this and implement or remove
+  }, []);
+
+  // Load more messages
   const handleLoadMore = useCallback(() => {
     if (!isFetching && hasMore) {
       fetchMessagesForPage(page);
     }
   }, [fetchMessagesForPage, isFetching, hasMore, page]);
 
+  // Save chat settings
   const handleSettingsSave = useCallback((newSettings) => {
     setChatSettings(newSettings);
     setSettingsOpen(false);
   }, []);
 
+  // Calculate message item size
   const itemSize = useCallback(
     (index) => {
       const message = filteredMessages[index];
@@ -256,6 +279,7 @@ const ChatView = ({
     [filteredMessages]
   );
 
+  // Render message item
   const renderItem = useCallback(
     ({ index, style }) => {
       return (
@@ -283,10 +307,13 @@ const ChatView = ({
             onPinMessage={onPinMessage}
             onUnpinMessage={onUnpinMessage}
             chatSettings={chatSettings}
-            showDate={index === 0 || !isSameDay(
-              new Date(filteredMessages[index].timestamp),
-              new Date(filteredMessages[index - 1]?.timestamp)
-            )}
+            showDate={
+              index === 0 ||
+              !isSameDay(
+                new Date(filteredMessages[index].timestamp),
+                new Date(filteredMessages[index - 1]?.timestamp)
+              )
+            }
             socket={socket}
           />
         </div>
@@ -318,6 +345,7 @@ const ChatView = ({
     ]
   );
 
+  // Auto-scroll to bottom
   useEffect(() => {
     if (filteredMessages.length > 0 && listRef.current && isNearBottomRef.current) {
       setTimeout(() => {
@@ -326,18 +354,26 @@ const ChatView = ({
     }
   }, [filteredMessages]);
 
+  // Track scroll position
   useEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
+    const outerRef = listRef.current?._outerRef;
+    if (!outerRef) return;
 
     const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = list._outerRef;
+      const { scrollTop, scrollHeight, clientHeight } = outerRef;
       isNearBottomRef.current = scrollTop + clientHeight >= scrollHeight - 100;
+      if (scrollTop < 100 && hasMore && !isFetching) {
+        handleLoadMore();
+      }
     };
 
-    list._outerRef.addEventListener('scroll', handleScroll);
-    return () => list._outerRef.removeEventListener('scroll', handleScroll);
-  }, []);
+    outerRef.addEventListener('scroll', handleScroll);
+    return () => {
+      if (outerRef) {
+        outerRef.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, [hasMore, isFetching, handleLoadMore]);
 
   if (!conversation || !conversationId) {
     return (
@@ -354,11 +390,11 @@ const ChatView = ({
         flexDirection: 'column',
         height: '100%',
         border: '1px solid',
-        borderColor: 'grey.300',
+        borderColor: theme.palette.grey[300],
         borderRadius: 2,
         bgcolor: theme.palette.background.paper,
       }}
-      aria-label="Chat View 2"
+      aria-label="Chat View"
     >
       {error && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
@@ -380,9 +416,7 @@ const ChatView = ({
         friends={friends}
         currentUserId={currentUserId}
       />
-      <Box sx={{ flex: 1, overflow: 'hidden' }}
-      aria-label="Chat Messages"
-      >
+      <Box sx={{ flex: 1, overflow: 'hidden' }} aria-label="Chat Messages">
         <AutoSizer>
           {({ height, width }) => (
             <VariableSizeList
@@ -408,9 +442,6 @@ const ChatView = ({
         conversationId={conversationId}
         recipient={conversation}
         onSendMediaMessage={handleSendMessage}
-        pendingMediaList={pendingMediaList}
-        setPendingMediaFile={setPendingMediaFile}
-        clearPendingMedia={clearPendingMedia}
         replyToMessage={replyToMessage}
         setReplyToMessage={setReplyToMessage}
         isGroupChat={isGroupChat}
@@ -418,6 +449,8 @@ const ChatView = ({
         currentUserId={currentUserId}
         friends={friends}
         socket={socket}
+        onTyping={onTyping}
+        clearPendingMedia={clearPendingMedia} // Added to maintain compatibility
       />
       <ChatSettingsModal
         open={settingsOpen}
@@ -445,9 +478,6 @@ ChatView.propTypes = {
   onForwardMessage: PropTypes.func.isRequired,
   token: PropTypes.string.isRequired,
   fetchMessagesList: PropTypes.func.isRequired,
-  pendingMediaList: PropTypes.array,
-  setPendingMediaFile: PropTypes.func.isRequired,
-  clearPendingMedia: PropTypes.func.isRequired,
   friends: PropTypes.arrayOf(
     PropTypes.shape({
       anonymous_id: PropTypes.string.isRequired,
@@ -463,7 +493,6 @@ ChatView.propTypes = {
       timestamp: PropTypes.string.isRequired,
       is_read: PropTypes.bool,
       sender_id: PropTypes.string,
-      receiver_id: PropTypes.string,
       type: PropTypes.string,
       media: PropTypes.array,
       replyTo: PropTypes.string,
@@ -480,6 +509,7 @@ ChatView.propTypes = {
   onVotePoll: PropTypes.func.isRequired,
   onPinMessage: PropTypes.func.isRequired,
   onUnpinMessage: PropTypes.func.isRequired,
+  onTyping: PropTypes.func.isRequired,
   socket: PropTypes.object,
 };
 

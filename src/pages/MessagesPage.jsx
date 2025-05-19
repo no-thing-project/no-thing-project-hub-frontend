@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -10,14 +10,12 @@ import {
   useTheme,
 } from '@mui/material';
 import { GroupAdd } from '@mui/icons-material';
-import io from 'socket.io-client';
 import { throttle } from 'lodash';
 import AppLayout from '../components/Layout/AppLayout';
 import LoadingSpinner from '../components/Layout/LoadingSpinner';
 import useAuth from '../hooks/useAuth';
 import useMessages from '../hooks/useMessages';
 import useConversations from '../hooks/useConversations';
-import useUploads from '../hooks/useUploads';
 import useSocial from '../hooks/useSocial';
 import { useNotification } from '../context/NotificationContext';
 import ProfileHeader from '../components/Headers/ProfileHeader';
@@ -42,6 +40,8 @@ const getLocalizedMessage = (key, params = {}) => {
       [MESSAGE_CONSTANTS.ERRORS.SOCKET_CONNECTION]: 'Failed to connect to messaging service.',
       [MESSAGE_CONSTANTS.ERRORS.FRIENDS_LOAD]: 'Failed to load friends.',
       [MESSAGE_CONSTANTS.ERRORS.GROUP_VALIDATION]: 'Group name and at least one member are required.',
+      [MESSAGE_CONSTANTS.ERRORS.LOAD_MORE]: 'Failed to load more conversations.',
+      [MESSAGE_CONSTANTS.ERRORS.CONVERSATION_LOAD]: 'Failed to load conversations.',
     },
   };
   const lang = 'en';
@@ -50,6 +50,8 @@ const getLocalizedMessage = (key, params = {}) => {
 
 const MemoizedConversationsList = React.memo(ConversationsList);
 const MemoizedChatView = React.memo(ChatView);
+const MemoizedGroupChatModal = React.memo(GroupChatModal);
+const MemoizedForwardMessageModal = React.memo(ForwardMessageModal);
 
 const MessagesPage = () => {
   const navigate = useNavigate();
@@ -94,15 +96,13 @@ const MessagesPage = () => {
     loading: messagesLoading,
     error: messagesError,
     clearError: clearMessagesError,
-  } = useMessages({ token, userId: authData?.anonymous_id, onLogout: handleLogout, navigate, updateLastMessage });
-  const {
-    uploads,
-    uploadMediaFile,
-    clearUploads,
-    loading: uploadsLoading,
-    error: uploadsError,
-    clearError: clearUploadsError,
-  } = useUploads({ token, userId: authData?.anonymous_id, onLogout: handleLogout, navigate });
+  } = useMessages({
+    token,
+    userId: authData?.anonymous_id,
+    onLogout: handleLogout,
+    navigate,
+    updateLastMessage,
+  });
   const { friends, getFriends } = useSocial(token, handleLogout, navigate);
 
   const [groupModalOpen, setGroupModalOpen] = useState(false);
@@ -111,24 +111,29 @@ const MessagesPage = () => {
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [friendsFetched, setFriendsFetched] = useState(false);
-  const [socket, setSocket] = useState(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const socketRef = useRef(null);
 
   // Initialize socket.io
   useEffect(() => {
     if (!token || !isAuthenticated) return;
-  
-    connectSocket(token);
-    const socketInstance = getSocket();
-    setSocket(socketInstance);
-  
-    return () => {
-      socketInstance?.disconnect();
-    };
-  }, [token, isAuthenticated]);
-  
 
-  // Handle real-time message updates
+    try {
+      connectSocket(token);
+      socketRef.current = getSocket();
+    } catch (err) {
+      showNotification(getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.SOCKET_CONNECTION), 'error');
+    }
+
+    return () => {
+      socketRef.current?.disconnect();
+    };
+  }, [token, isAuthenticated, showNotification]);
+
+  // Handle real-time updates
   useEffect(() => {
+    const socket = socketRef.current;
     if (!socket || !authData?.anonymous_id) return;
 
     const handleNewMessage = throttle((message) => {
@@ -145,44 +150,100 @@ const MessagesPage = () => {
           (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
         );
       });
-      setConversations((prev) => {
-        const updated = prev.map((conv) =>
+      // Update conversation last message
+      setConversations((prev) =>
+        prev.map((conv) =>
           conv.conversation_id === message.conversation_id
-            ? {
-                ...conv,
-                lastMessage: message,
-                unreadCount:
-                  message.sender_id !== authData.anonymous_id && !message.is_read
-                    ? (conv.unreadCount || 0) + 1
-                    : conv.unreadCount,
-              }
+            ? { ...conv, lastMessage: message }
             : conv
-        );
-        return [...updated].sort((a, b) => {
-          const aTime = a.lastMessage?.timestamp ? new Date(a.lastMessage.timestamp) : 0;
-          const bTime = b.lastMessage?.timestamp ? new Date(b.lastMessage.timestamp) : 0;
-          return bTime - aTime;
-        });
-      });
+        )
+      );
     }, MESSAGE_CONSTANTS.THROTTLE_MS);
 
+    const handleConversationCreated = (newConv) => {
+      if (!newConv?.conversation_id) {
+        console.warn('Invalid conversation received:', newConv);
+        return;
+      }
+      setConversations((prev) => {
+        if (prev.some((c) => c.conversation_id === newConv.conversation_id)) {
+          return prev;
+        }
+        return [newConv, ...prev];
+      });
+    };
+
     socket.on(SOCKET_EVENTS.MESSAGE, handleNewMessage);
+    socket.on(SOCKET_EVENTS.CONVERSATION_CREATED, handleConversationCreated);
 
     return () => {
       socket.off(SOCKET_EVENTS.MESSAGE, handleNewMessage);
+      socket.off(SOCKET_EVENTS.CONVERSATION_CREATED, handleConversationCreated);
     };
-  }, [socket, setMessages, setConversations, authData?.anonymous_id]);
+  }, [socketRef, setMessages, setConversations, authData?.anonymous_id]);
+
+  // Load initial data
+  useEffect(() => {
+    if (!isAuthenticated) {
+      clearNotifications();
+      return;
+    }
+    if (token) {
+      loadConversations({ page: 1, limit: 20 })
+        .then((data) => {
+          setHasMore(data.conversations.length === 20);
+        })
+        .catch((err) => {
+          showNotification(
+            err.message || getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.CONVERSATION_LOAD),
+            'error'
+          );
+        });
+      if (!friendsFetched && friends.length === 0) {
+        getFriends()
+          .then(() => setFriendsFetched(true))
+          .catch((err) => {
+            showNotification(
+              err.message || getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.FRIENDS_LOAD),
+              'error'
+            );
+          });
+      }
+    }
+  }, [
+    isAuthenticated,
+    token,
+    loadConversations,
+    getFriends,
+    friendsFetched,
+    friends,
+    showNotification,
+  ]);
+
+  // Load more conversations
+  const loadMoreConversations = useCallback(async () => {
+    if (convLoading || !hasMore) return;
+    try {
+      const data = await loadConversations({ page: page + 1, limit: 20 });
+      setPage((prev) => prev + 1);
+      setHasMore(data.conversations.length === 20);
+    } catch (err) {
+      const errorMsg = err.message || getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.LOAD_MORE);
+      setError(errorMsg);
+      showNotification(errorMsg, 'error');
+    }
+  }, [convLoading, hasMore, loadConversations, page, showNotification]);
 
   // Handle typing events
   const handleTyping = useCallback(
     throttle(() => {
       if (selectedConversation?.conversation_id) {
-        sendTypingIndicator(selectedConversation.conversation_id).catch((err) =>
-          console.error('Typing indicator error:', err)
-        );
+        sendTypingIndicator(selectedConversation.conversation_id).catch((err) => {
+          showNotification('Failed to send typing indicator', 'error');
+        });
       }
     }, 1000),
-    [selectedConversation, sendTypingIndicator]
+    [selectedConversation, sendTypingIndicator, showNotification]
   );
 
   const clearNotifications = useCallback(() => {
@@ -190,50 +251,14 @@ const MessagesPage = () => {
     setError('');
     clearMessagesError();
     clearConvError();
-    clearUploadsError();
-  }, [clearMessagesError, clearConvError, clearUploadsError]);
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      clearNotifications();
-      navigate('/login');
-    } else if (token) {
-      loadConversations();
-      if (!friendsFetched && friends.length === 0) {
-        getFriends()
-          .then(() => setFriendsFetched(true))
-          .catch((err) => {
-            console.error('Failed to load friends:', err);
-            setError(getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.FRIENDS_LOAD));
-          });
-      }
-    }
-  }, [isAuthenticated, token, loadConversations, getFriends, clearNotifications, navigate, friendsFetched, friends]);
-
-  useEffect(() => {
-    if (selectedConversation?.conversation_id) {
-      loadMessages(selectedConversation.conversation_id);
-    } else {
-      setMessages([]);
-    }
-  }, [selectedConversation, loadMessages, setMessages]);
-
-  const handleSelectConversation = useCallback(
-    (conv) => {
-      setSelectedConversation(conv);
-      if (conv?.conversation_id) {
-        loadMessages(conv.conversation_id);
-      } else {
-        setMessages([]);
-      }
-    },
-    [loadMessages, setSelectedConversation, setMessages]
-  );
+  }, [clearMessagesError, clearConvError]);
 
   const handleCreateGroup = useCallback(
     async (name, members) => {
       if (!name.trim() || members.length < 1) {
-        setError(getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.GROUP_VALIDATION));
+        const errorMsg = getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.GROUP_VALIDATION);
+        setError(errorMsg);
+        showNotification(errorMsg, 'error');
         return;
       }
       try {
@@ -242,33 +267,29 @@ const MessagesPage = () => {
           name,
           members,
         });
-        if (group) {
-          setSuccess(`${group.name} ${getLocalizedMessage(MESSAGE_CONSTANTS.SUCCESS.GROUP_CREATED)}`);
-          setGroupModalOpen(false);
-          await loadConversations();
-          setSelectedConversation(group);
-        }
+        setSuccess(`${group.name} ${getLocalizedMessage(MESSAGE_CONSTANTS.SUCCESS.GROUP_CREATED)}`);
+        setGroupModalOpen(false);
+        setSelectedConversation(group);
       } catch (err) {
-        console.error('Group creation error:', err);
-        setError(getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.GROUP_CREATE));
-        showNotification(err.message || getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.GROUP_CREATE), 'error');
+        const errorMsg = err.message || getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.GROUP_CREATE);
+        setError(errorMsg);
+        showNotification(errorMsg, 'error');
       }
     },
-    [createNewConversation, loadConversations, setSelectedConversation, showNotification]
+    [createNewConversation, setSelectedConversation, showNotification]
   );
 
-  const handleForwardMessage = useCallback(
-    (message) => {
-      setForwardMessage(message);
-      setForwardModalOpen(true);
-    },
-    []
-  );
+  const handleForwardMessage = useCallback((message) => {
+    setForwardMessage(message);
+    setForwardModalOpen(true);
+  }, []);
 
   const handleForwardConfirm = useCallback(
     async (recipients) => {
       if (!forwardMessage || !recipients.length) {
-        setError('No message or recipients selected');
+        const errorMsg = 'No message or recipients selected';
+        setError(errorMsg);
+        showNotification(errorMsg, 'error');
         return;
       }
       try {
@@ -282,7 +303,7 @@ const MessagesPage = () => {
                 forwardMessage.media,
                 forwardMessage.replyTo,
                 null,
-                forwardMessage.selectedText
+                forwardMessage.message_id
               );
             }
           })
@@ -291,21 +312,13 @@ const MessagesPage = () => {
         setForwardModalOpen(false);
         setForwardMessage(null);
       } catch (err) {
-        console.error('Message forward error:', err);
-        setError(getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.MESSAGE_FORWARD));
-        showNotification(err.message || getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.MESSAGE_FORWARD), 'error');
+        const errorMsg = err.message || getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.MESSAGE_FORWARD);
+        setError(errorMsg);
+        showNotification(errorMsg, 'error');
       }
     },
     [forwardMessage, sendNewMessage, getOrCreateConversation, showNotification]
   );
-
-  const filteredMessages = useMemo(() => {
-    if (!selectedConversation?.conversation_id) return [];
-    const validMessages = (messages || []).filter(
-      (m) => m && m.message_id && m.conversation_id === selectedConversation.conversation_id
-    );
-    return validMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  }, [messages, selectedConversation]);
 
   if (authLoading) return <LoadingSpinner />;
 
@@ -314,7 +327,7 @@ const MessagesPage = () => {
       <Box
         sx={{
           maxWidth: { xs: '100%', md: 1500 },
-          margin: '0 auto',
+          mx: 'auto',
           p: { xs: 1, md: 2 },
           height: '100vh',
           display: 'flex',
@@ -326,23 +339,26 @@ const MessagesPage = () => {
         aria-label="Messages Page"
       >
         <ProfileHeader user={authData} isOwnProfile />
-        {(messagesError || convError || uploadsError || error) && (
+        {(error || convError || messagesError) && (
           <Alert
             severity="error"
             onClose={clearNotifications}
-            sx={{ mt: 2, borderRadius: 1 }}
+            sx={{ mt: 2, borderRadius: 1, mx: { xs: 1, md: 0 } }}
           >
-            {error || messagesError || convError || uploadsError}
+            {error || convError || messagesError}
           </Alert>
         )}
         {success && (
-          <Alert
-            severity="success"
+          <Snackbar
+            open={!!success}
+            autoHideDuration={3000}
             onClose={clearNotifications}
-            sx={{ mt: 2, borderRadius: 1 }}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
           >
-            {success}
-          </Alert>
+            <Alert severity="success" sx={{ width: '100%' }}>
+              {success}
+            </Alert>
+          </Snackbar>
         )}
         <Box
           sx={{
@@ -358,8 +374,8 @@ const MessagesPage = () => {
             startIcon={<GroupAdd aria-hidden="true" />}
             onClick={() => setGroupModalOpen(true)}
             aria-label="Create new group chat"
-            disabled={friends.length === 0}
-            sx={{ minWidth: 'fit-content', borderRadius: 1, px: 3 }}
+            disabled={friends.length === 0 || convLoading}
+            sx={{ minWidth: 'fit-content', borderRadius: 1, px: 3, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
           >
             Create Group
           </Button>
@@ -387,32 +403,29 @@ const MessagesPage = () => {
             }}
             aria-label="Conversations list"
           >
-            {(convLoading || messagesLoading || uploadsLoading) ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-                <CircularProgress aria-label="Loading conversations" />
-              </Box>
-            ) : (
-              <MemoizedConversationsList
-                conversations={conversations}
-                groupChats={conversations.filter((c) => c.type === 'group')}
-                friends={friends}
-                currentUserId={authData?.anonymous_id}
-                onSelectConversation={handleSelectConversation}
-                selectedConversation={selectedConversation}
-                onDeleteGroupChat={deleteConv}
-                onDeleteConversation={deleteConv}
-                messages={messages}
-                getOrCreateConversation={getOrCreateConversation}
-                pinConv={pinConv}
-                unpinConv={unpinConv}
-                archiveConv={archiveConv}
-                unarchiveConv={unarchiveConv}
-                muteConv={muteConv}
-                unmuteConv={unmuteConv}
-                markRead={markRead}
-                socket={socket}
-              />
-            )}
+            <MemoizedConversationsList
+              conversations={conversations}
+              groupChats={conversations.filter((c) => c.type === 'group')}
+              friends={friends}
+              currentUserId={authData?.anonymous_id}
+              onSelectConversation={setSelectedConversation}
+              selectedConversation={selectedConversation}
+              onDeleteConversation={deleteConv}
+              onDeleteGroupChat={deleteConv}
+              messages={messages}
+              getOrCreateConversation={getOrCreateConversation}
+              pinConv={pinConv}
+              unpinConv={unpinConv}
+              archiveConv={archiveConv}
+              unarchiveConv={unarchiveConv}
+              muteConv={muteConv}
+              unmuteConv={unmuteConv}
+              markRead={markRead}
+              socket={socketRef.current}
+              loadMoreConversations={loadMoreConversations}
+              hasMore={hasMore}
+              loading={convLoading}
+            />
           </Box>
           <Box
             sx={{
@@ -428,7 +441,7 @@ const MessagesPage = () => {
               <MemoizedChatView
                 currentUserId={authData?.anonymous_id}
                 conversation={selectedConversation}
-                socket={socket}
+                socket={socketRef.current}
                 onSendMediaMessage={sendNewMessage}
                 onMarkRead={markRead}
                 onDeleteMessage={deleteMsg}
@@ -436,11 +449,8 @@ const MessagesPage = () => {
                 onForwardMessage={handleForwardMessage}
                 token={token}
                 fetchMessagesList={loadMessages}
-                pendingMediaList={uploads}
-                setPendingMediaFile={uploadMediaFile}
-                clearPendingMedia={clearUploads}
                 friends={friends}
-                messages={filteredMessages}
+                messages={messages}
                 setMessages={setMessages}
                 onAddReaction={addMessageReaction}
                 onCreatePoll={createNewPoll}
@@ -456,19 +466,19 @@ const MessagesPage = () => {
                 sx={{ mt: 4, textAlign: 'center' }}
                 aria-label="No conversation selected"
               >
-                Select a conversation to start chatting
+                {getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.NO_CONVERSATION)}
               </Typography>
             )}
           </Box>
         </Box>
-        <GroupChatModal
+        <MemoizedGroupChatModal
           open={groupModalOpen}
           onClose={() => setGroupModalOpen(false)}
           friends={friends}
           currentUserId={authData?.anonymous_id}
           onCreate={handleCreateGroup}
         />
-        <ForwardMessageModal
+        <MemoizedForwardMessageModal
           open={forwardModalOpen}
           onClose={() => {
             setForwardModalOpen(false);

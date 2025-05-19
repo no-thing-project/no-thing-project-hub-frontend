@@ -14,6 +14,7 @@ import {
 import { Search, Clear } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
+import { useNotification } from '../../../context/NotificationContext';
 import ConversationFilter from './ConversationFilter';
 import ConversationItem from './ConversationItem';
 
@@ -36,15 +37,19 @@ const ConversationsList = ({
   unmuteConv,
   markRead,
   socket,
+  loadMoreConversations,
+  hasMore,
+  loading,
 }) => {
   const theme = useTheme();
+  const { showNotification } = useNotification();
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  // Clear success/error notifications after 3 seconds
+  // Clear notifications
   useEffect(() => {
     if (success || error) {
       const timer = setTimeout(() => {
@@ -65,32 +70,38 @@ const ConversationsList = ({
     return () => debouncedSearch.cancel();
   }, [debouncedSearch]);
 
-  // Real-time conversation updates via socket.io
+  // Real-time conversation updates
   useEffect(() => {
     if (!socket) return;
 
-    const handleConversationCreated = (newConv) => {
-      conversations.push(newConv);
-      setSuccess(`Conversation with ${newConv.name || 'new chat'} created!`);
-    };
-
     const handleConversationDeleted = ({ conversationId }) => {
-      conversations.filter((conv) => conv.conversation_id !== conversationId);
+      if (!conversationId) {
+        console.warn('Invalid conversationId received for deletion');
+        return;
+      }
       if (selectedConversation?.conversation_id === conversationId) {
         onSelectConversation(null);
       }
     };
 
-    socket.on('conversationCreated', handleConversationCreated);
     socket.on('conversationDeleted', handleConversationDeleted);
-
     return () => {
-      socket.off('conversationCreated', handleConversationCreated);
       socket.off('conversationDeleted', handleConversationDeleted);
     };
-  }, [socket, conversations, selectedConversation, onSelectConversation]);
+  }, [socket, selectedConversation, onSelectConversation]);
 
-  // Combine conversations and group chats with preview
+  // Handle scroll for infinite loading
+  const handleScroll = useCallback(
+    (event) => {
+      const { scrollTop, scrollHeight, clientHeight } = event.target;
+      if (scrollHeight - scrollTop <= clientHeight * 1.5 && hasMore && !loading) {
+        loadMoreConversations();
+      }
+    },
+    [hasMore, loading, loadMoreConversations]
+  );
+
+  // Combine and process conversations
   const combinedConversations = useMemo(() => {
     const uniqueConversations = new Map();
 
@@ -101,7 +112,10 @@ const ConversationsList = ({
           (f) => conv.participants?.includes(f.anonymous_id) && f.anonymous_id !== currentUserId
         );
         const unreadCount = messages.filter(
-          (m) => m?.conversation_id === conv.conversation_id && !m.is_read && m.sender_id !== currentUserId
+          (m) =>
+            m?.conversation_id === conv.conversation_id &&
+            !m.is_read &&
+            m.sender_id !== currentUserId
         ).length;
         let lastMessage = conv.lastMessage;
         if (typeof lastMessage === 'string') {
@@ -112,12 +126,13 @@ const ConversationsList = ({
           name: conv.name || friend?.username || 'Unknown',
           isGroup: false,
           lastMessage,
-          lastMessagePreview: lastMessage?.content?.slice(0, 50) || (lastMessage?.media?.length ? 'Media message' : ''),
-          created_at: conv.created_at,
+          lastMessagePreview:
+            lastMessage?.content?.slice(0, 50) || (lastMessage?.media?.length ? 'Media message' : ''),
+          created_at: conv.created_at || new Date().toISOString(),
           pinnedBy: conv.pinnedBy || [],
           mutedBy: conv.mutedBy || [],
           isArchived: conv.isArchived || false,
-          participants: conv.participants,
+          participants: conv.participants || [],
           unreadCount,
         });
       }
@@ -138,20 +153,20 @@ const ConversationsList = ({
       uniqueConversations.set(group.conversation_id, {
         conversation_id: group.conversation_id,
         group_id: group.group_id,
-        name: group.name,
+        name: group.name || 'Unnamed Group',
         isGroup: true,
         lastMessage,
-        lastMessagePreview: lastMessage?.content?.slice(0, 50) || (lastMessage?.media?.length ? 'Media message' : ''),
-        created_at: group.created_at,
+        lastMessagePreview:
+          lastMessage?.content?.slice(0, 50) || (lastMessage?.media?.length ? 'Media message' : ''),
+        created_at: group.created_at || new Date().toISOString(),
         pinnedBy: group.pinnedBy || [],
         mutedBy: group.mutedBy || [],
         isArchived: group.isArchived || false,
-        participants: group.participants || group.members,
+        participants: group.participants || group.members || [],
         unreadCount,
       });
     });
 
-    // Sort by pinned status, unread messages, and last message timestamp
     return Array.from(uniqueConversations.values()).sort((a, b) => {
       const aPinned = a.pinnedBy.includes(currentUserId);
       const bPinned = b.pinnedBy.includes(currentUserId);
@@ -224,8 +239,9 @@ const ConversationsList = ({
           onSelectConversation({ ...conv, isGroup: false });
           setSuccess(`Chat with ${item.name} started!`);
         } catch (err) {
-          setError('Failed to start chat');
-          console.error('Create conversation error:', err);
+          const errorMsg = err.message || 'Failed to start chat';
+          setError(errorMsg);
+          showNotification(errorMsg, 'error');
         } finally {
           setIsCreating(false);
         }
@@ -233,21 +249,22 @@ const ConversationsList = ({
         onSelectConversation(item);
       }
     },
-    [onSelectConversation, getOrCreateConversation]
+    [onSelectConversation, getOrCreateConversation, showNotification]
   );
 
   return (
     <Box
       sx={{
         border: '1px solid',
-        borderColor: 'grey.300',
+        borderColor: theme.palette.grey[300],
         borderRadius: 2,
         p: 2,
         bgcolor: theme.palette.background.paper,
         height: '100%',
         overflowY: 'auto',
-        boxShadow: theme.shadows[1],
+        boxSizing: 'border-box',
       }}
+      onScroll={handleScroll}
       aria-label="Conversations list"
     >
       {(success || error) && (
@@ -331,6 +348,11 @@ const ConversationsList = ({
           </AnimatePresence>
         </List>
       )}
+      {loading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+          <CircularProgress size={24} aria-label="Loading more conversations" />
+        </Box>
+      )}
     </Box>
   );
 };
@@ -344,7 +366,7 @@ ConversationsList.propTypes = {
       created_at: PropTypes.string,
       pinnedBy: PropTypes.arrayOf(PropTypes.string),
       mutedBy: PropTypes.arrayOf(PropTypes.string),
-      isFiltered: PropTypes.bool,
+      isArchived: PropTypes.bool,
       type: PropTypes.string,
       lastMessage: PropTypes.oneOfType([
         PropTypes.string,
@@ -417,6 +439,9 @@ ConversationsList.propTypes = {
   unmuteConv: PropTypes.func.isRequired,
   markRead: PropTypes.func.isRequired,
   socket: PropTypes.object,
+  loadMoreConversations: PropTypes.func.isRequired,
+  hasMore: PropTypes.bool.isRequired,
+  loading: PropTypes.bool.isRequired,
 };
 
 export default React.memo(ConversationsList);

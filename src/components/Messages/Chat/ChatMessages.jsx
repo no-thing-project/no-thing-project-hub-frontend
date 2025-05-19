@@ -29,6 +29,7 @@ const PinnedMessages = ({ pinnedMessages, theme, setHighlightedMessage }) => {
         zIndex: 1,
         boxShadow: theme.shadows[1],
       }}
+      aria-label="Pinned messages"
     >
       <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
         Pinned Messages
@@ -42,10 +43,12 @@ const PinnedMessages = ({ pinnedMessages, theme, setHighlightedMessage }) => {
             const element = document.getElementById(`message-${msg.message_id}`);
             element?.scrollIntoView({ behavior: 'smooth' });
             setHighlightedMessage(msg.message_id);
-            setTimeout(() => {
-              setHighlightedMessage(null);
-            }, 3000);
+            setTimeout(() => setHighlightedMessage(null), 3000);
           }}
+          role="button"
+          tabIndex={0}
+          onKeyPress={(e) => e.key === 'Enter' && e.target.click()}
+          aria-label={`Pinned message: ${msg.content?.slice(0, 50) || 'Media message'}`}
         >
           {msg.content?.length > 50 ? `${msg.content.slice(0, 50)}...` : msg.content || 'Media message'}
         </Typography>
@@ -106,7 +109,7 @@ const ChatMessages = ({
   const [error, setError] = useState(null);
 
   const normalizedMessages = useMemo(() => {
-    const msgs = Array.isArray(messages) ? messages : [messages];
+    const msgs = Array.isArray(messages) ? messages : [messages].filter(Boolean);
     return msgs
       .filter((m) => m?.message_id)
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -116,9 +119,7 @@ const ChatMessages = ({
     return normalizedMessages.filter((m) => m?.pinned);
   }, [normalizedMessages]);
 
-  const backgroundStyle = useMemo(() => {
-    return getBackgroundStyle(chatBackground);
-  }, [chatBackground]);
+  const backgroundStyle = useMemo(() => getBackgroundStyle(chatBackground), [chatBackground]);
 
   const getSenderName = useCallback(
     (senderId) => {
@@ -182,25 +183,29 @@ const ChatMessages = ({
   }, [hasMore, isFetching, debouncedLoadMore]);
 
   useEffect(() => {
-    const unreadMessages = normalizedMessages.filter((m) => m?.receiver_id === currentUserId && !m.is_read);
+    const unreadMessages = normalizedMessages.filter(
+      (m) => m?.receiver_id === currentUserId && !m.is_read
+    );
     for (const msg of unreadMessages) {
       if (msg?.message_id) {
-        onMarkRead(msg.message_id);
+        onMarkRead(msg.message_id).catch((err) =>
+          console.error('Mark read error:', err)
+        );
       }
     }
   }, [normalizedMessages, currentUserId, onMarkRead]);
 
   useEffect(() => {
     if (error) {
-      const timer = setTimeout(() => {
-        setError(null);
-      }, 5000);
+      const timer = setTimeout(() => setError(null), 5000);
       return () => clearTimeout(timer);
     }
   }, [error]);
 
   const handleMarkAllRead = useCallback(async () => {
-    const unreadMessages = normalizedMessages.filter((m) => m?.receiver_id === currentUserId && !m.is_read);
+    const unreadMessages = normalizedMessages.filter(
+      (m) => m?.receiver_id === currentUserId && !m.is_read
+    );
     try {
       for (const msg of unreadMessages) {
         if (msg?.message_id) {
@@ -235,36 +240,67 @@ const ChatMessages = ({
         p: 2,
         ...backgroundStyle,
       }}
+      role="region"
+      aria-label="Chat messages"
     >
-      {error && (
-        <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
-          {error}
-          {error.includes('Failed to send') && (
-            <Button size="small" onClick={() => handleRetrySend(contextMenu.message)}>
-              Retry
-            </Button>
-          )}
-        </Alert>
-      )}
-      <div style={{ height: '1px' }} />
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
+              {error}
+              {error.includes('Failed to send') && (
+                <Button
+                  size="small"
+                  onClick={() => handleRetrySend(contextMenu.message)}
+                >
+                  Retry
+                </Button>
+              )}
+            </Alert>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <div style={{ height: '1px' }} aria-hidden="true" />
       {pinnedMessages.length > 0 && (
-        <PinnedMessages pinnedMessages={pinnedMessages} theme={theme} setHighlightedMessage={setHighlightedMessage} />
+        <PinnedMessages
+          pinnedMessages={pinnedMessages}
+          theme={theme}
+          setHighlightedMessage={setHighlightedMessage}
+        />
       )}
-      {isGroupChat && normalizedMessages.some((m) => m?.receiver_id === currentUserId && !m.is_read) && (
-        <Box sx={{ textAlign: 'center', mb: 2 }}>
-          <Button variant="outlined" onClick={handleMarkAllRead}>
-            Mark All as Read
-          </Button>
-        </Box>
-      )}
+      {isGroupChat &&
+        normalizedMessages.some((m) => m?.receiver_id === currentUserId && !m.is_read) && (
+          <Box sx={{ textAlign: 'center', mb: 2 }}>
+            <Button
+              variant="outlined"
+              onClick={handleMarkAllRead}
+              aria-label="Mark all messages as read"
+            >
+              Mark All as Read
+            </Button>
+          </Box>
+        )}
       {isFetching && normalizedMessages.length === 0 && (
         <Box sx={{ py: 2 }}>
           {[...Array(5)].map((_, i) => (
             <Box
               key={`skeleton-${i}`}
-              sx={{ display: 'flex', justifyContent: i % 2 === 0 ? 'flex-start' : 'flex-end', mb: 2 }}
+              sx={{
+                display: 'flex',
+                justifyContent: i % 2 === 0 ? 'flex-start' : 'flex-end',
+                mb: 2,
+              }}
             >
-              <Skeleton variant="rectangular" width="60%" height={40} sx={{ borderRadius: 2 }} />
+              <Skeleton
+                variant="rectangular"
+                width="60%"
+                height={40}
+                sx={{ borderRadius: 2 }}
+              />
             </Box>
           ))}
         </Box>
@@ -282,8 +318,12 @@ const ChatMessages = ({
                 mb: 1,
                 borderRadius: 1,
               }}
+              aria-label="Message date"
             >
-              <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+              <Typography
+                variant="caption"
+                sx={{ color: theme.palette.text.secondary }}
+              >
                 {format(new Date(normalizedMessages[0].timestamp), 'MMMM d, yyyy')}
               </Typography>
             </Box>
@@ -325,12 +365,21 @@ const ChatMessages = ({
         </AnimatePresence>
       ) : (
         !isFetching && (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 2, textAlign: 'center' }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mt: 2, textAlign: 'center' }}
+            aria-label="No messages"
+          >
             No messages yet. Start chatting!
           </Typography>
         )
       )}
-      <Menu anchorEl={contextMenu.anchorEl} open={Boolean(contextMenu.anchorEl)} onClose={handleContextMenuClose}>
+      <Menu
+        anchorEl={contextMenu.anchorEl}
+        open={Boolean(contextMenu.anchorEl)}
+        onClose={handleContextMenuClose}
+      >
         <MenuItem onClick={handleReplyText}>
           {contextMenu.selectedText ? 'Reply to Selected Text' : 'Reply to Message'}
         </MenuItem>
