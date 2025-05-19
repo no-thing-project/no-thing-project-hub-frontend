@@ -39,7 +39,6 @@ const MediaPreview = ({ pendingMedia, onClear, index }) => {
               clipPath: videoShapes[shape],
               backgroundColor: "black",
             }}
-            // onError={(e) => (e.target.src = "/fallback-image.jpg")}
           />
         );
       case "video":

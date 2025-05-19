@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, memo, useRef } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box,
@@ -28,17 +28,17 @@ import {
   People,
   Public,
   Lock,
-  Toll,
   Brush,
   Delete,
+  Toll,
 } from '@mui/icons-material';
+import PropTypes from 'prop-types';
 import LoadingSpinner from '../components/Layout/LoadingSpinner';
 import Board from '../components/social-features/Board/Board';
 import useAuth from '../hooks/useAuth';
 import BoardFormDialog from '../components/Dialogs/BoardFormDialog';
 import MemberFormDialog from '../components/Dialogs/MemberFormDialog';
 import DeleteConfirmationDialog from '../components/Dialogs/DeleteConfirmationDialog';
-import { useNotification } from '../context/NotificationContext';
 import { actionButtonStyles, cancelButtonStyle } from '../styles/BaseStyles';
 import AnimatedPoints from '../components/AnimatedPoints/AnimatedPoints';
 import PointsDeductionAnimation from '../components/PointsDeductionAnimation/PointsDeductionAnimation';
@@ -46,6 +46,7 @@ import { useBoards } from '../hooks/useBoards';
 import { usePoints } from '../hooks/usePoints';
 import { useGates } from '../hooks/useGates';
 import { useClasses } from '../hooks/useClasses';
+import { useNotification } from '../context/NotificationContext';
 import { debounce } from 'lodash';
 
 const BoardPage = memo(() => {
@@ -63,9 +64,8 @@ const BoardPage = memo(() => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [inviteLink, setInviteLink] = useState('');
-  const [prevPoints, setPrevPoints] = useState(0);
   const [pointsSpent, setPointsSpent] = useState(0);
-  const [retryCount, setRetryCount] = useState(0);
+  const isMounted = useRef(true);
 
   // Hooks
   const {
@@ -80,26 +80,24 @@ const BoardPage = memo(() => {
     addMemberToBoard,
     removeMemberFromBoard,
     updateMemberRole,
+    clearBoardTweets,
   } = useBoards(token, handleLogout, navigate);
 
   const {
     pointsData,
     loading: pointsLoading,
-    error: pointsError,
     fetchPointsData,
   } = usePoints(token, handleLogout, navigate);
 
   const {
     gates,
     loading: gatesLoading,
-    error: gatesError,
     fetchGatesList,
   } = useGates(token, handleLogout, navigate);
 
   const {
     classes,
     loading: classesLoading,
-    error: classesError,
     fetchClassesList,
   } = useClasses(token, handleLogout, navigate);
 
@@ -130,12 +128,11 @@ const BoardPage = memo(() => {
   const debouncedFetchBoard = useMemo(
     () =>
       debounce(async (id, signal) => {
+        if (!isMounted.current) return;
         try {
           await fetchBoard(id, signal);
-          setRetryCount(0);
         } catch (err) {
           if (err.name !== 'AbortError') {
-            setRetryCount((prev) => prev + 1);
             showNotification(err.message || 'Failed to fetch board', 'error');
           }
         }
@@ -146,12 +143,11 @@ const BoardPage = memo(() => {
   const debouncedFetchPoints = useMemo(
     () =>
       debounce(async (signal) => {
+        if (!isMounted.current) return;
         try {
           await fetchPointsData(signal);
-          setRetryCount(0);
         } catch (err) {
           if (err.name !== 'AbortError') {
-            setRetryCount((prev) => prev + 1);
             showNotification(err.message || 'Failed to fetch points', 'error');
           }
         }
@@ -164,42 +160,27 @@ const BoardPage = memo(() => {
     if (!token || !board_id || !isAuthenticated) return;
 
     const controller = new AbortController();
-    Promise.all([
-      debouncedFetchBoard(board_id, controller.signal),
-      debouncedFetchPoints(controller.signal),
-    ]).catch((err) => {
-      if (err.name !== 'AbortError') {
-        showNotification(err.message || 'Failed to load initial data', 'error');
-      }
-    });
+    debouncedFetchBoard(board_id, controller.signal);
 
     return () => {
       controller.abort();
       debouncedFetchBoard.cancel();
+      isMounted.current = false;
+    };
+  }, [token, board_id, isAuthenticated, debouncedFetchBoard]);
+
+  // Points fetch on visibility or tweet action
+  useEffect(() => {
+    if (!token || !isAuthenticated || !pointsVisible) return;
+
+    const controller = new AbortController();
+    debouncedFetchPoints(controller.signal);
+
+    return () => {
+      controller.abort();
       debouncedFetchPoints.cancel();
     };
-  }, [token, board_id, isAuthenticated, debouncedFetchBoard, debouncedFetchPoints, showNotification]);
-
-  // Retry mechanism
-  useEffect(() => {
-    if (retryCount > 0 && retryCount <= 3) {
-      const timeout = setTimeout(() => {
-        const controller = new AbortController();
-        Promise.all([
-          debouncedFetchBoard(board_id, controller.signal),
-          debouncedFetchPoints(controller.signal),
-        ]).catch((err) => {
-          if (err.name !== 'AbortError') {
-            showNotification(`Retry ${retryCount} failed`, 'error');
-          }
-        });
-      }, 2000 * retryCount);
-      return () => clearTimeout(timeout);
-    }
-    if (retryCount > 3) {
-      showNotification('Maximum retry attempts reached. Please try again later.', 'error');
-    }
-  }, [retryCount, debouncedFetchBoard, debouncedFetchPoints, board_id, showNotification]);
+  }, [token, isAuthenticated, pointsVisible, debouncedFetchPoints]);
 
   // Points visibility observer
   useEffect(() => {
@@ -216,9 +197,9 @@ const BoardPage = memo(() => {
 
     observer.observe(pointsRef.current);
     return () => observer.disconnect();
-  }, [pointsVisible]);
+  }, []);
 
-  // Lazy load gates and classes
+  // Fetch gates and classes only when editing
   useEffect(() => {
     if (!editingBoard || !token || !isAuthenticated || (userRole !== 'owner' && userRole !== 'admin')) return;
 
@@ -237,37 +218,36 @@ const BoardPage = memo(() => {
 
   // Handle errors
   useEffect(() => {
-    const errors = [boardError, pointsError, gatesError, classesError].filter(Boolean);
-    if (errors.length) {
-      errors.forEach((err) => showNotification(err.message || 'An error occurred', 'error'));
+    if (boardError) {
+      showNotification(boardError || 'An error occurred', 'error');
       if (boardError?.includes('Board not found')) {
         setTimeout(() => navigate('/boards'), 2000);
       }
     }
-  }, [boardError, pointsError, gatesError, classesError, showNotification, navigate]);
+  }, [boardError, showNotification, navigate]);
 
   // Track points changes
   useEffect(() => {
-    if (pointsData?.total_points !== undefined && pointsData.total_points < prevPoints) {
+    if (!pointsData?.total_points) return;
+
+    const prevPoints = pointsData.prev_points || pointsData.total_points;
+    if (pointsData.total_points < prevPoints) {
       setPointsSpent(prevPoints - pointsData.total_points);
       const timeout = setTimeout(() => setPointsSpent(0), 700);
       return () => clearTimeout(timeout);
     }
-    setPrevPoints(pointsData?.total_points ?? 0);
-  }, [pointsData?.total_points, prevPoints]);
+  }, [pointsData?.total_points]);
 
   // Handlers
   const handleUpdateBoard = useCallback(async () => {
-    if (!editingBoard) return;
-    if (userRole !== 'owner' && userRole !== 'admin') {
-      showNotification('You do not have permission to edit this board.', 'error');
-      return;
-    }
+    if (!editingBoard || (userRole !== 'owner' && userRole !== 'admin')) return;
+
     const validationError = validateBoardData(editingBoard);
     if (validationError) {
       showNotification(validationError, 'error');
       return;
     }
+
     try {
       await updateExistingBoard(editingBoard.board_id, {
         name: editingBoard.name,
@@ -280,7 +260,7 @@ const BoardPage = memo(() => {
         settings: editingBoard.settings,
         tags: editingBoard.tags,
       });
-      showNotification('Board updated successfully!', 'success');
+      showNotification('Board updated', 'success');
       setEditingBoard(null);
     } catch (err) {
       showNotification(err.message || 'Failed to update board', 'error');
@@ -289,20 +269,17 @@ const BoardPage = memo(() => {
 
   const handleFavorite = useCallback(async () => {
     if (!boardData) return;
+
     try {
       await toggleFavoriteBoard(board_id, isFavorited);
-      showNotification(`Board ${isFavorited ? 'unfavorited' : 'favorited'} successfully!`, 'success');
+      showNotification(`Board ${isFavorited ? 'unfavorited' : 'favorited'}`, 'success');
     } catch (err) {
       showNotification('Failed to toggle favorite', 'error');
     }
   }, [boardData, board_id, isFavorited, toggleFavoriteBoard, showNotification]);
 
   const handleEdit = useCallback(() => {
-    if (userRole !== 'owner' && userRole !== 'admin') {
-      showNotification('You do not have permission to edit this board.', 'error');
-      return;
-    }
-    if (!boardData) return;
+    if (userRole !== 'owner' && userRole !== 'admin' || !boardData) return;
     setEditingBoard({
       board_id: boardData.board_id,
       name: boardData.name || '',
@@ -326,53 +303,57 @@ const BoardPage = memo(() => {
       tags: boardData.tags || [],
       current_user: { anonymous_id: authData?.anonymous_id, role: userRole },
     });
-  }, [boardData, authData?.anonymous_id, userRole, showNotification]);
+  }, [boardData, authData?.anonymous_id, userRole]);
 
   const handleManageMembers = useCallback(() => {
-    if (userRole !== 'owner' && userRole !== 'admin') {
-      showNotification('You do not have permission to manage members.', 'error');
-      return;
-    }
+    if (userRole !== 'owner' && userRole !== 'admin') return;
     setMembersDialogOpen(true);
-  }, [userRole, showNotification]);
+  }, [userRole]);
 
   const handleShare = useCallback(() => {
-    const boardUrl = `${window.location.origin}/board/${board_id}`;
-    setInviteLink(boardUrl);
+    setInviteLink(`${window.location.origin}/board/${board_id}`);
     setShareDialogOpen(true);
   }, [board_id]);
 
   const handleOpenDeleteDialog = useCallback(() => {
-    if (userRole !== 'owner') {
-      showNotification('You do not have permission to delete this board.', 'error');
-      return;
-    }
+    if (userRole !== 'owner') return;
     setDeleteDialogOpen(true);
-  }, [userRole, showNotification]);
+  }, [userRole]);
 
   const handleDelete = useCallback(async () => {
     try {
       await deleteExistingBoard(board_id);
-      showNotification('Board deleted successfully!', 'success');
+      showNotification('Board deleted', 'success');
       navigate('/boards');
     } catch (err) {
       showNotification('Failed to delete board', 'error');
+    } finally {
+      setDeleteDialogOpen(false);
     }
-    setDeleteDialogOpen(false);
   }, [board_id, deleteExistingBoard, navigate, showNotification]);
+
+  const handleClearBoard = useCallback(async () => {
+    try {
+      await clearBoardTweets(board_id);
+      showNotification('Tweets cleared', 'success');
+      setClearDialogOpen(false);
+    } catch (err) {
+      showNotification('Failed to clear tweets', 'error');
+    }
+  }, [board_id, clearBoardTweets, showNotification]);
 
   const handleCopyLink = useCallback(async () => {
     if (!inviteLink) {
       showNotification('Invalid share link', 'error');
-      setShareDialogOpen(false);
       return;
     }
     try {
       await navigator.clipboard.write(inviteLink);
-      showNotification('Link copied to clipboard!', 'success');
-      setShareDialogOpen(false);
+      showNotification('Link copied', 'success');
     } catch (err) {
       showNotification('Failed to copy link', 'error');
+    } finally {
+      setShareDialogOpen(false);
     }
   }, [inviteLink, showNotification]);
 
@@ -395,6 +376,10 @@ const BoardPage = memo(() => {
     },
     [gates]
   );
+
+  const handleTweetAction = useCallback(() => {
+    debouncedFetchPoints();
+  }, [debouncedFetchPoints]);
 
   const childBoardMenuItems = useMemo(() => {
     const uniqueChildIds = [...new Set(boardData?.child_board_ids?.filter((id) => id) || [])];
@@ -434,9 +419,9 @@ const BoardPage = memo(() => {
         <AnimatePresence>
           {boardLoading ? (
             <>
-              <Skeleton variant='circular' width={40} height={40} />
-              <Skeleton variant='circular' width={40} height={40} />
-              <Skeleton variant='circular' width={40} height={40} />
+              <Skeleton variant="circular" width={40} height={40} />
+              <Skeleton variant="circular" width={40} height={40} />
+              <Skeleton variant="circular" width={40} height={40} />
             </>
           ) : (
             boardData && (
@@ -464,7 +449,7 @@ const BoardPage = memo(() => {
                       onClick={handleFavorite}
                       aria-label={isFavorited ? 'Unfavorite board' : 'Favorite board'}
                     >
-                      {isFavorited ? <Favorite color='error' /> : <FavoriteBorder />}
+                      {isFavorited ? <Favorite color="error" /> : <FavoriteBorder />}
                     </IconButton>
                   </Tooltip>
                 </motion.div>
@@ -474,8 +459,8 @@ const BoardPage = memo(() => {
                   exit={{ opacity: 0, scale: 0.8 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <Tooltip title='Share Board'>
-                    <IconButton onClick={handleShare} aria-label='Share board'>
+                  <Tooltip title="Share Board">
+                    <IconButton onClick={handleShare} aria-label="Share board">
                       <Share />
                     </IconButton>
                   </Tooltip>
@@ -488,12 +473,12 @@ const BoardPage = memo(() => {
                       exit={{ opacity: 0, scale: 0.8 }}
                       transition={{ duration: 0.2 }}
                     >
-                      <Tooltip title='Manage Members'>
+                      <Tooltip title="Manage Members">
                         <IconButton
                           onClick={handleManageMembers}
                           aria-label={`Manage members (current count: ${members?.length || 0})`}
                         >
-                          <Badge badgeContent={members?.length || 0} color='default'>
+                          <Badge badgeContent={members?.length || 0} color="default">
                             <People />
                           </Badge>
                         </IconButton>
@@ -505,8 +490,8 @@ const BoardPage = memo(() => {
                       exit={{ opacity: 0, scale: 0.8 }}
                       transition={{ duration: 0.2 }}
                     >
-                      <Tooltip title='Edit Board'>
-                        <IconButton onClick={handleEdit} aria-label='Edit board'>
+                      <Tooltip title="Edit Board">
+                        <IconButton onClick={handleEdit} aria-label="Edit board">
                           <Edit />
                         </IconButton>
                       </Tooltip>
@@ -517,9 +502,9 @@ const BoardPage = memo(() => {
                       exit={{ opacity: 0, scale: 0.8 }}
                       transition={{ duration: 0.2 }}
                     >
-                      <Tooltip title='Clear Board Tweets'>
-                        <IconButton onClick={() => setClearDialogOpen(true)} aria-label='Clear board tweets'>
-                          <Brush color='error' />
+                      <Tooltip title="Clear Board Tweets">
+                        <IconButton onClick={() => setClearDialogOpen(true)} aria-label="Clear board tweets">
+                          <Brush color="error" />
                         </IconButton>
                       </Tooltip>
                     </motion.div>
@@ -532,9 +517,9 @@ const BoardPage = memo(() => {
                     exit={{ opacity: 0, scale: 0.8 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <Tooltip title='Delete Board'>
-                      <IconButton onClick={handleOpenDeleteDialog} aria-label='Delete board'>
-                        <Delete color='error' />
+                    <Tooltip title="Delete Board">
+                      <IconButton onClick={handleOpenDeleteDialog} aria-label="Delete board">
+                        <Delete color="error" />
                       </IconButton>
                     </Tooltip>
                   </motion.div>
@@ -546,13 +531,13 @@ const BoardPage = memo(() => {
                     exit={{ opacity: 0, scale: 0.8 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <Tooltip title='Child Boards'>
+                    <Tooltip title="Child Boards">
                       <IconButton
-                        aria-controls='board-menu'
-                        aria-haspopup='true'
+                        aria-controls="board-menu"
+                        aria-haspopup="true"
                         onClick={handleMenuOpen}
                         sx={{ bgcolor: 'background.paper', '&:hover': { bgcolor: 'action.hover' } }}
-                        aria-label='Open child boards menu'
+                        aria-label="Open child boards menu"
                       >
                         <MoreVert />
                       </IconButton>
@@ -564,7 +549,7 @@ const BoardPage = memo(() => {
           )}
         </AnimatePresence>
         <Menu
-          id='board-menu'
+          id="board-menu"
           anchorEl={anchorEl}
           open={Boolean(anchorEl)}
           onClose={handleMenuClose}
@@ -593,11 +578,11 @@ const BoardPage = memo(() => {
       >
         {pointsVisible ? (
           pointsLoading ? (
-            <Skeleton variant='circular' width={40} height={40} />
+            <Skeleton variant="circular" width={40} height={40} />
           ) : (
             <>
-              <Tooltip title='Available points'>
-                <IconButton size='small' aria-label='Available points'>
+              <Tooltip title="Available points">
+                <IconButton size="small" aria-label="Available points">
                   <Toll />
                 </IconButton>
               </Tooltip>
@@ -606,25 +591,25 @@ const BoardPage = memo(() => {
             </>
           )
         ) : (
-          <Skeleton variant='circular' width={40} height={40} />
+          <Skeleton variant="circular" width={40} height={40} />
         )}
       </Box>
 
       <Board
         boardId={board_id}
         boardTitle={boardData?.name || ''}
-        boardData={boardData}
         token={token}
         currentUser={authData}
         userRole={userRole}
-        onPointsUpdate={debouncedFetchPoints}
         onLogout={handleLogout}
+        availableBoards={[]}
+        onTweetAction={handleTweetAction}
       />
 
       {editingBoard && (
         <BoardFormDialog
           open={true}
-          title='Edit Board'
+          title="Edit Board"
           board={editingBoard}
           setBoard={setEditingBoard}
           onSave={handleUpdateBoard}
@@ -640,7 +625,7 @@ const BoardPage = memo(() => {
       {membersDialogOpen && (
         <MemberFormDialog
           open={membersDialogOpen}
-          title='Manage Board Members'
+          title="Manage Board Members"
           boardId={board_id}
           token={token}
           onSave={() => {
@@ -659,27 +644,27 @@ const BoardPage = memo(() => {
       <Dialog
         open={shareDialogOpen}
         onClose={() => setShareDialogOpen(false)}
-        maxWidth='sm'
+        maxWidth="sm"
         fullWidth
         sx={{ '& .MuiDialog-paper': { borderRadius: theme.shape.borderRadiusMedium } }}
       >
         <DialogTitle>Share Board</DialogTitle>
         <DialogContent>
-          <Typography variant='body2' sx={{ mb: 2 }}>
+          <Typography variant="body2" sx={{ mb: 2 }}>
             Copy the link below to share this board:
           </Typography>
           <TextField
             fullWidth
             value={inviteLink}
             InputProps={{ readOnly: true }}
-            aria-label='Board share link'
+            aria-label="Board share link"
           />
         </DialogContent>
         <DialogActions>
           <Button
             onClick={() => setShareDialogOpen(false)}
             sx={cancelButtonStyle}
-            aria-label='Close share dialog'
+            aria-label="Close share dialog"
           >
             Close
           </Button>
@@ -687,7 +672,7 @@ const BoardPage = memo(() => {
             onClick={handleCopyLink}
             sx={actionButtonStyles}
             startIcon={<Link />}
-            aria-label='Copy share link'
+            aria-label="Copy share link"
           >
             Copy Link
           </Button>
@@ -697,11 +682,8 @@ const BoardPage = memo(() => {
       <DeleteConfirmationDialog
         open={clearDialogOpen}
         onClose={() => setClearDialogOpen(false)}
-        onConfirm={() => {
-          setClearDialogOpen(false);
-          showNotification('Clear board functionality not implemented.', 'warning');
-        }}
-        message='Are you sure you want to delete all tweets on this board? This action cannot be undone.'
+        onConfirm={handleClearBoard}
+        message="Are you sure you want to delete all tweets on this board? This action cannot be undone."
         disabled={boardLoading}
       />
 
@@ -709,11 +691,15 @@ const BoardPage = memo(() => {
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
         onConfirm={handleDelete}
-        message='Are you sure you want to delete this board? This action cannot be undone.'
+        message="Are you sure you want to delete this board? This action cannot be undone."
         disabled={boardLoading}
       />
     </Box>
   );
 });
+
+BoardPage.propTypes = {
+  // No props are expected as this is a top-level page component
+};
 
 export default BoardPage;

@@ -106,7 +106,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
             setError('Recorded file exceeds 50MB limit.');
             return;
           }
-          // Add isRecorded flag for video_message
           handleFileChange({ target: { files: [file] } });
           stream.getTracks().forEach((track) => track.stop());
         };
@@ -194,7 +193,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
               url: fileUrlsRef.current.get(file) || URL.createObjectURL(file),
               contentType: file.type,
               duration: file.type.startsWith('video') ? 0 : undefined,
-              isRecorded: file.isRecorded || false, // Include isRecorded flag
             })),
             style: {},
             hashtags: [],
@@ -206,7 +204,9 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
           },
         };
         const position = { x: Math.max(0, x), y: Math.max(0, y) };
-        await onSubmit(content, position.x, position.y, form.scheduledAt || null, files, setUploadProgress);
+        await onSubmit(content, position.x, position.y, form.scheduledAt || null, files, (progress) =>
+          setUploadProgress(progress)
+        );
         setForm({ draft: '', scheduledAt: '' });
         cleanup();
         onClose();
@@ -258,7 +258,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
                 style={TweetContentStyles.popupPreviewMedia}
                 effect="blur"
                 placeholder={<Box sx={TweetContentStyles.popupPreviewPlaceholder}>Loading Image...</Box>}
-                onError={(e) => (e.target.src = '/fallback-image.png')}
               />
             ) : file.type.startsWith('video') ? (
               <video
@@ -385,8 +384,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         ...TweetContentStyles.popupPaper,
         top: y,
         left: x,
-        // width: { xs: '90vw', sm: POPUP_WIDTH },
-        // maxWidth: '95vw',
       }}
       role="dialog"
       aria-labelledby="tweet-popup-title"
@@ -440,7 +437,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
           <Box sx={TweetContentStyles.popupProgressContainer}>
             <LinearProgress variant="determinate" value={uploadProgress} />
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              Uploading: {uploadProgress}%
+            Uploading: {uploadProgress}%
             </Typography>
           </Box>
         )}

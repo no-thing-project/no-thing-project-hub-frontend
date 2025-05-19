@@ -149,7 +149,8 @@ const TweetContent = ({
   availableBoards = [],
   boardId,
   isListView = false,
-  error = null, // New prop for error state
+  error = null,
+  getParentTweetText, // New prop for parent tweet text lookup
 }) => {
   const [animate, setAnimate] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -158,7 +159,7 @@ const TweetContent = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   const tweetAuthor = useMemo(
-    () => tweet.username || tweet.user?.username || 'Someone',
+    () => tweet.username || tweet.user?.username || 'Anonymous',
     [tweet.username, tweet.user?.username]
   );
 
@@ -195,9 +196,15 @@ const TweetContent = ({
     [hasReplies, replyCount, tweet.child_tweet_ids]
   );
 
-  const rawStatus = tweet.status || 'unknown';
+  const rawStatus = tweet.status || 'approved';
   const chipColor = statusColorMap[rawStatus] || 'default';
   const chipLabel = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+
+  // Resolve parent tweet text
+  const resolvedParentTweetText = useMemo(() => {
+    if (!tweet.parent_tweet_id) return null;
+    return parentTweetText || getParentTweetText?.(tweet.parent_tweet_id) || 'Parent tweet not found';
+  }, [tweet.parent_tweet_id, parentTweetText, getParentTweetText]);
 
   useEffect(() => {
     if (tweet.stats?.like_count !== undefined) {
@@ -297,7 +304,6 @@ const TweetContent = ({
                   alt={`Image ${index + 1}`}
                   effect="blur"
                   style={TweetContentStyles.image(imageFiles.length === 1)}
-                  onError={(e) => (e.target.src = '/fallback-image.png')}
                   placeholder={
                     <Box sx={TweetContentStyles.imagePlaceholder}>
                       <CircularProgress size={24} />
@@ -484,7 +490,6 @@ const TweetContent = ({
                 alt={`Media ${idx + 1}`}
                 effect="blur"
                 style={TweetContentStyles.modalImage}
-                onError={(e) => (e.target.src = '/fallback-image.png')}
                 placeholder={
                   <Box sx={TweetContentStyles.modalImagePlaceholder}>
                     <CircularProgress size={24} />
@@ -567,7 +572,7 @@ const TweetContent = ({
             </motion.div>
           </Box>
         )}
-        {parentTweetText && (
+        {resolvedParentTweetText && (
           <motion.div
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
@@ -578,7 +583,7 @@ const TweetContent = ({
                 Replying to:
               </Typography>
               <Typography variant="body2" sx={TweetContentStyles.replyToText}>
-                <Emoji text={parentTweetText} />
+                <Emoji text={resolvedParentTweetText} />
               </Typography>
             </Box>
           </motion.div>
@@ -729,7 +734,8 @@ const arePropsEqual = (prevProps, nextProps) => {
     isEqual(prevProps.availableBoards, nextProps.availableBoards) &&
     prevProps.boardId === nextProps.boardId &&
     prevProps.isListView === nextProps.isListView &&
-    prevProps.error === nextProps.error
+    prevProps.error === nextProps.error &&
+    prevProps.getParentTweetText === nextProps.getParentTweetText
   );
 };
 
@@ -804,7 +810,8 @@ TweetContent.propTypes = {
   ),
   boardId: PropTypes.string,
   isListView: PropTypes.bool,
-  error: PropTypes.string, // New prop for error state
+  error: PropTypes.string,
+  getParentTweetText: PropTypes.func, // New prop for parent tweet text
 };
 
 TweetContent.defaultProps = {
@@ -817,6 +824,7 @@ TweetContent.defaultProps = {
   boardId: '',
   isListView: false,
   error: null,
+  getParentTweetText: null,
 };
 
 export default memo(TweetContent, arePropsEqual);
