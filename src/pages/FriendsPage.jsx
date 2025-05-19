@@ -1,17 +1,17 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { Box, Button, Typography, Alert, Snackbar } from "@mui/material";
-import { Add } from "@mui/icons-material";
-import AppLayout from "../components/Layout/AppLayout";
-import LoadingSpinner from "../components/Layout/LoadingSpinner";
-import useAuth from "../hooks/useAuth";
-import useSocial from "../hooks/useSocial";
-import { useNotification } from "../context/NotificationContext";
-import { actionButtonStyles } from "../styles/BaseStyles";
-import ProfileHeader from "../components/Headers/ProfileHeader";
-import FriendFormDialog from "../components/Dialogs/FriendFormDialog";
-import FriendsList from "../components/Friends/FriendsList";
-import PendingRequestsList from "../components/Friends/PendingRequestsList";
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Box, Button, Alert, Snackbar } from '@mui/material';
+import { Add } from '@mui/icons-material';
+import AppLayout from '../components/Layout/AppLayout';
+import LoadingSpinner from '../components/Layout/LoadingSpinner';
+import useAuth from '../hooks/useAuth';
+import useSocial from '../hooks/useSocial';
+import { useNotification } from '../context/NotificationContext';
+import { actionButtonStyles } from '../styles/BaseStyles';
+import ProfileHeader from '../components/Headers/ProfileHeader';
+import FriendFormDialog from '../components/Dialogs/FriendFormDialog';
+import FriendsList from '../components/Friends/FriendsList';
+import PendingRequestsList from '../components/Friends/PendingRequestsList';
 
 const FriendsPage = () => {
   const navigate = useNavigate();
@@ -28,24 +28,24 @@ const FriendsPage = () => {
     acceptFriend,
     rejectFriend,
     removeExistingFriend,
-    searchUsersByUsername,
   } = useSocial(token, handleLogout, navigate);
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [username, setUsername] = useState(""); // Змінюємо friendId на username
-  const [success, setSuccess] = useState("");
+  const [username, setUsername] = useState('');
+  const [success, setSuccess] = useState('');
 
   const loadFriendsData = useCallback(async () => {
     if (!isAuthenticated || !token) {
-      showNotification("Authentication missing.", "error");
+      showNotification('Authentication missing.', 'error');
+      navigate('/login');
       return;
     }
     try {
       await Promise.all([getFriends(), getPendingRequests()]);
     } catch (err) {
-      showNotification(err.message || "Failed to load friends data", "error");
+      showNotification(err.message || 'Failed to load friends data', 'error');
     }
-  }, [isAuthenticated, token, getFriends, getPendingRequests, showNotification]);
+  }, [isAuthenticated, token, getFriends, getPendingRequests, showNotification, navigate]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -53,94 +53,100 @@ const FriendsPage = () => {
     }
   }, [authLoading, loadFriendsData]);
 
-  const handleOpenAddFriend = () => {
-    setUsername("");
+  const handleOpenAddFriend = useCallback(() => {
+    setUsername('');
     setCreateDialogOpen(true);
-  };
+  }, []);
 
-  const handleCancelAddFriend = () => {
+  const handleCancelAddFriend = useCallback(() => {
     setCreateDialogOpen(false);
-  };
+  }, []);
 
-  const handleAddFriend = async () => {
-    if (!username.trim()) {
-      showNotification("Username is required!", "error");
-      return;
-    }
-    try {
-      // Шукаємо користувача за username
-      const users = await searchUsersByUsername(username);
-      if (!users.length) {
-        showNotification("User not found!", "error");
+  const handleAddFriend = useCallback(
+    async (friendId) => {
+      if (!friendId) {
+        showNotification('User ID is required!', 'error');
         return;
       }
-      const friendId = users[0].anonymous_id; // Беремо перший результат
-      await addNewFriend(friendId);
-      setSuccess("Friend request sent successfully!");
-      setCreateDialogOpen(false);
-      setUsername("");
-      await getPendingRequests();
-    } catch (err) {
-      showNotification(err.message || "Failed to send friend request", "error");
-    }
-  };
+      try {
+        await addNewFriend(friendId);
+        setSuccess('Friend request sent successfully!');
+        setCreateDialogOpen(false);
+        setUsername('');
+        await getPendingRequests();
+      } catch (err) {
+        showNotification(err.message || 'Failed to send friend request', 'error');
+      }
+    },
+    [addNewFriend, getPendingRequests, showNotification]
+  );
 
-  const handleAcceptFriend = async (friendId) => {
-    try {
-      await acceptFriend(friendId);
-      setSuccess("Friend request accepted!");
-      await Promise.all([getFriends(), getPendingRequests()]);
-    } catch (err) {
-      showNotification(err.message || "Failed to accept friend request", "error");
-    }
-  };
+  const handleAcceptFriend = useCallback(
+    async (friendId) => {
+      try {
+        await acceptFriend(friendId);
+        setSuccess('Friend request accepted!');
+        await Promise.all([getFriends(), getPendingRequests()]);
+      } catch (err) {
+        showNotification(err.message || 'Failed to accept friend request', 'error');
+      }
+    },
+    [acceptFriend, getFriends, getPendingRequests, showNotification]
+  );
 
-  const handleRejectFriend = async (friendId) => {
-    try {
-      await rejectFriend(friendId);
-      setSuccess("Friend request rejected!");
-      await getPendingRequests();
-    } catch (err) {
-      showNotification(err.message || "Failed to reject friend request", "error");
-    }
-  };
+  const handleRejectFriend = useCallback(
+    async (friendId) => {
+      try {
+        await rejectFriend(friendId);
+        setSuccess('Friend request rejected!');
+        await getPendingRequests();
+      } catch (err) {
+        showNotification(err.message || 'Failed to reject friend request', 'error');
+      }
+    },
+    [rejectFriend, getPendingRequests, showNotification]
+  );
 
-  const handleRemoveFriend = async (friendId) => {
-    try {
-      await removeExistingFriend(friendId);
-      setSuccess("Friend removed successfully!");
-      await getFriends();
-    } catch (err) {
-      showNotification(err.message || "Failed to remove friend", "error");
-    }
-  };
+  const handleRemoveFriend = useCallback(
+    async (friendId) => {
+      try {
+        await removeExistingFriend(friendId);
+        setSuccess('Friend removed successfully!');
+        await getFriends();
+      } catch (err) {
+        showNotification(err.message || 'Failed to remove friend', 'error');
+      }
+    },
+    [removeExistingFriend, getFriends, showNotification]
+  );
 
-  const handleCloseSnackbar = () => {
-    setSuccess("");
-  };
+  const handleCloseSnackbar = useCallback(() => {
+    setSuccess('');
+  }, []);
 
   if (authLoading || socialLoading) return <LoadingSpinner />;
   if (!isAuthenticated) {
-    navigate("/login");
+    navigate('/login');
     return null;
   }
 
   return (
-    <AppLayout currentUser={authData} onLogout={handleLogout} token={token} >
-      <Box sx={{ maxWidth: 1500, margin: "0 auto", p: 2 }}>
-        <ProfileHeader user={authData} isOwnProfile={true}>
+    <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
+      <Box sx={{ maxWidth: 1500, mx: 'auto', p: { xs: 1, md: 2 } }}>
+        <ProfileHeader user={authData} isOwnProfile>
           <Button
             variant="contained"
             onClick={handleOpenAddFriend}
             startIcon={<Add />}
-            sx={actionButtonStyles}
+            sx={{ ...actionButtonStyles, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+            aria-label="Add a new friend"
           >
             Add Friend
           </Button>
         </ProfileHeader>
 
         {socialError && (
-          <Alert severity="error" sx={{ mt: 2 }}>
+          <Alert severity="error" sx={{ mt: 2, mx: { xs: 1, md: 0 } }}>
             {socialError}
           </Alert>
         )}
@@ -157,19 +163,21 @@ const FriendsPage = () => {
         <FriendFormDialog
           open={createDialogOpen}
           title="Add a New Friend"
-          username={username} // Змінюємо friendId на username
+          username={username}
           setUsername={setUsername}
           onSave={handleAddFriend}
           onCancel={handleCancelAddFriend}
+          disabled={socialLoading}
+          token={token}
         />
 
         <Snackbar
           open={!!success}
           autoHideDuration={3000}
           onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         >
-          <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: "100%" }}>
+          <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: '100%' }}>
             {success}
           </Alert>
         </Snackbar>
@@ -178,4 +186,4 @@ const FriendsPage = () => {
   );
 };
 
-export default FriendsPage;
+export default React.memo(FriendsPage);
