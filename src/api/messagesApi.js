@@ -121,7 +121,7 @@ export const deleteMessage = (messageId, token) => {
 // Edit a message
 export const editMessage = ({ messageId, newContent }, token) => {
   validatePayload(editMessageSchema, { messageId, newContent }, 'Invalid edit message data');
-  return apiRequest('put', `/api/v1/messages/${messageId}`, token, { payload: { messageId, newContent } });
+  return apiRequest('patch', `/api/v1/messages/${messageId}`, token, { payload: { messageId, newContent } });
 };
 
 // Search messages in a conversation
