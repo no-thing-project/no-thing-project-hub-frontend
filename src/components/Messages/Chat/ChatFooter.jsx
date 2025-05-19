@@ -1,3 +1,4 @@
+// src/components/ChatFooter.jsx
 import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Box, Alert } from '@mui/material';
@@ -6,24 +7,28 @@ import ChatInput from './ChatInput';
 const ChatFooter = ({
   conversationId,
   recipient,
-  onSendMediaMessage,
-  pendingMediaList,
-  setPendingMediaFile,
-  clearPendingMedia,
+  onSendMessage,
   replyToMessage,
   setReplyToMessage,
   isGroupChat,
   token,
   currentUserId,
   friends,
+  socket,
+  onTyping,
 }) => {
   const [error, setError] = useState(null);
 
   // Validate props
   useEffect(() => {
-    if (!conversationId || !recipient || !currentUserId || !token) {
-      setError('Invalid chat configuration.');
+    if (!conversationId || typeof conversationId !== 'string') {
+      console.warn('[ChatFooter] Invalid conversationId:', conversationId);
+      setError('No conversation selected');
+    } else if (!recipient || !currentUserId || !token) {
+      console.warn('[ChatFooter] Invalid chat configuration:', { recipient, currentUserId, token });
+      setError('Invalid chat configuration');
     } else {
+      console.log('[ChatFooter] conversationId:', conversationId);
       setError(null);
     }
   }, [conversationId, recipient, currentUserId, token]);
@@ -49,7 +54,7 @@ const ChatFooter = ({
   return (
     <Box
       sx={{
-        borderTop: '1px solid',
+        borderTop: `1px solid`,
         borderColor: 'grey.300',
         bgcolor: 'background.paper',
         px: 2,
@@ -60,16 +65,15 @@ const ChatFooter = ({
       <ChatInput
         conversationId={conversationId}
         recipient={recipient}
-        onSendMediaMessage={onSendMediaMessage}
-        pendingMediaList={pendingMediaList}
-        setPendingMediaFile={setPendingMediaFile}
-        clearPendingMedia={clearPendingMedia}
+        onSendMessage={onSendMessage}
         replyToMessage={replyToMessage}
         setReplyToMessage={setReplyToMessage}
         isGroupChat={isGroupChat}
         token={token}
         currentUserId={currentUserId}
         friends={friends}
+        socket={socket}
+        onTyping={onTyping}
       />
     </Box>
   );
@@ -79,25 +83,15 @@ ChatFooter.propTypes = {
   conversationId: PropTypes.string.isRequired,
   recipient: PropTypes.shape({
     anonymous_id: PropTypes.string,
-    group_id: PropTypes.string,
     name: PropTypes.string,
     username: PropTypes.string,
+    conversation_id: PropTypes.string,
   }).isRequired,
-  onSendMediaMessage: PropTypes.func.isRequired,
-  pendingMediaList: PropTypes.arrayOf(
-    PropTypes.shape({
-      file: PropTypes.instanceOf(File),
-      preview: PropTypes.string,
-      type: PropTypes.string,
-    })
-  ).isRequired,
-  setPendingMediaFile: PropTypes.func.isRequired,
-  clearPendingMedia: PropTypes.func.isRequired,
+  onSendMessage: PropTypes.func.isRequired,
   replyToMessage: PropTypes.shape({
     message_id: PropTypes.string,
     content: PropTypes.string,
     sender_id: PropTypes.string,
-    selectedText: PropTypes.string,
     thread_id: PropTypes.string,
   }),
   setReplyToMessage: PropTypes.func.isRequired,
@@ -110,6 +104,8 @@ ChatFooter.propTypes = {
       username: PropTypes.string,
     })
   ).isRequired,
+  socket: PropTypes.object,
+  onTyping: PropTypes.func.isRequired,
 };
 
 export default React.memo(ChatFooter);

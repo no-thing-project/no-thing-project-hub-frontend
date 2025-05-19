@@ -1,7 +1,27 @@
 import React, { useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import { ListItem, ListItemText, Box, Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography } from '@mui/material';
-import { Delete, PushPin, Archive, NotificationsOff, Unarchive, Notifications, DoneAll } from '@mui/icons-material';
+import {
+  ListItem,
+  ListItemText,
+  Box,
+  Menu,
+  MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Typography,
+} from '@mui/material';
+import {
+  Delete,
+  PushPin,
+  Archive,
+  NotificationsOff,
+  Unarchive,
+  Notifications,
+  DoneAll,
+} from '@mui/icons-material';
 import ConversationAvatar from './ConversationAvatar';
 import ConversationActions from './ConversationActions';
 
@@ -21,7 +41,7 @@ const ConversationItem = ({
   messages,
 }) => {
   const [contextMenu, setContextMenu] = useState({ anchorEl: null });
-  const [deleteDialog, setDeleteDialog] = useState({ open: false, id: null, isGroup: false });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, id: null });
 
   const handleOpenMenu = useCallback((event) => {
     event.stopPropagation();
@@ -33,14 +53,14 @@ const ConversationItem = ({
   }, []);
 
   const handleDeleteClick = useCallback(() => {
-    setDeleteDialog({ open: true, id: item.conversation_id, isGroup: item.isGroup });
+    setDeleteDialog({ open: true, id: item.conversation_id });
     handleCloseMenu();
-  }, [item.conversation_id, item.isGroup, handleCloseMenu]);
+  }, [item.conversation_id, handleCloseMenu]);
 
   const handleDeleteConfirm = useCallback(async () => {
     try {
       await onDelete(item.conversation_id);
-      setDeleteDialog({ open: false, id: null, isGroup: false });
+      setDeleteDialog({ open: false, id: null });
     } catch (err) {
       console.error('Delete error:', err);
     }
@@ -58,51 +78,22 @@ const ConversationItem = ({
     [handleCloseMenu]
   );
 
-  // Helper function to determine last message preview
-  const getMessagePreview = (lastMessage) => {
-    if (!lastMessage) {
-      return 'No messages yet';
-    }
-
-    // Check for text content
-    if (lastMessage.content && lastMessage.content.trim()) {
+  const getMessagePreview = useCallback((lastMessage) => {
+    if (!lastMessage) return 'No messages yet';
+    if (lastMessage.content?.trim()) {
       return lastMessage.content.length > 30
         ? `${lastMessage.content.slice(0, 30)}...`
         : lastMessage.content;
     }
-
-    // Check for media or type
-    if (lastMessage.media && lastMessage.media.length > 0) {
+    if (lastMessage.media?.length) {
       const mediaType = lastMessage.media[0]?.type || 'media';
-      switch (mediaType) {
-        case 'image':
-          return 'Image';
-        case 'video':
-          return 'Video';
-        case 'audio':
-          return 'Audio';
-        default:
-          return 'Media';
-      }
+      return mediaType.charAt(0).toUpperCase() + mediaType.slice(1);
     }
-
-    // Check for message type (if provided)
     if (lastMessage.type) {
-      switch (lastMessage.type) {
-        case 'poll':
-          return 'Poll';
-        case 'reaction':
-          return 'Reaction';
-        case 'text':
-          return 'Text message'; // Fallback for empty content
-        default:
-          return lastMessage.type.charAt(0).toUpperCase() + lastMessage.type.slice(1);
-      }
+      return lastMessage.type.charAt(0).toUpperCase() + lastMessage.type.slice(1);
     }
-
-    // Fallback for unknown cases
     return 'Message';
-  };
+  }, []);
 
   return (
     <>
@@ -202,21 +193,21 @@ const ConversationItem = ({
       </Menu>
       <Dialog
         open={deleteDialog.open}
-        onClose={() => setDeleteDialog({ open: false, id: null, isGroup: false })}
+        onClose={() => setDeleteDialog({ open: false, id: null })}
         aria-labelledby="delete-dialog-title"
       >
         <DialogTitle id="delete-dialog-title">
-          Delete {deleteDialog.isGroup ? 'Group Chat' : 'Conversation'}?
+          Delete {item.isGroup ? 'Group Chat' : 'Conversation'}?
         </DialogTitle>
         <DialogContent>
           <Typography>
             This action cannot be undone. Are you sure you want to delete this{' '}
-            {deleteDialog.isGroup ? 'group chat' : 'conversation'}?
+            {item.isGroup ? 'group chat' : 'conversation'}?
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button
-            onClick={() => setDeleteDialog({ open: false, id: null, isGroup: false })}
+            onClick={() => setDeleteDialog({ open: false, id: null })}
             aria-label="Cancel deletion"
           >
             Cancel
@@ -251,7 +242,6 @@ ConversationItem.propTypes = {
       media: PropTypes.arrayOf(
         PropTypes.shape({
           url: PropTypes.string,
-          fileKey: PropTypes.string,
           type: PropTypes.string,
         })
       ),
@@ -277,7 +267,6 @@ ConversationItem.propTypes = {
     PropTypes.shape({
       message_id: PropTypes.string.isRequired,
       conversation_id: PropTypes.string,
-      group_id: PropTypes.string,
       content: PropTypes.string,
       timestamp: PropTypes.string.isRequired,
       is_read: PropTypes.bool,

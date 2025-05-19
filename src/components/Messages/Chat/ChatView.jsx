@@ -1,6 +1,7 @@
+// src/components/ChatView.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Alert, Typography, useTheme, CircularProgress, Button } from '@mui/material';
+import { Box, Alert, Typography, useTheme, CircularProgress } from '@mui/material';
 import { VariableSizeList } from 'react-window';
 import { motion, AnimatePresence } from 'framer-motion';
 import AutoSizer from 'react-virtualized-auto-sizer';
@@ -9,29 +10,28 @@ import ChatMessages from './ChatMessages';
 import ChatFooter from './ChatFooter';
 import ChatSettingsModal from '../ChatSettingsModal';
 import { isSameDay } from 'date-fns';
-import { v4 as uuidv4 } from 'uuid';
 import { useNotification } from '../../../context/NotificationContext';
 
 const ChatView = ({
   currentUserId,
   conversation,
-  onSendMediaMessage,
-  onMarkRead,
-  onDeleteMessage,
-  onEditMessage,
-  onForwardMessage,
-  token,
-  fetchMessagesList,
-  friends,
   messages,
   setMessages,
-  onAddReaction,
-  onCreatePoll,
-  onVotePoll,
-  onPinMessage,
-  onUnpinMessage,
-  onTyping,
+  token,
+  friends,
   socket,
+  fetchMessagesList: loadMessages,
+  onSendMessage: sendNewMessage,
+  onMarkRead: markRead,
+  onDeleteMessage: deleteMsg,
+  onEditMessage: editMsg,
+  onAddReaction: addMessageReaction,
+  onCreatePoll: createNewPoll,
+  onVotePoll: voteInPoll,
+  onPinMessage: pinMsg,
+  onUnpinMessage: unpinMsg,
+  onTyping: sendTypingIndicator,
+  onForwardMessage,
 }) => {
   const theme = useTheme();
   const { showNotification } = useNotification();
@@ -49,9 +49,18 @@ const ChatView = ({
   const [replyToMessage, setReplyToMessage] = useState(null);
   const listRef = useRef(null);
   const isNearBottomRef = useRef(true);
-  const socketListenerId = useRef(`chatview-${uuidv4()}`);
-  const conversationId = conversation?.conversation_id || null;
-  const isGroupChat = conversation?.type === 'group' || false;
+  const conversationId = conversation?.conversation_id ?? null;
+  const isGroupChat = conversation?.type === 'group' ?? false;
+
+  // Log conversationId for debugging
+  useEffect(() => {
+    if (!conversationId || typeof conversationId !== 'string') {
+      console.warn('[ChatView] Invalid conversationId:', conversationId);
+      setError('No conversation selected');
+    } else {
+      console.log('[ChatView] conversationId:', conversationId);
+    }
+  }, [conversationId]);
 
   // Clear error after timeout
   useEffect(() => {
@@ -64,198 +73,65 @@ const ChatView = ({
   // Filter and sort messages
   const filteredMessages = useMemo(() => {
     if (!conversationId) return [];
-    const validMessages = (messages || []).filter(
-      (m) => m?.message_id && (isGroupChat ? m.group_id === conversationId : m.conversation_id === conversationId)
-    );
     return Array.from(
-      new Map(validMessages.map((m) => [m.message_id, m])).values()
+      new Map(
+        (messages || []).filter((m) => m?.message_id && m.conversation_id === conversationId).map((m) => [m.message_id, m])
+      ).values()
     ).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  }, [messages, conversationId, isGroupChat]);
+  }, [messages, conversationId]);
 
   // Fetch messages for pagination
   const fetchMessagesForPage = useCallback(
     async (targetPage, reset = false) => {
       if (!conversationId || isFetching || !hasMore) return;
-
       setIsFetching(true);
       setError(null);
-
       try {
-        const data = await fetchMessagesList(conversationId, {
-          page: targetPage,
-          limit: 20,
-          reset,
-        });
-
-        const newMessages = (data?.messages || []).filter((m) => m?.message_id);
-
-        setMessages((prev) => {
-          const validPrev = Array.isArray(prev) ? prev : [];
-          const filteredPrev = reset
-            ? validPrev.filter(
-                (m) => (isGroupChat ? m.group_id !== conversationId : m.conversation_id !== conversationId)
-              )
-            : validPrev;
-          const combined = [...filteredPrev, ...newMessages];
-          return Array.from(
-            new Map(combined.map((m) => [m.message_id, m])).values()
-          ).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        });
-
-        setHasMore(newMessages.length === 20);
+        const data = await loadMessages(conversationId, { page: targetPage, limit: 20 });
+        setHasMore(data.messages.length === 20);
         setPage(targetPage + 1);
+        if (reset) setMessages(data.messages);
       } catch (err) {
-        const errorMsg = err.message || 'Failed to load messages.';
+        const errorMsg = err.message || 'Failed to load messages';
         setError(errorMsg);
         showNotification(errorMsg, 'error');
       } finally {
         setIsFetching(false);
       }
     },
-    [conversationId, fetchMessagesList, isGroupChat, setMessages, hasMore, isFetching, showNotification]
+    [conversationId, loadMessages, hasMore, isFetching, setMessages, showNotification]
   );
 
   // Initial message fetch
   useEffect(() => {
     if (conversationId) {
+      setMessages([]);
       fetchMessagesForPage(1, true);
     }
-  }, [conversationId, fetchMessagesForPage]);
+  }, [conversationId, fetchMessagesForPage, setMessages]);
 
   // Real-time message updates
   useEffect(() => {
     if (!socket || !conversationId) return;
-
     const handleNewMessage = (newMessage) => {
-      if (
-        !newMessage?.message_id ||
-        (isGroupChat && newMessage.group_id !== conversationId) ||
-        (!isGroupChat && newMessage.conversation_id !== conversationId)
-      ) {
-        return;
-      }
-
+      if (newMessage?.conversation_id !== conversationId) return;
       setMessages((prev) => {
-        if (
-          prev.some(
-            (m) =>
-              m.message_id === newMessage.message_id ||
-              m.client_message_id === newMessage.client_message_id
-          )
-        ) {
-          return prev;
-        }
-        return [...prev, newMessage].sort(
-          (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
-        );
+        if (prev.some((m) => m.message_id === newMessage.message_id)) return prev;
+        return [...prev, newMessage].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
       });
-
       if (newMessage.sender_id !== currentUserId) {
-        onMarkRead(newMessage.message_id).catch((err) =>
+        markRead(newMessage.message_id).catch(() =>
           showNotification('Failed to mark message as read', 'error')
         );
       }
     };
-
-    socket.on(`new_message_${socketListenerId.current}`, handleNewMessage);
-    return () => {
-      socket.off(`new_message_${socketListenerId.current}`, handleNewMessage);
-    };
-  }, [socket, isGroupChat, conversationId, setMessages, currentUserId, onMarkRead, showNotification]);
-
-  // Send message
-  const handleSendMessage = useCallback(
-    async (messageData) => {
-      if (!conversationId || (!messageData.content?.trim() && !messageData.media?.length)) {
-        showNotification('Message content or media is required', 'error');
-        return false;
-      }
-
-      const clientMessageId = `client-${uuidv4()}`;
-      const finalMessageData = {
-        conversationId: String(conversationId),
-        content: messageData.content?.trim(),
-        media: messageData.media || [],
-        replyTo: messageData.replyTo || undefined,
-        selectedText: messageData.selectedText || undefined,
-        isTextReply: messageData.isTextReply || false,
-        thread_id: messageData.thread_id || null,
-        client_message_id: clientMessageId,
-      };
-
-      const tempMessage = {
-        ...finalMessageData,
-        message_id: clientMessageId,
-        sender_id: currentUserId,
-        timestamp: new Date().toISOString(),
-        is_read: false,
-        delivery_status: 'pending',
-      };
-
-      setMessages((prev) => {
-        const updated = prev.filter((m) => m.client_message_id !== clientMessageId);
-        return [...updated, tempMessage].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-      });
-
-      try {
-        const sentMessage = await onSendMediaMessage(
-          finalMessageData.conversationId,
-          finalMessageData.content,
-          finalMessageData.media,
-          finalMessageData.replyTo
-        );
-
-        if (!sentMessage) throw new Error('Empty message response from server');
-
-        setMessages((prev) =>
-          prev
-            .map((m) =>
-              m.client_message_id === clientMessageId
-                ? { ...sentMessage, message_id: sentMessage.message_id || clientMessageId }
-                : m
-            )
-            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-        );
-
-        setReplyToMessage(null);
-        return true;
-      } catch (err) {
-        const errorMsg = err.message || 'Failed to send message.';
-        setError(errorMsg);
-        showNotification(errorMsg, 'error');
-        setMessages((prev) => prev.filter((m) => m.client_message_id !== clientMessageId));
-        return false;
-      }
-    },
-    [conversationId, currentUserId, onSendMediaMessage, setMessages, setReplyToMessage, showNotification]
-  );
-
-  // Retry failed message
-  const handleRetrySend = useCallback(
-    async (messageData) => {
-      try {
-        await handleSendMessage(messageData);
-        setError(null);
-      } catch (err) {
-        const errorMsg = err.message || 'Failed to retry sending message.';
-        setError(errorMsg);
-        showNotification(errorMsg, 'error');
-      }
-    },
-    [handleSendMessage, showNotification]
-  );
-
-  // Placeholder for clearPendingMedia (to be removed if not needed)
-  const clearPendingMedia = useCallback(() => {
-    // No-op function to prevent errors in ChatFooter
-    // TODO: Verify if ChatFooter requires this and implement or remove
-  }, []);
+    socket.on('newMessage', handleNewMessage);
+    return () => socket.off('newMessage', handleNewMessage);
+  }, [socket, conversationId, currentUserId, markRead, setMessages, showNotification]);
 
   // Load more messages
   const handleLoadMore = useCallback(() => {
-    if (!isFetching && hasMore) {
-      fetchMessagesForPage(page);
-    }
+    if (!isFetching && hasMore) fetchMessagesForPage(page);
   }, [fetchMessagesForPage, isFetching, hasMore, page]);
 
   // Save chat settings
@@ -265,15 +141,15 @@ const ChatView = ({
   }, []);
 
   // Calculate message item size
-  const itemSize = useCallback(
+  const getItemSize = useCallback(
     (index) => {
       const message = filteredMessages[index];
       if (!message) return 120;
       let baseSize = 120;
       if (message.media?.length) baseSize += 180;
-      if (message.poll) baseSize += 100;
-      if (message.replyTo) baseSize += 60;
-      if (message.content) baseSize += Math.floor((message.content.length || 0) / 50) * 20;
+      if (message.type === 'poll') baseSize += 100;
+      if (message.reply_to) baseSize += 60;
+      if (message.content) baseSize += Math.floor(message.content.length / 50) * 20;
       return Math.max(120, baseSize);
     },
     [filteredMessages]
@@ -282,16 +158,16 @@ const ChatView = ({
   // Render message item
   const renderItem = useCallback(
     ({ index, style }) => {
+      const message = filteredMessages[index];
       return (
-        <div style={style} key={filteredMessages[index].message_id}>
+        <div style={style} key={message.message_id}>
           <ChatMessages
-            messages={[filteredMessages[index]]}
+            messages={[message]}
             currentUserId={currentUserId}
             recipient={conversation}
-            onDeleteMessage={onDeleteMessage}
-            onEditMessage={onEditMessage}
-            onSendMediaMessage={handleSendMessage}
-            onMarkRead={onMarkRead}
+            onDeleteMessage={deleteMsg}
+            onEditMessage={editMsg}
+            onMarkRead={markRead}
             onForwardMessage={onForwardMessage}
             isFetching={isFetching}
             hasMore={hasMore}
@@ -301,18 +177,15 @@ const ChatView = ({
             isGroupChat={isGroupChat}
             friends={friends}
             token={token}
-            onAddReaction={onAddReaction}
-            onCreatePoll={onCreatePoll}
-            onVotePoll={onVotePoll}
-            onPinMessage={onPinMessage}
-            onUnpinMessage={onUnpinMessage}
+            onAddReaction={addMessageReaction}
+            onCreatePoll={createNewPoll}
+            onVotePoll={voteInPoll}
+            onPinMessage={pinMsg}
+            onUnpinMessage={unpinMsg}
             chatSettings={chatSettings}
             showDate={
               index === 0 ||
-              !isSameDay(
-                new Date(filteredMessages[index].timestamp),
-                new Date(filteredMessages[index - 1]?.timestamp)
-              )
+              !isSameDay(new Date(message.timestamp), new Date(filteredMessages[index - 1]?.timestamp))
             }
             socket={socket}
           />
@@ -323,10 +196,9 @@ const ChatView = ({
       filteredMessages,
       currentUserId,
       conversation,
-      onDeleteMessage,
-      onEditMessage,
-      handleSendMessage,
-      onMarkRead,
+      deleteMsg,
+      editMsg,
+      markRead,
       onForwardMessage,
       isFetching,
       hasMore,
@@ -336,21 +208,19 @@ const ChatView = ({
       isGroupChat,
       friends,
       token,
-      onAddReaction,
-      onCreatePoll,
-      onVotePoll,
-      onPinMessage,
-      onUnpinMessage,
+      addMessageReaction,
+      createNewPoll,
+      voteInPoll,
+      pinMsg,
+      unpinMsg,
       socket,
     ]
   );
 
   // Auto-scroll to bottom
   useEffect(() => {
-    if (filteredMessages.length > 0 && listRef.current && isNearBottomRef.current) {
-      setTimeout(() => {
-        listRef.current.scrollToItem(filteredMessages.length - 1, 'end');
-      }, 100);
+    if (filteredMessages.length && listRef.current && isNearBottomRef.current) {
+      listRef.current.scrollToItem(filteredMessages.length - 1, 'end');
     }
   }, [filteredMessages]);
 
@@ -358,24 +228,17 @@ const ChatView = ({
   useEffect(() => {
     const outerRef = listRef.current?._outerRef;
     if (!outerRef) return;
-
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = outerRef;
       isNearBottomRef.current = scrollTop + clientHeight >= scrollHeight - 100;
-      if (scrollTop < 100 && hasMore && !isFetching) {
-        handleLoadMore();
-      }
+      if (scrollTop < 100 && hasMore && !isFetching) handleLoadMore();
     };
-
     outerRef.addEventListener('scroll', handleScroll);
-    return () => {
-      if (outerRef) {
-        outerRef.removeEventListener('scroll', handleScroll);
-      }
-    };
+    return () => outerRef.removeEventListener('scroll', handleScroll);
   }, [hasMore, isFetching, handleLoadMore]);
 
-  if (!conversation || !conversationId) {
+  // Early return if no valid conversation
+  if (!conversation || !conversationId || typeof conversationId !== 'string') {
     return (
       <Typography variant="h6" color="text.secondary" sx={{ mt: 4, textAlign: 'center' }}>
         Select a conversation to start chatting
@@ -389,25 +252,21 @@ const ChatView = ({
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        border: '1px solid',
-        borderColor: theme.palette.grey[300],
+        border: `1px solid ${theme.palette.grey[300]}`,
         borderRadius: 2,
         bgcolor: theme.palette.background.paper,
       }}
       aria-label="Chat View"
     >
-      {error && (
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-          <Alert severity="error" onClose={() => setError(null)} sx={{ m: 1 }}>
-            {error}
-            {error.includes('Failed to send') && (
-              <Button size="small" onClick={() => handleRetrySend(replyToMessage)}>
-                Retry
-              </Button>
-            )}
-          </Alert>
-        </motion.div>
-      )}
+      <AnimatePresence>
+        {error && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <Alert severity="error" onClose={() => setError(null)} sx={{ m: 1 }}>
+              {error}
+            </Alert>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <ChatHeader
         recipient={conversation}
         isGroupChat={isGroupChat}
@@ -425,7 +284,7 @@ const ChatView = ({
               height={height}
               width={width}
               itemCount={filteredMessages.length}
-              itemSize={itemSize}
+              itemSize={getItemSize}
               overscanCount={10}
             >
               {renderItem}
@@ -441,7 +300,7 @@ const ChatView = ({
       <ChatFooter
         conversationId={conversationId}
         recipient={conversation}
-        onSendMediaMessage={handleSendMessage}
+        onSendMessage={sendNewMessage}
         replyToMessage={replyToMessage}
         setReplyToMessage={setReplyToMessage}
         isGroupChat={isGroupChat}
@@ -449,8 +308,7 @@ const ChatView = ({
         currentUserId={currentUserId}
         friends={friends}
         socket={socket}
-        onTyping={onTyping}
-        clearPendingMedia={clearPendingMedia} // Added to maintain compatibility
+        onTyping={sendTypingIndicator}
       />
       <ChatSettingsModal
         open={settingsOpen}
@@ -471,46 +329,40 @@ ChatView.propTypes = {
     name: PropTypes.string,
     participants: PropTypes.arrayOf(PropTypes.string),
   }),
-  onSendMediaMessage: PropTypes.func.isRequired,
-  onMarkRead: PropTypes.func.isRequired,
-  onDeleteMessage: PropTypes.func.isRequired,
-  onEditMessage: PropTypes.func.isRequired,
-  onForwardMessage: PropTypes.func.isRequired,
-  token: PropTypes.string.isRequired,
-  fetchMessagesList: PropTypes.func.isRequired,
-  friends: PropTypes.arrayOf(
-    PropTypes.shape({
-      anonymous_id: PropTypes.string.isRequired,
-      username: PropTypes.string,
-    })
-  ).isRequired,
   messages: PropTypes.arrayOf(
     PropTypes.shape({
       message_id: PropTypes.string.isRequired,
       conversation_id: PropTypes.string,
-      group_id: PropTypes.string,
       content: PropTypes.string,
       timestamp: PropTypes.string.isRequired,
       is_read: PropTypes.bool,
       sender_id: PropTypes.string,
       type: PropTypes.string,
       media: PropTypes.array,
-      replyTo: PropTypes.string,
-      selectedText: PropTypes.string,
-      pinned: PropTypes.bool,
-      reactions: PropTypes.array,
-      client_message_id: PropTypes.string,
-      isTextReply: PropTypes.bool,
+      reply_to: PropTypes.string,
     })
   ).isRequired,
   setMessages: PropTypes.func.isRequired,
+  token: PropTypes.string.isRequired,
+  friends: PropTypes.arrayOf(
+    PropTypes.shape({
+      anonymous_id: PropTypes.string.isRequired,
+      username: PropTypes.string,
+    })
+  ).isRequired,
+  socket: PropTypes.object,
+  fetchMessagesList: PropTypes.func.isRequired,
+  onSendMessage: PropTypes.func.isRequired,
+  onMarkRead: PropTypes.func.isRequired,
+  onDeleteMessage: PropTypes.func.isRequired,
+  onEditMessage: PropTypes.func.isRequired,
   onAddReaction: PropTypes.func.isRequired,
   onCreatePoll: PropTypes.func.isRequired,
   onVotePoll: PropTypes.func.isRequired,
   onPinMessage: PropTypes.func.isRequired,
   onUnpinMessage: PropTypes.func.isRequired,
   onTyping: PropTypes.func.isRequired,
-  socket: PropTypes.object,
+  onForwardMessage: PropTypes.func.isRequired,
 };
 
 export default React.memo(ChatView);

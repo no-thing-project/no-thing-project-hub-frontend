@@ -1,3 +1,4 @@
+// src/utils/validations.js
 import Joi from 'joi';
 
 export const SUPPORTED_MIME_TYPES = [
@@ -608,15 +609,15 @@ export const muteConversationSchema = Joi.object({
   })
   .label('MuteConversation');
 
-// Existing message-related schemas (unchanged)
+// Message-related schemas
 export const sendMessageBodySchema = Joi.object({
   conversationId: Joi.string()
     .pattern(uuidPattern)
     .required()
     .messages({
-      'string.base': messageErrorMessages.string.replace('{{#label}}', 'Conversation ID'),
-      'string.pattern.base': messageErrorMessages.uuid.replace('{{#label}}', 'Conversation ID'),
-      'any.required': messageErrorMessages.required.replace('{{#label}}', 'Conversation ID'),
+      'string.base': 'Conversation ID must be a string (e.g)',
+      'string.pattern.base': 'Conversation ID must be a valid UUID format',
+      'any.required': 'Conversation ID is required to send a message',
     }),
   content: Joi.string()
     .allow('')
@@ -698,6 +699,7 @@ export const sendMessageBodySchema = Joi.object({
   forwardedFrom: Joi.string()
     .pattern(uuidPattern)
     .optional()
+    .allow(null)
     .messages({
       'string.base': messageErrorMessages.string.replace('{{#label}}', 'ForwardedFrom'),
       'string.pattern.base': messageErrorMessages.uuid.replace('{{#label}}', 'ForwardedFrom'),
@@ -705,6 +707,7 @@ export const sendMessageBodySchema = Joi.object({
   threadId: Joi.string()
     .pattern(uuidPattern)
     .optional()
+    .allow(null)
     .messages({
       'string.base': messageErrorMessages.string.replace('{{#label}}', 'Thread ID'),
       'string.pattern.base': messageErrorMessages.uuid.replace('{{#label}}', 'Thread ID'),
@@ -732,7 +735,7 @@ export const sendMessageBodySchema = Joi.object({
 })
   .or('content', 'media')
   .messages({
-    'object.missing': 'Either content or media is required',
+    'object.missing': 'Either message content or media is required',
   })
   .label('SendMessageBody');
 
@@ -943,8 +946,6 @@ export const generatePresignedUrlSchema = Joi.object({
       'number.max': `File size cannot exceed ${MAX_FILE_SIZE / (1024 * 1024)}MB`,
     }),
 }).label('GeneratePresignedUrl');
-
-// New schemas for additional frontend validations
 
 // Schema for forwarding a message
 export const forwardMessageSchema = Joi.object({

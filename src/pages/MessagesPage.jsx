@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -6,11 +6,9 @@ import {
   Snackbar,
   Typography,
   Button,
-  CircularProgress,
   useTheme,
 } from '@mui/material';
 import { GroupAdd } from '@mui/icons-material';
-import { throttle } from 'lodash';
 import AppLayout from '../components/Layout/AppLayout';
 import LoadingSpinner from '../components/Layout/LoadingSpinner';
 import useAuth from '../hooks/useAuth';
@@ -90,7 +88,6 @@ const MessagesPage = () => {
     markRead,
     deleteMsg,
     editMsg,
-    searchMsgs,
     pinMsg,
     unpinMsg,
     loading: messagesLoading,
@@ -118,14 +115,12 @@ const MessagesPage = () => {
   // Initialize socket.io
   useEffect(() => {
     if (!token || !isAuthenticated) return;
-
     try {
       connectSocket(token);
       socketRef.current = getSocket();
     } catch (err) {
       showNotification(getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.SOCKET_CONNECTION), 'error');
     }
-
     return () => {
       socketRef.current?.disconnect();
     };
@@ -136,51 +131,35 @@ const MessagesPage = () => {
     const socket = socketRef.current;
     if (!socket || !authData?.anonymous_id) return;
 
-    const handleNewMessage = throttle((message) => {
-      if (!message?.message_id || !message?.conversation_id) {
-        console.warn('Invalid message received:', message);
-        return;
-      }
+    const handleNewMessage = (message) => {
+      if (!message?.message_id || !message?.conversation_id) return;
       setMessages((prev) => {
         const validPrev = Array.isArray(prev) ? prev : [];
-        if (validPrev.some((m) => m.message_id === message.message_id)) {
-          return validPrev;
-        }
-        return [...validPrev, message].sort(
-          (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
-        );
+        if (validPrev.some((m) => m.message_id === message.message_id)) return validPrev;
+        return [...validPrev, message].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
       });
-      // Update conversation last message
       setConversations((prev) =>
         prev.map((conv) =>
-          conv.conversation_id === message.conversation_id
-            ? { ...conv, lastMessage: message }
-            : conv
+          conv.conversation_id === message.conversation_id ? { ...conv, lastMessage: message } : conv
         )
       );
-    }, MESSAGE_CONSTANTS.THROTTLE_MS);
+    };
 
     const handleConversationCreated = (newConv) => {
-      if (!newConv?.conversation_id) {
-        console.warn('Invalid conversation received:', newConv);
-        return;
-      }
+      if (!newConv?.conversation_id) return;
       setConversations((prev) => {
-        if (prev.some((c) => c.conversation_id === newConv.conversation_id)) {
-          return prev;
-        }
+        if (prev.some((c) => c.conversation_id === newConv.conversation_id)) return prev;
         return [newConv, ...prev];
       });
     };
 
     socket.on(SOCKET_EVENTS.MESSAGE, handleNewMessage);
     socket.on(SOCKET_EVENTS.CONVERSATION_CREATED, handleConversationCreated);
-
     return () => {
       socket.off(SOCKET_EVENTS.MESSAGE, handleNewMessage);
       socket.off(SOCKET_EVENTS.CONVERSATION_CREATED, handleConversationCreated);
     };
-  }, [socketRef, setMessages, setConversations, authData?.anonymous_id]);
+  }, [authData?.anonymous_id, setConversations, setMessages]);
 
   // Load initial data
   useEffect(() => {
@@ -190,35 +169,25 @@ const MessagesPage = () => {
     }
     if (token) {
       loadConversations({ page: 1, limit: 20 })
-        .then((data) => {
-          setHasMore(data.conversations.length === 20);
-        })
-        .catch((err) => {
+        .then((data) => setHasMore(data.conversations.length === 20))
+        .catch((err) =>
           showNotification(
             err.message || getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.CONVERSATION_LOAD),
             'error'
-          );
-        });
-      if (!friendsFetched && friends.length === 0) {
+          )
+        );
+      if (!friendsFetched && !friends.length) {
         getFriends()
           .then(() => setFriendsFetched(true))
-          .catch((err) => {
+          .catch((err) =>
             showNotification(
               err.message || getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.FRIENDS_LOAD),
               'error'
-            );
-          });
+            )
+          );
       }
     }
-  }, [
-    isAuthenticated,
-    token,
-    loadConversations,
-    getFriends,
-    friendsFetched,
-    friends,
-    showNotification,
-  ]);
+  }, [isAuthenticated, token, loadConversations, getFriends, friendsFetched, friends, showNotification]);
 
   // Load more conversations
   const loadMoreConversations = useCallback(async () => {
@@ -234,18 +203,6 @@ const MessagesPage = () => {
     }
   }, [convLoading, hasMore, loadConversations, page, showNotification]);
 
-  // Handle typing events
-  const handleTyping = useCallback(
-    throttle(() => {
-      if (selectedConversation?.conversation_id) {
-        sendTypingIndicator(selectedConversation.conversation_id).catch((err) => {
-          showNotification('Failed to send typing indicator', 'error');
-        });
-      }
-    }, 1000),
-    [selectedConversation, sendTypingIndicator, showNotification]
-  );
-
   const clearNotifications = useCallback(() => {
     setSuccess('');
     setError('');
@@ -255,18 +212,14 @@ const MessagesPage = () => {
 
   const handleCreateGroup = useCallback(
     async (name, members) => {
-      if (!name.trim() || members.length < 1) {
+      if (!name?.trim() || !members?.length) {
         const errorMsg = getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.GROUP_VALIDATION);
         setError(errorMsg);
         showNotification(errorMsg, 'error');
         return;
       }
       try {
-        const group = await createNewConversation({
-          type: 'group',
-          name,
-          members,
-        });
+        const group = await createNewConversation({ type: 'group', name, members });
         setSuccess(`${group.name} ${getLocalizedMessage(MESSAGE_CONSTANTS.SUCCESS.GROUP_CREATED)}`);
         setGroupModalOpen(false);
         setSelectedConversation(group);
@@ -286,7 +239,7 @@ const MessagesPage = () => {
 
   const handleForwardConfirm = useCallback(
     async (recipients) => {
-      if (!forwardMessage || !recipients.length) {
+      if (!forwardMessage || !recipients?.length) {
         const errorMsg = 'No message or recipients selected';
         setError(errorMsg);
         showNotification(errorMsg, 'error');
@@ -317,7 +270,7 @@ const MessagesPage = () => {
         showNotification(errorMsg, 'error');
       }
     },
-    [forwardMessage, sendNewMessage, getOrCreateConversation, showNotification]
+    [forwardMessage, getOrCreateConversation, sendNewMessage, showNotification]
   );
 
   if (authLoading) return <LoadingSpinner />;
@@ -333,18 +286,13 @@ const MessagesPage = () => {
           display: 'flex',
           flexDirection: 'column',
           bgcolor: theme.palette.background.default,
-          boxSizing: 'border-box',
         }}
         role="main"
         aria-label="Messages Page"
       >
         <ProfileHeader user={authData} isOwnProfile />
         {(error || convError || messagesError) && (
-          <Alert
-            severity="error"
-            onClose={clearNotifications}
-            sx={{ mt: 2, borderRadius: 1, mx: { xs: 1, md: 0 } }}
-          >
+          <Alert severity="error" onClose={clearNotifications} sx={{ mt: 2, borderRadius: 1 }}>
             {error || convError || messagesError}
           </Alert>
         )}
@@ -360,22 +308,14 @@ const MessagesPage = () => {
             </Alert>
           </Snackbar>
         )}
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            mb: 2,
-            gap: 2,
-            alignItems: 'center',
-          }}
-        >
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2, gap: 2, alignItems: 'center' }}>
           <Button
             variant="contained"
-            startIcon={<GroupAdd aria-hidden="true" />}
+            startIcon={<GroupAdd />}
             onClick={() => setGroupModalOpen(true)}
             aria-label="Create new group chat"
-            disabled={friends.length === 0 || convLoading}
-            sx={{ minWidth: 'fit-content', borderRadius: 1, px: 3, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+            disabled={!friends.length || convLoading}
+            sx={{ borderRadius: 1, px: 3, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
           >
             Create Group
           </Button>
@@ -389,29 +329,25 @@ const MessagesPage = () => {
             overflow: 'hidden',
             borderRadius: 1,
             boxShadow: theme.shadows[2],
-            boxSizing: 'border-box',
           }}
         >
           <Box
             sx={{
-              flex: { xs: '1 1 100%', md: '1 1 30%' },
-              maxWidth: { md: '400px' },
+              flex: { xs: '1 1 100%', md: '0 0 30%' },
+              maxWidth: { md: 400 },
               bgcolor: theme.palette.background.paper,
               borderRadius: 1,
               overflowY: 'auto',
-              boxSizing: 'border-box',
             }}
             aria-label="Conversations list"
           >
             <MemoizedConversationsList
               conversations={conversations}
-              groupChats={conversations.filter((c) => c.type === 'group')}
               friends={friends}
               currentUserId={authData?.anonymous_id}
               onSelectConversation={setSelectedConversation}
               selectedConversation={selectedConversation}
               onDeleteConversation={deleteConv}
-              onDeleteGroupChat={deleteConv}
               messages={messages}
               getOrCreateConversation={getOrCreateConversation}
               pinConv={pinConv}
@@ -433,7 +369,6 @@ const MessagesPage = () => {
               bgcolor: theme.palette.background.paper,
               borderRadius: 1,
               overflow: 'hidden',
-              boxSizing: 'border-box',
             }}
             aria-label="Chat View"
           >
@@ -442,7 +377,7 @@ const MessagesPage = () => {
                 currentUserId={authData?.anonymous_id}
                 conversation={selectedConversation}
                 socket={socketRef.current}
-                onSendMediaMessage={sendNewMessage}
+                onSendMessage={sendNewMessage}
                 onMarkRead={markRead}
                 onDeleteMessage={deleteMsg}
                 onEditMessage={editMsg}
@@ -457,15 +392,10 @@ const MessagesPage = () => {
                 onVotePoll={voteInPoll}
                 onPinMessage={pinMsg}
                 onUnpinMessage={unpinMsg}
-                onTyping={handleTyping}
+                onTyping={sendTypingIndicator}
               />
             ) : (
-              <Typography
-                variant="h6"
-                color="text.secondary"
-                sx={{ mt: 4, textAlign: 'center' }}
-                aria-label="No conversation selected"
-              >
+              <Typography variant="h6" color="text.secondary" sx={{ mt: 4, textAlign: 'center' }}>
                 {getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.NO_CONVERSATION)}
               </Typography>
             )}

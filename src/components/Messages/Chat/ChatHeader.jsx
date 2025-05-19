@@ -1,14 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import PropTypes from 'prop-types';
-import {
-  Box,
-  Typography,
-  IconButton,
-  Avatar,
-  Skeleton,
-  Chip,
-  Alert,
-} from '@mui/material';
+import { Box, Typography, IconButton, Avatar, Skeleton, Chip, Alert } from '@mui/material';
 import { Settings } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
@@ -28,7 +20,7 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket, friends, c
         ?.filter((id) => id !== currentUserId)
         .map((id) => friends.find((f) => f.anonymous_id === id)?.username || 'Unknown')
         .filter(Boolean);
-      return participantNames?.length > 0 ? participantNames.join(', ') : 'Unnamed Group';
+      return participantNames?.length ? participantNames.join(', ') : 'Unnamed Group';
     }
     const friend = friends.find(
       (f) => recipient?.participants?.includes(f.anonymous_id) && f.anonymous_id !== currentUserId
@@ -36,7 +28,7 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket, friends, c
     return friend?.username || recipient?.username || 'Unknown User';
   }, [isGroupChat, recipient, friends, currentUserId]);
 
-  const avatarSrc = useMemo(() => recipient?.profile_image || null, [recipient]);
+  const avatarSrc = useMemo(() => recipient?.profile_image ?? null, [recipient]);
   const avatarAlt = `Avatar for ${displayName}`;
 
   const handleOnlineStatus = useCallback(
@@ -50,12 +42,13 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket, friends, c
   );
 
   const handleTypingStatus = useCallback(
-    ({ userId, status }) => {
-      if (!isGroupChat && recipient?.anonymous_id === userId) {
-        setIsTyping(status);
+    ({ userId, conversationId }) => {
+      if (!isGroupChat && recipient?.anonymous_id === userId && conversationId === recipient?.conversation_id) {
+        setIsTyping(true);
+        setTimeout(() => setIsTyping(false), 3000);
       }
     },
-    [isGroupChat, recipient?.anonymous_id]
+    [isGroupChat, recipient?.anonymous_id, recipient?.conversation_id]
   );
 
   useEffect(() => {
@@ -69,7 +62,6 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket, friends, c
       },
       { threshold: 0.1 }
     );
-
     if (avatarRef.current) observer.observe(avatarRef.current);
     return () => observer.disconnect();
   }, [avatarSrc]);
@@ -79,18 +71,16 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket, friends, c
       setIsLoading(false);
       return;
     }
-
     socket.emit('check_online', recipient.anonymous_id);
-    socket.on(`online_status_${socketListenerId.current}`, handleOnlineStatus);
-    socket.on(`typing_status_${socketListenerId.current}`, handleTypingStatus);
+    socket.on('online_status', handleOnlineStatus);
+    socket.on('typing', handleTypingStatus);
     socket.on('connect_error', (err) => {
       setError('Connection error. Retrying...');
       console.error('Socket connect error:', err);
     });
-
     return () => {
-      socket.off(`online_status_${socketListenerId.current}`, handleOnlineStatus);
-      socket.off(`typing_status_${socketListenerId.current}`, handleTypingStatus);
+      socket.off('online_status', handleOnlineStatus);
+      socket.off('typing', handleTypingStatus);
       socket.off('connect_error');
     };
   }, [socket, isGroupChat, recipient?.anonymous_id, handleOnlineStatus, handleTypingStatus]);
@@ -120,7 +110,7 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket, friends, c
         p: 2,
         bgcolor: 'primary.main',
         color: 'white',
-        borderBottom: '1px solid',
+        borderBottom: `1px solid`,
         borderColor: 'grey.300',
       }}
       aria-label="Chat Header"
@@ -140,12 +130,7 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket, friends, c
           {isLoading ? (
             <Skeleton variant="circular" width={40} height={40} />
           ) : (
-            <Avatar
-              src={avatarSrc}
-              alt={avatarAlt}
-              sx={{ width: 40, height: 40 }}
-              imgProps={{ loading: 'lazy' }}
-            >
+            <Avatar src={avatarSrc} alt={avatarAlt} sx={{ width: 40, height: 40 }} imgProps={{ loading: 'lazy' }}>
               {displayName.charAt(0).toUpperCase()}
             </Avatar>
           )}
@@ -161,11 +146,7 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket, friends, c
           ) : isLoading ? (
             <Skeleton variant="text" width={60} sx={{ mt: 0.5 }} />
           ) : (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
               <Chip
                 label={isTyping ? 'Typing...' : isOnline ? 'Online' : 'Offline'}
                 size="small"
@@ -176,11 +157,7 @@ const ChatHeader = ({ recipient, isGroupChat, onSettingsOpen, socket, friends, c
           )}
         </Box>
       </Box>
-      <IconButton
-        onClick={onSettingsOpen}
-        color="inherit"
-        sx={{ p: 1 }}
-      >
+      <IconButton onClick={onSettingsOpen} color="inherit" sx={{ p: 1 }} aria-label="Open chat settings">
         <Settings />
       </IconButton>
     </Box>
@@ -194,6 +171,7 @@ ChatHeader.propTypes = {
     username: PropTypes.string,
     profile_image: PropTypes.string,
     participants: PropTypes.arrayOf(PropTypes.string),
+    conversation_id: PropTypes.string,
   }),
   isGroupChat: PropTypes.bool.isRequired,
   onSettingsOpen: PropTypes.func.isRequired,

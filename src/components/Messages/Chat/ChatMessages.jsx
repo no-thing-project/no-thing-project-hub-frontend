@@ -188,8 +188,8 @@ const ChatMessages = ({
     );
     for (const msg of unreadMessages) {
       if (msg?.message_id) {
-        onMarkRead(msg.message_id).catch((err) =>
-          console.error('Mark read error:', err)
+        onMarkRead(msg.message_id).catch(() =>
+          setError('Failed to mark message as read')
         );
       }
     }
@@ -213,8 +213,7 @@ const ChatMessages = ({
         }
       }
     } catch (err) {
-      console.error(`[ChatMessages] Mark all read error: ${err.message}`);
-      setError('Failed to mark all messages as read.');
+      setError('Failed to mark all messages as read');
     }
   }, [normalizedMessages, currentUserId, onMarkRead]);
 
@@ -224,8 +223,7 @@ const ChatMessages = ({
         await onSendMediaMessage(message);
         setError(null);
       } catch (err) {
-        console.error(`[ChatMessages] Retry send error: ${err.message}`);
-        setError('Failed to retry sending message.');
+        setError('Failed to retry sending message');
       }
     },
     [onSendMediaMessage]

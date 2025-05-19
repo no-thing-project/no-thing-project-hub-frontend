@@ -19,9 +19,7 @@ const ConversationAvatar = ({ item, currentUserId }) => (
   >
     <Avatar
       sx={{
-        bgcolor: item.isGroup
-          ? 'secondary.main'
-          : 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
+        bgcolor: item.isGroup ? 'secondary.main' : 'primary.main',
         width: 40,
         height: 40,
       }}

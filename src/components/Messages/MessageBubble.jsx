@@ -417,7 +417,7 @@ const MessageBubble = ({
                             textDecoration: 'none',
                           }}
                         >
-                          {media.fileKey || 'Download File'}
+                          {media.name || 'Download File'}
                         </a>
                       </Box>
                     )}
@@ -583,7 +583,7 @@ MessageBubble.propTypes = {
       PropTypes.shape({
         type: PropTypes.string,
         url: PropTypes.string,
-        fileKey: PropTypes.string,
+        name: PropTypes.string,
       })
     ),
     reactions: PropTypes.arrayOf(

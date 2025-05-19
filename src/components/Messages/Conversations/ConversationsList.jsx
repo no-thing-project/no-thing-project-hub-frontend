@@ -20,13 +20,11 @@ import ConversationItem from './ConversationItem';
 
 const ConversationsList = ({
   conversations,
-  groupChats,
   friends,
   currentUserId,
   onSelectConversation,
   selectedConversation,
   onDeleteConversation,
-  onDeleteGroupChat,
   messages,
   getOrCreateConversation,
   pinConv,
@@ -61,10 +59,7 @@ const ConversationsList = ({
   }, [success, error]);
 
   // Debounced search handler
-  const debouncedSearch = useMemo(
-    () => debounce((query) => setSearchQuery(query), 300),
-    []
-  );
+  const debouncedSearch = useMemo(() => debounce((query) => setSearchQuery(query), 300), []);
 
   useEffect(() => {
     return () => debouncedSearch.cancel();
@@ -75,20 +70,18 @@ const ConversationsList = ({
     if (!socket) return;
 
     const handleConversationDeleted = ({ conversationId }) => {
-      if (!conversationId) {
-        console.warn('Invalid conversationId received for deletion');
-        return;
-      }
+      if (!conversationId) return;
       if (selectedConversation?.conversation_id === conversationId) {
         onSelectConversation(null);
       }
+      showNotification('Conversation deleted', 'info');
     };
 
     socket.on('conversationDeleted', handleConversationDeleted);
     return () => {
       socket.off('conversationDeleted', handleConversationDeleted);
     };
-  }, [socket, selectedConversation, onSelectConversation]);
+  }, [socket, selectedConversation, onSelectConversation, showNotification]);
 
   // Handle scroll for infinite loading
   const handleScroll = useCallback(
@@ -101,73 +94,83 @@ const ConversationsList = ({
     [hasMore, loading, loadMoreConversations]
   );
 
-  // Combine and process conversations
-  const combinedConversations = useMemo(() => {
-    const uniqueConversations = new Map();
-
-    // Process direct conversations
-    conversations.forEach((conv) => {
-      if (!conv?.type || conv.type !== 'group') {
-        const friend = friends.find(
-          (f) => conv.participants?.includes(f.anonymous_id) && f.anonymous_id !== currentUserId
-        );
-        const unreadCount = messages.filter(
-          (m) =>
-            m?.conversation_id === conv.conversation_id &&
-            !m.is_read &&
-            m.sender_id !== currentUserId
-        ).length;
-        let lastMessage = conv.lastMessage;
-        if (typeof lastMessage === 'string') {
-          lastMessage = messages.find((m) => m.message_id === lastMessage) || null;
-        }
-        uniqueConversations.set(conv.conversation_id, {
-          conversation_id: conv.conversation_id,
-          name: conv.name || friend?.username || 'Unknown',
-          isGroup: false,
-          lastMessage,
-          lastMessagePreview:
-            lastMessage?.content?.slice(0, 50) || (lastMessage?.media?.length ? 'Media message' : ''),
-          created_at: conv.created_at || new Date().toISOString(),
-          pinnedBy: conv.pinnedBy || [],
-          mutedBy: conv.mutedBy || [],
-          isArchived: conv.isArchived || false,
-          participants: conv.participants || [],
-          unreadCount,
-        });
-      }
-    });
-
-    // Process group chats
-    groupChats.forEach((group) => {
+  // Process conversations
+  const filteredConversations = useMemo(() => {
+    let filtered = conversations.map((conv) => {
+      const isGroup = conv.type === 'group';
+      const friend = !isGroup
+        ? friends.find(
+            (f) => conv.participants?.includes(f.anonymous_id) && f.anonymous_id !== currentUserId
+          )
+        : null;
       const unreadCount = messages.filter(
         (m) =>
-          (m?.group_id === group.group_id || m?.conversation_id === group.conversation_id) &&
+          m?.conversation_id === conv.conversation_id &&
           !m.is_read &&
           m.sender_id !== currentUserId
       ).length;
-      let lastMessage = group.lastMessage;
-      if (typeof lastMessage === 'string') {
-        lastMessage = messages.find((m) => m.message_id === lastMessage) || null;
-      }
-      uniqueConversations.set(group.conversation_id, {
-        conversation_id: group.conversation_id,
-        group_id: group.group_id,
-        name: group.name || 'Unnamed Group',
-        isGroup: true,
+      const lastMessage = messages.find((m) => m.message_id === conv.lastMessage?.message_id) || conv.lastMessage;
+
+      return {
+        conversation_id: conv.conversation_id,
+        name: conv.name || friend?.username || 'Unknown',
+        isGroup,
         lastMessage,
         lastMessagePreview:
           lastMessage?.content?.slice(0, 50) || (lastMessage?.media?.length ? 'Media message' : ''),
-        created_at: group.created_at || new Date().toISOString(),
-        pinnedBy: group.pinnedBy || [],
-        mutedBy: group.mutedBy || [],
-        isArchived: group.isArchived || false,
-        participants: group.participants || group.members || [],
+        created_at: conv.created_at || new Date().toISOString(),
+        pinnedBy: conv.pinnedBy || [],
+        mutedBy: conv.mutedBy || [],
+        isArchived: conv.isArchived || false,
+        participants: conv.participants || [],
         unreadCount,
-      });
+      };
     });
 
-    return Array.from(uniqueConversations.values()).sort((a, b) => {
+    // Apply filter
+    if (filter === 'active') {
+      filtered = filtered.filter((item) => !item.isArchived);
+    } else if (filter === 'archived') {
+      filtered = filtered.filter((item) => item.isArchived);
+    }
+
+    // Apply search
+    if (searchQuery.trim()) {
+      const lowerQuery = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (item) =>
+          item.name.toLowerCase().includes(lowerQuery) ||
+          item.lastMessagePreview?.toLowerCase().includes(lowerQuery) ||
+          item.participants?.some((id) => {
+            const friend = friends.find((f) => f.anonymous_id === id);
+            return friend?.username.toLowerCase().includes(lowerQuery);
+          })
+      );
+
+      // Include friends for new chats
+      const filteredFriends = friends
+        .filter(
+          (f) =>
+            f.anonymous_id !== currentUserId &&
+            f.username.toLowerCase().includes(lowerQuery) &&
+            !filtered.some((c) => !c.isGroup && c.participants?.includes(f.anonymous_id))
+        )
+        .map((f) => ({
+          conversation_id: `friend:${f.anonymous_id}`,
+          name: f.username,
+          isFriend: true,
+          created_at: new Date().toISOString(),
+          pinnedBy: [],
+          mutedBy: [],
+          isArchived: false,
+          unreadCount: 0,
+        }));
+
+      filtered = [...filtered, ...filteredFriends];
+    }
+
+    // Sort conversations
+    return filtered.sort((a, b) => {
       const aPinned = a.pinnedBy.includes(currentUserId);
       const bPinned = b.pinnedBy.includes(currentUserId);
       if (aPinned && !bPinned) return -1;
@@ -184,51 +187,7 @@ const ConversationsList = ({
         : new Date(b.created_at || 0);
       return bTime - aTime;
     });
-  }, [conversations, groupChats, friends, messages, currentUserId]);
-
-  // Filter conversations
-  const filteredItems = useMemo(() => {
-    let filtered = combinedConversations;
-
-    if (filter === 'active') {
-      filtered = filtered.filter((item) => !item.isArchived);
-    } else if (filter === 'archived') {
-      filtered = filtered.filter((item) => item.isArchived);
-    }
-
-    if (!searchQuery.trim()) return filtered;
-
-    const lowerQuery = searchQuery.toLowerCase();
-    const filteredConvs = filtered.filter(
-      (item) =>
-        item.name.toLowerCase().includes(lowerQuery) ||
-        item.lastMessagePreview?.toLowerCase().includes(lowerQuery) ||
-        item.participants?.some((id) => {
-          const friend = friends.find((f) => f.anonymous_id === id);
-          return friend?.username.toLowerCase().includes(lowerQuery);
-        })
-    );
-
-    const filteredFriends = friends
-      .filter(
-        (f) =>
-          f.anonymous_id !== currentUserId &&
-          f.username.toLowerCase().includes(lowerQuery) &&
-          !filteredConvs.some((c) => !c.isGroup && c.participants?.includes(f.anonymous_id))
-      )
-      .map((f) => ({
-        conversation_id: `friend:${f.anonymous_id}`,
-        name: f.username,
-        isFriend: true,
-        created_at: new Date().toISOString(),
-        pinnedBy: [],
-        mutedBy: [],
-        isArchived: false,
-        unreadCount: 0,
-      }));
-
-    return [...filteredConvs, ...filteredFriends];
-  }, [searchQuery, combinedConversations, friends, currentUserId, filter]);
+  }, [conversations, friends, messages, currentUserId, filter, searchQuery]);
 
   const handleSelectConversation = useCallback(
     async (item) => {
@@ -255,8 +214,7 @@ const ConversationsList = ({
   return (
     <Box
       sx={{
-        border: '1px solid',
-        borderColor: theme.palette.grey[300],
+        border: `1px solid ${theme.palette.grey[300]}`,
         borderRadius: 2,
         p: 2,
         bgcolor: theme.palette.background.paper,
@@ -308,7 +266,7 @@ const ConversationsList = ({
           <CircularProgress size={24} aria-label="Creating chat" />
         </Box>
       )}
-      {filteredItems.length === 0 ? (
+      {filteredConversations.length === 0 ? (
         <Typography
           variant="body1"
           color="text.secondary"
@@ -320,7 +278,7 @@ const ConversationsList = ({
       ) : (
         <List sx={{ p: 0 }}>
           <AnimatePresence>
-            {filteredItems.map((item) => (
+            {filteredConversations.map((item) => (
               <motion.div
                 key={item.conversation_id}
                 initial={{ opacity: 0, y: 20 }}
@@ -332,7 +290,7 @@ const ConversationsList = ({
                   item={item}
                   selected={selectedConversation?.conversation_id === item.conversation_id}
                   onSelect={handleSelectConversation}
-                  onDelete={item.isGroup ? onDeleteGroupChat : onDeleteConversation}
+                  onDelete={onDeleteConversation}
                   onPin={pinConv}
                   onUnpin={unpinConv}
                   onArchive={archiveConv}
@@ -382,30 +340,6 @@ ConversationsList.propTypes = {
       ]),
     })
   ).isRequired,
-  groupChats: PropTypes.arrayOf(
-    PropTypes.shape({
-      group_id: PropTypes.string,
-      conversation_id: PropTypes.string,
-      name: PropTypes.string.isRequired,
-      members: PropTypes.arrayOf(PropTypes.string).isRequired,
-      created_at: PropTypes.string,
-      pinnedBy: PropTypes.arrayOf(PropTypes.string),
-      mutedBy: PropTypes.arrayOf(PropTypes.string),
-      isArchived: PropTypes.bool,
-      lastMessage: PropTypes.oneOfType([
-        PropTypes.string,
-        PropTypes.shape({
-          message_id: PropTypes.string,
-          content: PropTypes.string,
-          timestamp: PropTypes.string,
-          sender_id: PropTypes.string,
-          is_read: PropTypes.bool,
-          type: PropTypes.string,
-          media: PropTypes.array,
-        }),
-      ]),
-    })
-  ).isRequired,
   friends: PropTypes.arrayOf(
     PropTypes.shape({
       anonymous_id: PropTypes.string.isRequired,
@@ -416,12 +350,10 @@ ConversationsList.propTypes = {
   onSelectConversation: PropTypes.func.isRequired,
   selectedConversation: PropTypes.object,
   onDeleteConversation: PropTypes.func.isRequired,
-  onDeleteGroupChat: PropTypes.func.isRequired,
   messages: PropTypes.arrayOf(
     PropTypes.shape({
       message_id: PropTypes.string.isRequired,
       conversation_id: PropTypes.string,
-      group_id: PropTypes.string,
       content: PropTypes.string,
       timestamp: PropTypes.string.isRequired,
       is_read: PropTypes.bool,
