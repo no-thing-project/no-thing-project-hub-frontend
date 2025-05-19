@@ -103,13 +103,13 @@ export const votePoll = (messageId, optionIndex, token) => {
 export const addReaction = (messageId, reaction, token) => {
   validatePayload(messageIdParamSchema, { messageId }, 'Invalid messageId');
   validatePayload(addReactionSchema, { reaction }, 'Invalid reaction data');
-  return apiRequest('post', `/api/v1/messages/${messageId}/reaction`, token, { payload: { reaction } });
+  return apiRequest('post', `/api/v1/messages/${messageId}/react`, token, { payload: { reaction } });
 };
 
 // Mark a message as read
 export const markMessageAsRead = (messageId, token) => {
   validatePayload(messageIdParamSchema, { messageId }, 'Invalid messageId');
-  return apiRequest('post', `/api/v1/messages/${messageId}/read`, token, {});
+  return apiRequest('put', `/api/v1/messages/${messageId}/read`, token, {});
 };
 
 // Delete a message

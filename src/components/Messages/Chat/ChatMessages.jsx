@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+// src/components/ChatMessages.jsx
+import React, { useEffect, useCallback, useState, useMemo, useRef } from 'react';
 import PropTypes from 'prop-types';
 import {
   Box,
@@ -16,7 +17,7 @@ import MessageBubble from '../MessageBubble';
 import { format, isSameDay } from 'date-fns';
 import debounce from 'lodash/debounce';
 
-const PinnedMessages = ({ pinnedMessages, theme, setHighlightedMessage }) => {
+const PinnedMessages = ({ pinnedMessages, theme, setHighlightedMessage, currentUserId }) => {
   return (
     <Box
       sx={{
@@ -34,25 +35,31 @@ const PinnedMessages = ({ pinnedMessages, theme, setHighlightedMessage }) => {
       <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
         Pinned Messages
       </Typography>
-      {pinnedMessages.map((msg) => (
-        <Typography
-          key={msg.message_id}
-          variant="body2"
-          sx={{ display: 'block', mt: 0.5, cursor: 'pointer' }}
-          onClick={() => {
-            const element = document.getElementById(`message-${msg.message_id}`);
-            element?.scrollIntoView({ behavior: 'smooth' });
-            setHighlightedMessage(msg.message_id);
-            setTimeout(() => setHighlightedMessage(null), 3000);
-          }}
-          role="button"
-          tabIndex={0}
-          onKeyPress={(e) => e.key === 'Enter' && e.target.click()}
-          aria-label={`Pinned message: ${msg.content?.slice(0, 50) || 'Media message'}`}
-        >
-          {msg.content?.length > 50 ? `${msg.content.slice(0, 50)}...` : msg.content || 'Media message'}
-        </Typography>
-      ))}
+      {pinnedMessages.map((msg) => {
+        const content = msg.content || (Array.isArray(msg.content_per_user) && msg.content_per_user.length > 0
+          ? msg.content_per_user.find(c => c.user_id === currentUserId)?.content || msg.content_per_user[0]?.content
+          : 'Media message');
+        console.log('[PinnedMessages] Rendering pinned message:', { message_id: msg.message_id, content });
+        return (
+          <Typography
+            key={msg.message_id}
+            variant="body2"
+            sx={{ display: 'block', mt: 0.5, cursor: 'pointer' }}
+            onClick={() => {
+              const element = document.getElementById(`message-${msg.message_id}`);
+              element?.scrollIntoView({ behavior: 'smooth' });
+              setHighlightedMessage(msg.message_id);
+              setTimeout(() => setHighlightedMessage(null), 3000);
+            }}
+            role="button"
+            tabIndex={0}
+            onKeyPress={(e) => e.key === 'Enter' && e.target.click()}
+            aria-label={`Pinned message: ${content.slice(0, 50)}`}
+          >
+            {content.length > 50 ? `${content.slice(0, 50)}...` : content}
+          </Typography>
+        );
+      })}
     </Box>
   );
 };
@@ -62,10 +69,17 @@ PinnedMessages.propTypes = {
     PropTypes.shape({
       message_id: PropTypes.string.isRequired,
       content: PropTypes.string,
+      content_per_user: PropTypes.arrayOf(
+        PropTypes.shape({
+          user_id: PropTypes.string,
+          content: PropTypes.string,
+        })
+      ),
     })
   ).isRequired,
   theme: PropTypes.object.isRequired,
   setHighlightedMessage: PropTypes.func.isRequired,
+  currentUserId: PropTypes.string.isRequired,
 };
 
 const getBackgroundStyle = (chatBackground) =>
@@ -110,9 +124,15 @@ const ChatMessages = ({
 
   const normalizedMessages = useMemo(() => {
     const msgs = Array.isArray(messages) ? messages : [messages].filter(Boolean);
-    return msgs
+    const sorted = msgs
       .filter((m) => m?.message_id)
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      .sort((a, b) => {
+        const aTime = a.timestamp ? new Date(a.timestamp) : new Date();
+        const bTime = b.timestamp ? new Date(b.timestamp) : new Date();
+        return aTime - bTime;
+      });
+    console.log('[ChatMessages] Normalized messages:', sorted);
+    return sorted;
   }, [messages]);
 
   const pinnedMessages = useMemo(() => {
@@ -155,6 +175,7 @@ const ChatMessages = ({
   const debouncedLoadMore = useCallback(
     debounce(() => {
       if (hasMore && !isFetching) {
+        console.log('[ChatMessages] Triggering loadMoreMessages');
         loadMoreMessages();
       }
     }, 300),
@@ -235,8 +256,10 @@ const ChatMessages = ({
       sx={{
         flex: 1,
         overflowY: 'auto',
-        p: 2,
+        p: { xs: 1, sm: 2 },
         ...backgroundStyle,
+        width: '100%',
+        boxSizing: 'border-box',
       }}
       role="region"
       aria-label="Chat messages"
@@ -248,16 +271,22 @@ const ChatMessages = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
           >
-            <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
+            <Alert
+              severity="error"
+              onClose={() => setError(null)}
+              sx={{ mb: 2 }}
+              action={
+                error.includes('Failed to send') ? (
+                  <Button
+                    size="small"
+                    onClick={() => handleRetrySend(contextMenu.message)}
+                  >
+                    Retry
+                  </Button>
+                ) : null
+              }
+            >
               {error}
-              {error.includes('Failed to send') && (
-                <Button
-                  size="small"
-                  onClick={() => handleRetrySend(contextMenu.message)}
-                >
-                  Retry
-                </Button>
-              )}
             </Alert>
           </motion.div>
         )}
@@ -268,6 +297,7 @@ const ChatMessages = ({
           pinnedMessages={pinnedMessages}
           theme={theme}
           setHighlightedMessage={setHighlightedMessage}
+          currentUserId={currentUserId}
         />
       )}
       {isGroupChat &&
@@ -282,7 +312,7 @@ const ChatMessages = ({
             </Button>
           </Box>
         )}
-      {isFetching && normalizedMessages.length === 0 && (
+      {isFetching && normalizedMessages.length === 0 ? (
         <Box sx={{ py: 2 }}>
           {[...Array(5)].map((_, i) => (
             <Box
@@ -302,76 +332,90 @@ const ChatMessages = ({
             </Box>
           ))}
         </Box>
-      )}
-      {normalizedMessages.length > 0 ? (
+      ) : normalizedMessages.length > 0 ? (
         <AnimatePresence>
-          {showDate && normalizedMessages[0]?.timestamp && (
-            <Box
-              sx={{
-                position: 'sticky',
-                top: pinnedMessages.length > 0 ? 80 : 0,
-                bgcolor: theme.palette.background.paper,
-                textAlign: 'center',
-                py: 1,
-                mb: 1,
-                borderRadius: 1,
-              }}
-              aria-label="Message date"
-            >
-              <Typography
-                variant="caption"
-                sx={{ color: theme.palette.text.secondary }}
-              >
-                {format(new Date(normalizedMessages[0].timestamp), 'MMMM d, yyyy')}
-              </Typography>
-            </Box>
-          )}
-          {normalizedMessages.map((msg) => (
-            <motion.div
-              key={msg.message_id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-            >
-              <MessageBubble
-                message={msg}
-                isSentByCurrentUser={msg.sender_id === currentUserId}
-                onDelete={onDeleteMessage}
-                onEdit={onEditMessage}
-                onSendMediaMessage={onSendMediaMessage}
-                currentUserId={currentUserId}
-                recipient={recipient}
-                messages={normalizedMessages}
-                setReplyToMessage={setReplyToMessage}
-                onForward={onForwardMessage}
-                onContextMenu={handleContextMenu}
-                isGroupChat={isGroupChat}
-                friends={friends}
-                token={token}
-                onAddReaction={onAddReaction}
-                onCreatePoll={onCreatePoll}
-                onVotePoll={onVotePoll}
-                onPinMessage={onPinMessage}
-                onUnpinMessage={onUnpinMessage}
-                chatSettings={chatSettings}
-                isHighlighted={highlightedMessage === msg.message_id}
-                setHighlightedMessage={setHighlightedMessage}
-                getSenderName={getSenderName}
-              />
-            </motion.div>
-          ))}
+          {normalizedMessages.map((msg, index) => {
+            const timestamp = msg.timestamp || new Date().toISOString();
+            const showDateForMessage =
+              showDate &&
+              (index === 0 ||
+                !isSameDay(new Date(timestamp), new Date(normalizedMessages[index - 1]?.timestamp || new Date())));
+            console.log('[ChatMessages] Rendering message:', { message_id: msg.message_id, content: msg.content, content_per_user: msg.content_per_user });
+            return (
+              <React.Fragment key={msg.message_id}>
+                {showDateForMessage && (
+                  <Box
+                    sx={{
+                      textAlign: 'center',
+                      py: 1,
+                      mb: 1,
+                      borderRadius: 1,
+                    }}
+                    aria-label="Message date"
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{ color: theme.palette.text.secondary }}
+                    >
+                      {format(new Date(timestamp), 'MMMM d, yyyy')}
+                    </Typography>
+                  </Box>
+                )}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                >
+                  <MessageBubble
+                    message={{ ...msg, timestamp }}
+                    isSentByCurrentUser={msg.sender_id === currentUserId}
+                    onDelete={onDeleteMessage}
+                    onEdit={onEditMessage}
+                    onSendMediaMessage={onSendMediaMessage}
+                    currentUserId={currentUserId}
+                    recipient={recipient}
+                    messages={normalizedMessages}
+                    setReplyToMessage={setReplyToMessage}
+                    onForward={onForwardMessage}
+                    onContextMenu={handleContextMenu}
+                    isGroupChat={isGroupChat}
+                    friends={friends}
+                    token={token}
+                    onAddReaction={onAddReaction}
+                    onCreatePoll={onCreatePoll}
+                    onVotePoll={onVotePoll}
+                    onPinMessage={onPinMessage}
+                    onUnpinMessage={onUnpinMessage}
+                    chatSettings={chatSettings}
+                    isHighlighted={highlightedMessage === msg.message_id}
+                    setHighlightedMessage={setHighlightedMessage}
+                    getSenderName={getSenderName}
+                  />
+                </motion.div>
+              </React.Fragment>
+            );
+          })}
         </AnimatePresence>
       ) : (
-        !isFetching && (
+        <Box sx={{ textAlign: 'center', mt: 2 }}>
           <Typography
             variant="body2"
             color="text.secondary"
-            sx={{ mt: 2, textAlign: 'center' }}
             aria-label="No messages"
           >
             No messages yet. Start chatting!
           </Typography>
-        )
+          {normalizedMessages.length === 0 && !isFetching && (
+            <Typography
+              variant="caption"
+              color="error"
+              sx={{ mt: 1 }}
+              aria-label="Debug info"
+            >
+              Debug: Messages loaded but none are valid. Check console logs for details.
+            </Typography>
+          )}
+        </Box>
       )}
       <Menu
         anchorEl={contextMenu.anchorEl}
@@ -390,32 +434,19 @@ const ChatMessages = ({
 };
 
 ChatMessages.propTypes = {
-  messages: PropTypes.oneOfType([
-    PropTypes.arrayOf(
-      PropTypes.shape({
-        message_id: PropTypes.string.isRequired,
-        conversation_id: PropTypes.string,
-        group_id: PropTypes.string,
-        content: PropTypes.string,
-        timestamp: PropTypes.string.isRequired,
-        is_read: PropTypes.bool,
-        sender_id: PropTypes.string.isRequired,
-        receiver_id: PropTypes.string,
-        media: PropTypes.array,
-        replyTo: PropTypes.string,
-        selectedText: PropTypes.string,
-        pinned: PropTypes.bool,
-        delivery_status: PropTypes.string,
-        reactions: PropTypes.array,
-        thread_id: PropTypes.string,
-      })
-    ),
+  messages: PropTypes.arrayOf(
     PropTypes.shape({
       message_id: PropTypes.string.isRequired,
       conversation_id: PropTypes.string,
       group_id: PropTypes.string,
       content: PropTypes.string,
-      timestamp: PropTypes.string.isRequired,
+      content_per_user: PropTypes.arrayOf(
+        PropTypes.shape({
+          user_id: PropTypes.string,
+          content: PropTypes.string,
+        })
+      ),
+      timestamp: PropTypes.string,
       is_read: PropTypes.bool,
       sender_id: PropTypes.string.isRequired,
       receiver_id: PropTypes.string,
@@ -426,8 +457,8 @@ ChatMessages.propTypes = {
       delivery_status: PropTypes.string,
       reactions: PropTypes.array,
       thread_id: PropTypes.string,
-    }),
-  ]).isRequired,
+    })
+  ).isRequired,
   currentUserId: PropTypes.string.isRequired,
   recipient: PropTypes.shape({
     anonymous_id: PropTypes.string,

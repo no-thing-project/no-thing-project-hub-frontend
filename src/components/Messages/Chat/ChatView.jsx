@@ -1,15 +1,13 @@
 // src/components/ChatView.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { Box, Alert, Typography, useTheme, CircularProgress } from '@mui/material';
-import { VariableSizeList } from 'react-window';
+import { Box, Alert, Typography, useTheme, CircularProgress, Button } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import ChatHeader from './ChatHeader';
 import ChatMessages from './ChatMessages';
 import ChatFooter from './ChatFooter';
 import ChatSettingsModal from '../ChatSettingsModal';
-import { isSameDay } from 'date-fns';
 import { useNotification } from '../../../context/NotificationContext';
 
 const ChatView = ({
@@ -52,7 +50,7 @@ const ChatView = ({
   const conversationId = conversation?.conversation_id ?? null;
   const isGroupChat = conversation?.type === 'group' ?? false;
 
-  // Log conversationId for debugging
+  // Log conversationId and messages for debugging
   useEffect(() => {
     if (!conversationId || typeof conversationId !== 'string') {
       console.warn('[ChatView] Invalid conversationId:', conversationId);
@@ -60,7 +58,8 @@ const ChatView = ({
     } else {
       console.log('[ChatView] conversationId:', conversationId);
     }
-  }, [conversationId]);
+    console.log('[ChatView] Raw messages:', messages);
+  }, [conversationId, messages]);
 
   // Clear error after timeout
   useEffect(() => {
@@ -73,12 +72,36 @@ const ChatView = ({
   // Filter and sort messages
   const filteredMessages = useMemo(() => {
     if (!conversationId) return [];
-    return Array.from(
-      new Map(
-        (messages || []).filter((m) => m?.message_id && m.conversation_id === conversationId).map((m) => [m.message_id, m])
-      ).values()
-    ).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  }, [messages, conversationId]);
+    const validMessages = (Array.isArray(messages) ? messages : [])
+      .map((m) => {
+        // Transform message to include conversation_id and normalize content
+        const transformed = {
+          ...m,
+          conversation_id: m.conversation_id || conversationId,
+          content: m.content || (Array.isArray(m.content_per_user) && m.content_per_user.length > 0
+            ? m.content_per_user.find(c => c.user_id === currentUserId)?.content || m.content_per_user[0]?.content
+            : ''),
+          timestamp: m.timestamp || new Date().toISOString(),
+        };
+        return transformed;
+      })
+      .filter((m) => {
+        const isValid = m?.message_id;
+        if (!isValid) {
+          console.warn('[ChatView] Filtered out invalid message:', m);
+        }
+        return isValid;
+      });
+    const uniqueMessages = Array.from(
+      new Map(validMessages.map((m) => [m.message_id, m])).values()
+    ).sort((a, b) => {
+      const aTime = a.timestamp ? new Date(a.timestamp) : new Date();
+      const bTime = b.timestamp ? new Date(b.timestamp) : new Date();
+      return aTime - bTime;
+    });
+    console.log('[ChatView] Filtered messages:', uniqueMessages);
+    return uniqueMessages;
+  }, [messages, conversationId, currentUserId]);
 
   // Fetch messages for pagination
   const fetchMessagesForPage = useCallback(
@@ -88,9 +111,26 @@ const ChatView = ({
       setError(null);
       try {
         const data = await loadMessages(conversationId, { page: targetPage, limit: 20 });
+        console.log('[ChatView] Raw API response:', data);
+        console.log('[ChatView] Fetched messages:', data.messages);
+        if (!Array.isArray(data.messages)) {
+          throw new Error('Invalid messages format from API');
+        }
+        setMessages((prev) => {
+          const newMessages = reset ? data.messages : [...data.messages, ...prev];
+          const uniqueMessages = Array.from(
+            new Map(newMessages.map((m) => [m.message_id, m])).values()
+          );
+          const sortedMessages = uniqueMessages.sort((a, b) => {
+            const aTime = a.timestamp ? new Date(a.timestamp) : new Date();
+            const bTime = b.timestamp ? new Date(b.timestamp) : new Date();
+            return aTime - bTime;
+          });
+          console.log('[ChatView] Updated messages state:', sortedMessages);
+          return [...sortedMessages]; // Deep copy to prevent mutation
+        });
         setHasMore(data.messages.length === 20);
         setPage(targetPage + 1);
-        if (reset) setMessages(data.messages);
       } catch (err) {
         const errorMsg = err.message || 'Failed to load messages';
         setError(errorMsg);
@@ -106,6 +146,7 @@ const ChatView = ({
   useEffect(() => {
     if (conversationId) {
       setMessages([]);
+      setPage(1);
       fetchMessagesForPage(1, true);
     }
   }, [conversationId, fetchMessagesForPage, setMessages]);
@@ -115,9 +156,28 @@ const ChatView = ({
     if (!socket || !conversationId) return;
     const handleNewMessage = (newMessage) => {
       if (newMessage?.conversation_id !== conversationId) return;
+      console.log('[ChatView] Received new message:', newMessage);
+      if (!newMessage?.message_id) {
+        console.warn('[ChatView] Invalid new message:', newMessage);
+        return;
+      }
       setMessages((prev) => {
         if (prev.some((m) => m.message_id === newMessage.message_id)) return prev;
-        return [...prev, newMessage].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const transformedMessage = {
+          ...newMessage,
+          conversation_id: newMessage.conversation_id || conversationId,
+          content: newMessage.content || (Array.isArray(newMessage.content_per_user) && newMessage.content_per_user.length > 0
+            ? newMessage.content_per_user.find(c => c.user_id === currentUserId)?.content || newMessage.content_per_user[0]?.content
+            : ''),
+          timestamp: newMessage.timestamp || new Date().toISOString(),
+        };
+        const updatedMessages = [...prev, transformedMessage].sort((a, b) => {
+          const aTime = a.timestamp ? new Date(a.timestamp) : new Date();
+          const bTime = b.timestamp ? new Date(b.timestamp) : new Date();
+          return aTime - bTime;
+        });
+        console.log('[ChatView] Updated messages with new message:', updatedMessages);
+        return updatedMessages;
       });
       if (newMessage.sender_id !== currentUserId) {
         markRead(newMessage.message_id).catch(() =>
@@ -134,88 +194,18 @@ const ChatView = ({
     if (!isFetching && hasMore) fetchMessagesForPage(page);
   }, [fetchMessagesForPage, isFetching, hasMore, page]);
 
+  // Retry failed fetch
+  const handleRetryFetch = useCallback(() => {
+    setPage(1);
+    setHasMore(true);
+    fetchMessagesForPage(1, true);
+  }, [fetchMessagesForPage]);
+
   // Save chat settings
   const handleSettingsSave = useCallback((newSettings) => {
     setChatSettings(newSettings);
     setSettingsOpen(false);
   }, []);
-
-  // Calculate message item size
-  const getItemSize = useCallback(
-    (index) => {
-      const message = filteredMessages[index];
-      if (!message) return 120;
-      let baseSize = 120;
-      if (message.media?.length) baseSize += 180;
-      if (message.type === 'poll') baseSize += 100;
-      if (message.reply_to) baseSize += 60;
-      if (message.content) baseSize += Math.floor(message.content.length / 50) * 20;
-      return Math.max(120, baseSize);
-    },
-    [filteredMessages]
-  );
-
-  // Render message item
-  const renderItem = useCallback(
-    ({ index, style }) => {
-      const message = filteredMessages[index];
-      return (
-        <div style={style} key={message.message_id}>
-          <ChatMessages
-            messages={[message]}
-            currentUserId={currentUserId}
-            recipient={conversation}
-            onDeleteMessage={deleteMsg}
-            onEditMessage={editMsg}
-            onMarkRead={markRead}
-            onForwardMessage={onForwardMessage}
-            isFetching={isFetching}
-            hasMore={hasMore}
-            loadMoreMessages={handleLoadMore}
-            chatBackground={chatSettings.chatBackground}
-            setReplyToMessage={setReplyToMessage}
-            isGroupChat={isGroupChat}
-            friends={friends}
-            token={token}
-            onAddReaction={addMessageReaction}
-            onCreatePoll={createNewPoll}
-            onVotePoll={voteInPoll}
-            onPinMessage={pinMsg}
-            onUnpinMessage={unpinMsg}
-            chatSettings={chatSettings}
-            showDate={
-              index === 0 ||
-              !isSameDay(new Date(message.timestamp), new Date(filteredMessages[index - 1]?.timestamp))
-            }
-            socket={socket}
-          />
-        </div>
-      );
-    },
-    [
-      filteredMessages,
-      currentUserId,
-      conversation,
-      deleteMsg,
-      editMsg,
-      markRead,
-      onForwardMessage,
-      isFetching,
-      hasMore,
-      handleLoadMore,
-      chatSettings,
-      setReplyToMessage,
-      isGroupChat,
-      friends,
-      token,
-      addMessageReaction,
-      createNewPoll,
-      voteInPoll,
-      pinMsg,
-      unpinMsg,
-      socket,
-    ]
-  );
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -261,7 +251,18 @@ const ChatView = ({
       <AnimatePresence>
         {error && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-            <Alert severity="error" onClose={() => setError(null)} sx={{ m: 1 }}>
+            <Alert
+              severity="error"
+              onClose={() => setError(null)}
+              sx={{ m: 1 }}
+              action={
+                error.includes('Failed to load') ? (
+                  <Button size="small" onClick={handleRetryFetch}>
+                    Retry
+                  </Button>
+                ) : null
+              }
+            >
               {error}
             </Alert>
           </motion.div>
@@ -276,21 +277,33 @@ const ChatView = ({
         currentUserId={currentUserId}
       />
       <Box sx={{ flex: 1, overflow: 'hidden' }} aria-label="Chat Messages">
-        <AutoSizer>
-          {({ height, width }) => (
-            <VariableSizeList
-              key={conversationId}
-              ref={listRef}
-              height={height}
-              width={width}
-              itemCount={filteredMessages.length}
-              itemSize={getItemSize}
-              overscanCount={10}
-            >
-              {renderItem}
-            </VariableSizeList>
-          )}
-        </AutoSizer>
+            <ChatMessages
+              messages={filteredMessages}
+              currentUserId={currentUserId}
+              recipient={conversation}
+              onDeleteMessage={deleteMsg}
+              onEditMessage={editMsg}
+              onSendMediaMessage={sendNewMessage}
+              onMarkRead={markRead}
+              onForwardMessage={onForwardMessage}
+              isFetching={isFetching}
+              hasMore={hasMore}
+              loadMoreMessages={handleLoadMore}
+              chatBackground={chatSettings.chatBackground}
+              setReplyToMessage={setReplyToMessage}
+              isGroupChat={isGroupChat}
+              friends={friends}
+              token={token}
+              onAddReaction={addMessageReaction}
+              onCreatePoll={createNewPoll}
+              onVotePoll={voteInPoll}
+              onPinMessage={pinMsg}
+              onUnpinMessage={unpinMsg}
+              chatSettings={chatSettings}
+              showDate={true}
+              socket={socket}
+              listRef={listRef}
+            />
         {isFetching && (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
             <CircularProgress size={24} />
@@ -334,7 +347,13 @@ ChatView.propTypes = {
       message_id: PropTypes.string.isRequired,
       conversation_id: PropTypes.string,
       content: PropTypes.string,
-      timestamp: PropTypes.string.isRequired,
+      content_per_user: PropTypes.arrayOf(
+        PropTypes.shape({
+          user_id: PropTypes.string,
+          content: PropTypes.string,
+        })
+      ),
+      timestamp: PropTypes.string,
       is_read: PropTypes.bool,
       sender_id: PropTypes.string,
       type: PropTypes.string,
