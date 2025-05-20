@@ -10,8 +10,10 @@ import {
   useTheme,
   Typography,
   IconButton,
+  Avatar,
+  Badge,
 } from '@mui/material';
-import { Search, Clear } from '@mui/icons-material';
+import { Search, Clear, FilterList } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
 import { useNotification } from '../../../context/NotificationContext';
@@ -124,6 +126,7 @@ const ConversationsList = ({
         isArchived: conv.isArchived || false,
         participants: conv.participants || [],
         unreadCount,
+        avatar: isGroup ? null : friend?.avatar || null, // Assume friend has avatar prop
       };
     });
 
@@ -164,6 +167,7 @@ const ConversationsList = ({
           mutedBy: [],
           isArchived: false,
           unreadCount: 0,
+          avatar: f.avatar || null,
         }));
 
       filtered = [...filtered, ...filteredFriends];
@@ -211,33 +215,49 @@ const ConversationsList = ({
     [onSelectConversation, getOrCreateConversation, showNotification]
   );
 
+  const getInitials = (name) => {
+    return name
+      .split(' ')
+      .map((word) => word[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase();
+  };
+
   return (
     <Box
       sx={{
-        border: `1px solid ${theme.palette.grey[300]}`,
+        border: `1px solid ${theme.palette.grey[200]}`,
         borderRadius: 2,
-        p: 2,
+        p: { xs: 1.5, sm: 2 },
         bgcolor: theme.palette.background.paper,
         height: '100%',
         overflowY: 'auto',
         boxSizing: 'border-box',
+        boxShadow: theme.shadows[1],
       }}
       onScroll={handleScroll}
       aria-label="Conversations list"
     >
       {(success || error) && (
-        <Alert
-          severity={success ? 'success' : 'error'}
-          onClose={() => {
-            setSuccess('');
-            setError('');
-          }}
-          sx={{ mb: 2, borderRadius: 1 }}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
         >
-          {success || error}
-        </Alert>
+          <Alert
+            severity={success ? 'success' : 'error'}
+            onClose={() => {
+              setSuccess('');
+              setError('');
+            }}
+            sx={{ mb: 2, borderRadius: 2, boxShadow: theme.shadows[1] }}
+          >
+            {success || error}
+          </Alert>
+        </motion.div>
       )}
-      <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+      <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center' }}>
         <TextField
           fullWidth
           variant="outlined"
@@ -249,42 +269,57 @@ const ConversationsList = ({
               <InputAdornment position="end">
                 {searchQuery && (
                   <IconButton onClick={() => debouncedSearch('')} aria-label="Clear search">
-                    <Clear />
+                    <Clear fontSize="small" />
                   </IconButton>
                 )}
-                <Search aria-hidden="true" />
+                <Search fontSize="small" aria-hidden="true" />
               </InputAdornment>
             ),
+            sx: { borderRadius: 8, bgcolor: theme.palette.grey[50], height: 40 },
           }}
-          sx={{ bgcolor: 'white', borderRadius: 1 }}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 8 } }}
           aria-label="Search conversations or friends"
         />
-        <ConversationFilter filter={filter} onChangeFilter={setFilter} />
+        <ConversationFilter
+          filter={filter}
+          onChangeFilter={setFilter}
+          sx={{
+            bgcolor: theme.palette.grey[50],
+            borderRadius: 8,
+            minWidth: 80,
+            '& .MuiSelect-select': { py: 1 },
+          }}
+        />
       </Box>
       {isCreating && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}
+        >
           <CircularProgress size={24} aria-label="Creating chat" />
-        </Box>
+        </motion.div>
       )}
       {filteredConversations.length === 0 ? (
         <Typography
           variant="body1"
           color="text.secondary"
-          sx={{ textAlign: 'center', mt: 2 }}
+          sx={{ textAlign: 'center', mt: 4, fontStyle: 'italic' }}
           aria-label="No conversations found"
         >
-          {searchQuery ? 'No chats or friends found' : 'No conversations yet'}
+          {searchQuery ? 'No chats or friends found' : 'Start a new conversation!'}
         </Typography>
       ) : (
-        <List sx={{ p: 0 }}>
+        <List sx={{ p: 0, mt: 1 }}>
           <AnimatePresence>
             {filteredConversations.map((item) => (
               <motion.div
                 key={item.conversation_id}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
               >
                 <ConversationItem
                   item={item}
@@ -300,6 +335,49 @@ const ConversationsList = ({
                   onMarkRead={markRead}
                   currentUserId={currentUserId}
                   messages={messages}
+                  sx={{
+                    borderRadius: 2,
+                    mb: 0.5,
+                    bgcolor:
+                      selectedConversation?.conversation_id === item.conversation_id
+                        ? theme.palette.action.selected
+                        : 'transparent',
+                    '&:hover': { bgcolor: theme.palette.action.hover },
+                    transition: 'background-color 0.2s',
+                  }}
+                  avatar={
+                    <Badge
+                      overlap="circular"
+                      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                      badgeContent={
+                        item.unreadCount > 0 && (
+                          <Box
+                            sx={{
+                              bgcolor: theme.palette.primary.main,
+                              color: 'white',
+                              borderRadius: '50%',
+                              width: 20,
+                              height: 20,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '0.75rem',
+                              fontWeight: 'bold',
+                            }}
+                          >
+                            {item.unreadCount}
+                          </Box>
+                        )
+                      }
+                    >
+                      <Avatar
+                        src={item.avatar}
+                        sx={{ width: 40, height: 40, bgcolor: theme.palette.grey[300] }}
+                      >
+                        {!item.avatar && getInitials(item.name)}
+                      </Avatar>
+                    </Badge>
+                  }
                 />
               </motion.div>
             ))}
@@ -307,9 +385,14 @@ const ConversationsList = ({
         </List>
       )}
       {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          sx={{ display: 'flex', justifyContent: 'center', p: 2 }}
+        >
           <CircularProgress size={24} aria-label="Loading more conversations" />
-        </Box>
+        </motion.div>
       )}
     </Box>
   );
@@ -344,6 +427,7 @@ ConversationsList.propTypes = {
     PropTypes.shape({
       anonymous_id: PropTypes.string.isRequired,
       username: PropTypes.string,
+      avatar: PropTypes.string,
     })
   ).isRequired,
   currentUserId: PropTypes.string.isRequired,

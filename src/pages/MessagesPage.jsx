@@ -7,8 +7,9 @@ import {
   Typography,
   Button,
   useTheme,
+  IconButton,
 } from '@mui/material';
-import { GroupAdd } from '@mui/icons-material';
+import { GroupAdd, ArrowBack } from '@mui/icons-material';
 import AppLayout from '../components/Layout/AppLayout';
 import LoadingSpinner from '../components/Layout/LoadingSpinner';
 import useAuth from '../hooks/useAuth';
@@ -51,7 +52,7 @@ const MemoizedChatView = React.memo(ChatView);
 const MemoizedGroupChatModal = React.memo(GroupChatModal);
 const MemoizedForwardMessageModal = React.memo(ForwardMessageModal);
 
-const MessagesPage = () => {
+  const MessagesPage = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const { showNotification } = useNotification();
@@ -279,43 +280,39 @@ const MessagesPage = () => {
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box
         sx={{
-          maxWidth: { xs: '100%', md: 1500 },
-          mx: 'auto',
-          p: { xs: 1, md: 2 },
-          height: '100vh',
+          height: '80vh',
+          overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
           bgcolor: theme.palette.background.default,
+          p: { xs: 1, sm: 2 },
         }}
         role="main"
         aria-label="Messages Page"
       >
-        <ProfileHeader user={authData} isOwnProfile />
-        {(error || convError || messagesError) && (
-          <Alert severity="error" onClose={clearNotifications} sx={{ mt: 2, borderRadius: 1 }}>
-            {error || convError || messagesError}
-          </Alert>
-        )}
-        {success && (
-          <Snackbar
-            open={!!success}
-            autoHideDuration={3000}
-            onClose={clearNotifications}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-          >
-            <Alert severity="success" sx={{ width: '100%' }}>
-              {success}
-            </Alert>
-          </Snackbar>
-        )}
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2, gap: 2, alignItems: 'center' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            mb: 1,
+            gap: 1,
+            alignItems: 'center',
+            flexShrink: 0,
+          }}
+        >
           <Button
             variant="contained"
             startIcon={<GroupAdd />}
             onClick={() => setGroupModalOpen(true)}
             aria-label="Create new group chat"
             disabled={!friends.length || convLoading}
-            sx={{ borderRadius: 1, px: 3, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+            sx={{
+              borderRadius: 1,
+              px: { xs: 2, sm: 3 },
+              py: 1,
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              minWidth: { xs: 120, sm: 140 },
+            }}
           >
             Create Group
           </Button>
@@ -325,7 +322,7 @@ const MessagesPage = () => {
             flex: 1,
             display: 'flex',
             flexDirection: { xs: 'column', md: 'row' },
-            gap: 2,
+            gap: { xs: 0, sm: 1, md: 2 },
             overflow: 'hidden',
             borderRadius: 1,
             boxShadow: theme.shadows[2],
@@ -333,11 +330,13 @@ const MessagesPage = () => {
         >
           <Box
             sx={{
+              display: { xs: selectedConversation ? 'none' : 'flex', md: 'flex' },
               flex: { xs: '1 1 100%', md: '0 0 30%' },
               maxWidth: { md: 400 },
               bgcolor: theme.palette.background.paper,
-              borderRadius: 1,
+              borderRadius: { xs: 0, md: 1 },
               overflowY: 'auto',
+              flexDirection: 'column',
             }}
             aria-label="Conversations list"
           >
@@ -365,13 +364,41 @@ const MessagesPage = () => {
           </Box>
           <Box
             sx={{
+              display: { xs: selectedConversation ? 'flex' : 'none', md: 'flex' },
               flex: { xs: '1 1 100%', md: '1 1 70%' },
               bgcolor: theme.palette.background.paper,
-              borderRadius: 1,
+              borderRadius: { xs: 0, md: 1 },
               overflow: 'hidden',
+              flexDirection: 'column',
+              position: 'relative',
             }}
             aria-label="Chat View"
           >
+            {selectedConversation && (
+              <Box
+                sx={{
+                  display: { xs: 'flex', md: 'none' },
+                  alignItems: 'center',
+                  p: 1,
+                  bgcolor: theme.palette.background.paper,
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1,
+                  borderBottom: `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <IconButton
+                  onClick={() => setSelectedConversation(null)}
+                  aria-label="Back to conversations list"
+                  sx={{ mr: 1 }}
+                >
+                  <ArrowBack />
+                </IconButton>
+                <Typography variant="h6" sx={{ flex: 1 }}>
+                  {selectedConversation.name || selectedConversation.recipient?.username || 'Chat'}
+                </Typography>
+              </Box>
+            )}
             {selectedConversation ? (
               <MemoizedChatView
                 currentUserId={authData?.anonymous_id}
@@ -393,9 +420,10 @@ const MessagesPage = () => {
                 onPinMessage={pinMsg}
                 onUnpinMessage={unpinMsg}
                 onTyping={sendTypingIndicator}
+                sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
               />
             ) : (
-              <Typography variant="h6" color="text.secondary" sx={{ mt: 4, textAlign: 'center' }}>
+              <Typography variant="h6" color="text.secondary" sx={{ mt: 4, textAlign: 'center', flex: 1 }}>
                 {getLocalizedMessage(MESSAGE_CONSTANTS.ERRORS.NO_CONVERSATION)}
               </Typography>
             )}
@@ -407,6 +435,13 @@ const MessagesPage = () => {
           friends={friends}
           currentUserId={authData?.anonymous_id}
           onCreate={handleCreateGroup}
+          sx={{
+            maxHeight: { xs: '100vh', sm: '80vh' },
+            maxWidth: { xs: '100%', sm: 600 },
+            width: '100%',
+            mx: 'auto',
+            overflowY: { xs: 'auto', sm: 'hidden' },
+          }}
         />
         <MemoizedForwardMessageModal
           open={forwardModalOpen}
@@ -417,6 +452,13 @@ const MessagesPage = () => {
           friends={friends}
           currentUserId={authData?.anonymous_id}
           onForward={handleForwardConfirm}
+          sx={{
+            maxHeight: { xs: '100vh', sm: '80vh' },
+            maxWidth: { xs: '100%', sm: 600 },
+            width: '100%',
+            mx: 'auto',
+            overflowY: { xs: 'auto', sm: 'hidden' },
+          }}
         />
       </Box>
     </AppLayout>

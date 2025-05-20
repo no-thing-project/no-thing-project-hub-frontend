@@ -87,10 +87,13 @@ const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) =
         console.log(`[useMessages] Loading messages for conversation: ${conversationId}, page: ${params.page}`);
         const data = await handleApiCall(fetchMessages, conversationId, params, abortControllerRef.current.signal);
         const newMessages = Array.isArray(data?.messages) ? data.messages : [];
+        console.log('[useMessages] Raw fetched messages:', newMessages);
         setMessages((prev) => {
           const existingIds = new Set(prev.map((msg) => msg.message_id));
           const filteredNewMessages = newMessages.filter((msg) => !existingIds.has(msg.message_id));
-          return params.page === 1 ? newMessages : [...prev, ...filteredNewMessages];
+          const updatedMessages = params.page === 1 ? newMessages : [...prev, ...filteredNewMessages];
+          console.log('[useMessages] Updated messages state:', updatedMessages);
+          return [...updatedMessages]; // Deep copy to prevent mutation
         });
         console.log(`[useMessages] Loaded ${newMessages.length} messages`);
         return {
@@ -104,7 +107,7 @@ const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) =
           return { messages: [], total: 0, nextCursor: null };
         }
         console.error('[useMessages] loadMessages error:', error);
-        setMessages([]);
+        setError(error.message || 'Failed to load messages');
         return { messages: [], total: 0, nextCursor: null };
       }
     },
@@ -154,7 +157,11 @@ const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) =
           throw new Error('Invalid message response from server');
         }
         if (!scheduledAt) {
-          setMessages((prev) => [data, ...prev]);
+          setMessages((prev) => {
+            const updatedMessages = [data, ...prev];
+            console.log('[useMessages] Updated messages with sent message:', updatedMessages);
+            return updatedMessages;
+          });
           if (updateLastMessage) {
             updateLastMessage(conversationId, data);
           }
@@ -225,7 +232,11 @@ const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) =
   const createNewPoll = useCallback(
     (pollData) =>
       handleApiCall(createPoll, pollData).then((data) => {
-        setMessages((prev) => [data, ...prev]);
+        setMessages((prev) => {
+          const updatedMessages = [data, ...prev];
+          console.log('[useMessages] Updated messages with poll:', updatedMessages);
+          return updatedMessages;
+        });
         if (updateLastMessage) {
           updateLastMessage(pollData.conversationId, data);
         }
@@ -244,7 +255,11 @@ const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) =
   const voteInPoll = useCallback(
     (messageId, optionIndex) =>
       handleApiCall(votePoll, messageId, optionIndex).then((data) => {
-        setMessages((prev) => prev.map((msg) => (msg.message_id === messageId ? data : msg)));
+        setMessages((prev) => {
+          const updatedMessages = prev.map((msg) => (msg.message_id === messageId ? data : msg));
+          console.log('[useMessages] Updated messages with poll vote:', updatedMessages);
+          return updatedMessages;
+        });
         console.log('[useMessages] Voted in poll:', data);
         return data;
       }),
@@ -260,7 +275,11 @@ const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) =
   const addMessageReaction = useCallback(
     (messageId, reaction) =>
       handleApiCall(addReaction, messageId, reaction).then((data) => {
-        setMessages((prev) => prev.map((msg) => (msg.message_id === messageId ? data : msg)));
+        setMessages((prev) => {
+          const updatedMessages = prev.map((msg) => (msg.message_id === messageId ? data : msg));
+          console.log('[useMessages] Updated messages with reaction:', updatedMessages);
+          return updatedMessages;
+        });
         console.log('[useMessages] Reaction added:', data);
         return data;
       }),
@@ -275,13 +294,15 @@ const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) =
   const markRead = useCallback(
     (messageId) =>
       handleApiCall(markMessageAsRead, messageId).then((data) => {
-        setMessages((prev) =>
-          prev.map((msg) =>
+        setMessages((prev) => {
+          const updatedMessages = prev.map((msg) =>
             msg.message_id === messageId
               ? { ...msg, is_read: data.is_read, status: data.status, readAt: data.readAt }
               : msg
-          )
-        );
+          );
+          console.log('[useMessages] Updated messages with read status:', updatedMessages);
+          return updatedMessages;
+        });
         console.log('[useMessages] Marked message as read:', data);
         return data;
       }),
@@ -296,7 +317,11 @@ const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) =
   const deleteMsg = useCallback(
     (messageId) =>
       handleApiCall(deleteMessage, messageId).then(() => {
-        setMessages((prev) => prev.filter((msg) => msg.message_id !== messageId));
+        setMessages((prev) => {
+          const updatedMessages = prev.filter((msg) => msg.message_id !== messageId);
+          console.log('[useMessages] Updated messages after deletion:', updatedMessages);
+          return updatedMessages;
+        });
         console.log('[useMessages] Message deleted:', messageId);
       }),
     [handleApiCall]
@@ -311,13 +336,15 @@ const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) =
   const editMsg = useCallback(
     (messageId, newContent) =>
       handleApiCall(editMessage, { messageId, newContent }).then((data) => {
-        setMessages((prev) =>
-          prev.map((msg) =>
+        setMessages((prev) => {
+          const updatedMessages = prev.map((msg) =>
             msg.message_id === messageId
               ? { ...msg, content: data.content, is_edited: data.is_edited, editedAt: data.editedAt }
               : msg
-          )
-        );
+          );
+          console.log('[useMessages] Updated messages with edited message:', updatedMessages);
+          return updatedMessages;
+        });
         console.log('[useMessages] Message edited:', data);
         return data;
       }),
@@ -349,6 +376,13 @@ const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) =
   const pinMsg = useCallback(
     (messageId) =>
       handleApiCall(pinMessage, messageId).then((data) => {
+        setMessages((prev) => {
+          const updatedMessages = prev.map((msg) =>
+            msg.message_id === messageId ? { ...msg, pinned: true } : msg
+          );
+          console.log('[useMessages] Updated messages with pinned message:', updatedMessages);
+          return updatedMessages;
+        });
         console.log('[useMessages] Message pinned:', data);
         return data;
       }),
@@ -363,6 +397,13 @@ const useMessages = ({ token, userId, onLogout, navigate, updateLastMessage }) =
   const unpinMsg = useCallback(
     (messageId) =>
       handleApiCall(unpinMessage, messageId).then((data) => {
+        setMessages((prev) => {
+          const updatedMessages = prev.map((msg) =>
+            msg.message_id === messageId ? { ...msg, pinned: false } : msg
+          );
+          console.log('[useMessages] Updated messages with unpinned message:', updatedMessages);
+          return updatedMessages;
+        });
         console.log('[useMessages] Message unpinned:', data);
         return data;
       }),
