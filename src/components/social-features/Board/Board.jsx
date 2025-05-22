@@ -45,7 +45,7 @@ const Board = ({
   const navigate = useNavigate();
   const { showNotification } = useNotification();
   const boardMainRef = useRef(null);
-  const [tweetPopup, setTweetPopup] = useState({ visible: false });
+  const [tweetPopup, setTweetPopup] = useState({ visible: false, x: 0, y: 0, clientX: 0, clientY: 0 });
   const [replyTweet, setReplyTweet] = useState(null);
   const [highlightedTweetId, setHighlightedTweetId] = useState(null);
   const [editTweetModal, setEditTweetModal] = useState(null);
@@ -59,7 +59,6 @@ const Board = ({
 
   const {
     tweets,
-    setTweets, // Assumed to be provided by useTweets
     loading,
     error,
     fetchTweets,
@@ -80,7 +79,6 @@ const Board = ({
     dragging,
     centerBoard,
     handleZoomButton,
-    handleWheel,
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
@@ -97,8 +95,9 @@ const Board = ({
         if (isFetching.current) return;
         isFetching.current = true;
         try {
-          await fetchTweets({ include_parents: true, page: 1, limit: 20 * page });
+          await fetchTweets({ include_parents: true, page: 1, limit: 20 });
           setPage(1);
+          centerBoard();
           showNotification('Board refreshed successfully!', 'success');
         } catch (err) {
           if (err.name !== 'AbortError') {
@@ -112,10 +111,10 @@ const Board = ({
           isFetching.current = false;
         }
       }, 1000),
-    [fetchTweets, showNotification, navigate, page]
+    [fetchTweets, showNotification, navigate, centerBoard]
   );
 
-  // Fetch tweets only on mount
+  // Initial fetch and centering
   useEffect(() => {
     if (!token || !boardId) return;
 
@@ -125,6 +124,7 @@ const Board = ({
       isFetching.current = true;
       try {
         await fetchTweets({ include_parents: true, page: 1, limit: 20 }, controller.signal);
+        centerBoard();
       } catch (err) {
         if (err.name !== 'AbortError') {
           showNotification(err.message || 'Failed to load tweets', 'error');
@@ -143,9 +143,9 @@ const Board = ({
       controller.abort();
       debouncedRefresh.cancel();
     };
-  }, []); // Empty deps for mount-only fetch
+  }, [token, boardId, fetchTweets, showNotification, navigate, centerBoard]);
 
-  // Fetch boards list only when editing tweet (cached)
+  // Fetch boards list for edit modal
   useEffect(() => {
     if (!editTweetModal || boards.length > 0) return;
 
@@ -166,14 +166,7 @@ const Board = ({
     return () => controller.abort();
   }, [editTweetModal, boards, fetchBoardsList, showNotification]);
 
-  // Center board after loading
-  useEffect(() => {
-    if (!loading && boardMainRef.current && !isListView) {
-      centerBoard();
-    }
-  }, [loading, centerBoard, isListView]);
-
-  // Tweet creation with optimistic update
+  // Tweet creation
   const handleTweetCreation = useCallback(
     async (content, x, y, scheduledAt, files, onProgress) => {
       if (content.value.length > MAX_TWEET_LENGTH) {
@@ -194,64 +187,60 @@ const Board = ({
           onProgress
         );
         showNotification('Tweet created successfully!', 'success');
-        setTweetPopup({ visible: false });
+        setTweetPopup({ visible: false, x: 0, y: 0, clientX: 0, clientY: 0 });
         setReplyTweet(null);
         return newTweet;
       } catch (err) {
-        setTweets((prev) => prev.filter((t) => t.tweet_id));
         showNotification(err.message || 'Failed to create tweet', 'error');
         throw err;
       }
     },
-    [createNewTweet, replyTweet, showNotification, boardId, currentUser, setTweets]
+    [createNewTweet, replyTweet, showNotification]
   );
 
   // Handle reply
   const handleReply = useCallback(
     (tweet) => {
+      const clientX = (tweet.position.x * scale) + offset.x;
+      const clientY = (tweet.position.y * scale) + offset.y;
       setReplyTweet(tweet);
       setTweetPopup({
         visible: true,
         x: tweet.position.x,
         y: tweet.position.y,
+        clientX,
+        clientY,
       });
     },
-    []
+    [scale, offset]
   );
 
-  // Throttle popup
+  // Throttled popup trigger
   const throttlePopup = useCallback(
-    (fn) => {
-      let lastCall = 0;
-      return (...args) => {
-        const now = Date.now();
-        if (now - lastCall >= 300) {
-          lastCall = now;
-          fn(...args);
-        }
-      };
-    },
+    throttle((x, y, clientX, clientY) => {
+      setTweetPopup({ visible: true, x, y, clientX, clientY });
+    }, 300),
     []
   );
 
   const handleMouseUpWithPopup = useCallback(
     (e) => {
-      if (e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root')) {
+      if (e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root, .MuiButton-root')) {
         handleMouseUp(e);
         return;
       }
-      handleMouseUp(e, throttlePopup((x, y) => setTweetPopup({ visible: true, x, y })));
+      handleMouseUp(e, throttlePopup);
     },
     [handleMouseUp, throttlePopup]
   );
 
   const handleTouchEndWithPopup = useCallback(
     (e) => {
-      if (e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root')) {
+      if (e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root, .MuiButton-root')) {
         handleTouchEnd(e);
         return;
       }
-      handleTouchEnd(e, throttlePopup((x, y) => setTweetPopup({ visible: true, x, y })));
+      handleTouchEnd(e, throttlePopup);
     },
     [handleTouchEnd, throttlePopup]
   );
@@ -266,20 +255,21 @@ const Board = ({
     [boards, boardId]
   );
 
-    // Pin toggle
-    const handlePinToggle = useCallback(
-      async (tweet) => {
-        try {
-          const action = tweet.is_pinned ? unpinTweet : pinTweet;
-          await action(tweet.tweet_id);
-          showNotification(`Tweet ${tweet.is_pinned ? 'unpinned' : 'pinned'} successfully!`, 'success');
-        } catch (err) {
-          showNotification('Failed to toggle pin status', 'error');
-        }
-      },
-      [pinTweet, unpinTweet, showNotification]
-    );
-  // Save edited tweet with optimistic update
+  // Pin toggle
+  const handlePinToggle = useCallback(
+    async (tweet) => {
+      try {
+        const action = tweet.is_pinned ? unpinTweet : pinTweet;
+        await action(tweet.tweet_id);
+        showNotification(`Tweet ${tweet.is_pinned ? 'unpinned' : 'pinned'} successfully!`, 'success');
+      } catch (err) {
+        showNotification('Failed to toggle pin status', 'error');
+      }
+    },
+    [pinTweet, unpinTweet, showNotification]
+  );
+
+  // Save edited tweet
   const handleSaveEditedTweet = useCallback(async () => {
     if (!editTweetModal) return;
     if (!editTweetModal.content?.value?.trim()) {
@@ -303,10 +293,6 @@ const Board = ({
     };
 
     try {
-      setTweets((prev) =>
-        prev.map((t) => (t.tweet_id === editTweetModal.tweet_id ? updatedTweet : t))
-      );
-
       await updateExistingTweet(editTweetModal.tweet_id, {
         content: updatedTweet.content,
         status: newStatus,
@@ -315,29 +301,30 @@ const Board = ({
 
       if (editTweetModal.board_id !== selectedBoardId) {
         await moveTweet(editTweetModal.tweet_id, selectedBoardId);
-        setTweets((prev) => prev.filter((t) => t.tweet_id !== editTweetModal.tweet_id));
-        debouncedRefresh(); // Refetch only when moving to another board
       }
 
       setEditTweetModal(null);
       showNotification('Tweet updated successfully!', 'success');
     } catch (err) {
-      setTweets((prev) =>
-        prev.map((t) => (t.tweet_id === editTweetModal.tweet_id ? editTweetModal : t))
-      );
       showNotification('Failed to save tweet', 'error');
     }
-  }, [editTweetModal, updateExistingTweet, moveTweet, newStatus, selectedBoardId, showNotification, setTweets, debouncedRefresh]);
+  }, [editTweetModal, updateExistingTweet, moveTweet, newStatus, selectedBoardId, showNotification]);
 
-  // Toggle like with optimistic update
-
-
-  // Pin toggle with optimistic update
-  // Load more tweets in list view
-  const handleLoadMore = useCallback(() => {
-    setPage((prev) => prev + 1);
-    debouncedRefresh();
-  }, [debouncedRefresh]);
+  // Load more tweets
+  const handleLoadMore = useCallback(async () => {
+    if (isFetching.current || tweets.length >= pagination.total) return;
+    isFetching.current = true;
+    try {
+      await fetchTweets({ include_parents: true, page: page + 1, limit: 20 });
+      setPage((prev) => prev + 1);
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        showNotification('Failed to load more tweets', 'error');
+      }
+    } finally {
+      isFetching.current = false;
+    }
+  }, [fetchTweets, page, tweets, pagination, showNotification]);
 
   // Get related tweet IDs
   const getRelatedTweetIds = useCallback(
@@ -355,22 +342,17 @@ const Board = ({
 
   const handleReplyHover = useCallback((tweetId) => setHighlightedTweetId(tweetId), []);
 
-  // Toggle view
+  // Toggle view with smooth transition
   const handleViewToggle = useCallback(() => {
     setIsListView((prev) => {
       if (!prev) {
         setBoardState({ scale, offset });
       } else {
-        if (boardState) {
-          restoreBoardState(boardState);
-        } else {
-          centerBoard();
-        }
+        centerBoard();
       }
       return !prev;
     });
-    setPage(1);
-  }, [scale, offset, boardState, restoreBoardState, centerBoard]);
+  }, [scale, offset, centerBoard]);
 
   // Filter and sort valid tweets
   const validTweets = useMemo(() => {
@@ -404,7 +386,7 @@ const Board = ({
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [tweets]);
 
-  // Memoized tweet props to prevent unnecessary re-renders
+  // Memoized tweet props
   const tweetProps = useMemo(
     () => ({
       currentUser,
@@ -462,7 +444,7 @@ const Board = ({
             key={`tweet-${tweet.tweet_id}`}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
+            exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
             sx={TweetContentStyles.boardListViewTweet(tweet.parent_tweet_id)}
           >
@@ -489,7 +471,7 @@ const Board = ({
     [highlightedTweetId, getRelatedTweetIds, tweets, tweetProps, updateExistingTweet]
   );
 
-  // Memoize rendered tweets
+  // Memoized rendered tweets
   const renderedTweets = useMemo(() => {
     if (!validTweets.length) return null;
     return (
@@ -526,7 +508,13 @@ const Board = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.4 }}
-      style={TweetContentStyles.boardContainer}
+      style={{
+        ...TweetContentStyles.boardContainer,
+        overflow: 'hidden',
+        height: '100vh',
+        width: '100vw',
+        position: 'relative',
+      }}
     >
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {/* Back Button */}
@@ -543,155 +531,199 @@ const Board = ({
         </Box>
 
         {/* Main Board Area */}
-        <Box
-          ref={boardMainRef}
-          sx={TweetContentStyles.boardMain(isListView, dragging)}
-          onMouseDown={isListView ? undefined : handleMouseDown}
-          onMouseMove={isListView ? undefined : handleMouseMove}
-          onMouseUp={isListView ? undefined : handleMouseUpWithPopup}
-          onWheel={isListView ? undefined : handleWheel}
-          onTouchStart={isListView ? undefined : handleTouchStart}
-          onTouchMove={isListView ? undefined : handleTouchMove}
-          onTouchEnd={isListView ? undefined : handleTouchEndWithPopup}
-          role="region"
-          aria-label={isListView ? 'Tweet list view' : 'Interactive board canvas'}
-          aria-live="polite"
-          tabIndex={0}
-        >
-          {error && renderError()}
+        {/* <motion.div
+          initial={{ opacity: 0, y: isListView ? -20 : 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: isListView ? -20 : 20 }}
+          transition={{ duration: 0.5, ease: 'easeInOut' }}
+        > */}
+          <Box
+            ref={boardMainRef}
+            sx={{
+              ...TweetContentStyles.boardMain(isListView, dragging),
+              touchAction: 'none',
+              userSelect: 'none',
+              height: '100%',
+              width: '100%',
+              overflowY: isListView ? 'auto' : 'hidden',
+            }}
+            onMouseDown={isListView ? undefined : handleMouseDown}
+            onMouseMove={isListView ? undefined : handleMouseMove}
+            onMouseUp={isListView ? undefined : handleMouseUpWithPopup}
+            onTouchStart={isListView ? undefined : handleTouchStart}
+            onTouchMove={isListView ? undefined : handleTouchMove}
+            onTouchEnd={isListView ? undefined : handleTouchEndWithPopup}
+            role="region"
+            aria-label={isListView ? 'Tweet list view' : 'Interactive board canvas'}
+            aria-live="polite"
+            tabIndex={0}
+          >
+            {error && renderError()}
 
-          {isListView ? (
-            <Box sx={TweetContentStyles.boardListViewContainer}>
-              {validTweets.length === 0 ? (
-                <Typography sx={TweetContentStyles.boardEmptyMessage}>
-                  No tweets yet. Create one to get started!
-                </Typography>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 20 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  {renderedTweets}
-                  {loading && <LoadingSpinner />}
-                  {tweets.length < pagination.total && (
-                    <Button
-                      variant="outlined"
-                      onClick={handleLoadMore}
-                      sx={{ mt: 2, alignSelf: 'center' }}
-                      aria-label="Load more tweets"
-                    >
-                      Load More
-                    </Button>
-                  )}
-                </motion.div>
-              )}
-            </Box>
-          ) : (
-            <Box sx={TweetContentStyles.boardCanvas(scale, offset)}>
-              <Box sx={TweetContentStyles.boardTitleContainer(scale)}>
-                <Typography sx={TweetContentStyles.boardTitle(boardTitle.length)}>
-                  {boardTitle}
-                </Typography>
-              </Box>
-              {validTweets.length === 0 ? (
-                <Box sx={TweetContentStyles.boardEmptyMessage}>
-                  <Typography variant="body1" color="text.secondary">
-                    No tweets yet. Click or tap anywhere to create one!
-                  </Typography>
-                </Box>
-              ) : (
-                renderedTweets
-              )}
-              {tweetPopup.visible && (
-                <TweetPopup
-                  x={tweetPopup.x}
-                  y={tweetPopup.y}
-                  onSubmit={handleTweetCreation}
-                  onClose={() => {
-                    setTweetPopup({ visible: false });
-                    setReplyTweet(null);
-                  }}
-                />
-              )}
-            </Box>
-          )}
-
-          {/* View Toggle, Zoom Controls, and Refresh Button */}
-          <Box sx={TweetContentStyles.boardControlsContainer}>
-            <Tooltip title={isListView ? 'Switch to board view' : 'Switch to list view'}>
-              <Button
-                variant="contained"
-                startIcon={isListView ? <ViewModule /> : <ViewList />}
-                onClick={handleViewToggle}
-                aria-label={isListView ? 'Show as board' : 'Show as list'}
-                sx={TweetContentStyles.boardViewToggleButton}
-              >
-                {isListView ? 'Board' : 'List'}
-              </Button>
-            </Tooltip>
-            <Tooltip title="Refresh board">
-              <IconButton
-                onClick={debouncedRefresh}
-                size="small"
-                aria-label="Refresh board"
-                sx={TweetContentStyles.boardZoomButton}
-                disabled={loading}
-              >
-                <Refresh fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            {!isListView && (
-              <>
-                <AnimatePresence>
-                  {Math.abs(scale - 1) > 0.01 && (
+            <motion.div
+              initial={{ opacity: 0, scale: isListView ? 0.95 : 1 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: isListView ? 0.95 : 1 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+            >
+              {isListView ? (
+                <Box sx={TweetContentStyles.boardListViewContainer}>
+                  {validTweets.length === 0 ? (
+                    <Typography sx={TweetContentStyles.boardEmptyMessage}>
+                      No tweets yet. Create one to get started!
+                    </Typography>
+                  ) : (
                     <motion.div
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
-                      transition={{ duration: 0.2 }}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.3 }}
                     >
-                      <Tooltip title="Reset zoom">
-                        <IconButton
-                          onClick={() => handleZoomButton('reset')}
-                          size="small"
-                          aria-label="Reset board zoom to 100%"
-                          sx={TweetContentStyles.boardZoomButton}
+                      {renderedTweets}
+                      {loading && <LoadingSpinner />}
+                      {tweets.length < pagination.total && (
+                        <Button
+                          variant="outlined"
+                          onClick={handleLoadMore}
+                          sx={{ mt: 2, alignSelf: 'center' }}
+                          aria-label="Load more tweets"
                         >
-                          <RestartAlt fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                          Load More
+                        </Button>
+                      )}
                     </motion.div>
                   )}
-                </AnimatePresence>
-                <Tooltip title="Zoom out">
-                  <IconButton
-                    onClick={() => handleZoomButton('out')}
-                    size="small"
-                    aria-label="Zoom out board"
-                    sx={TweetContentStyles.boardZoomButton}
+                </Box>
+              ) : (
+                <Box sx={TweetContentStyles.boardCanvas(scale, offset)}>
+                  <Box sx={TweetContentStyles.boardTitleContainer(scale)}>
+                    <Typography sx={TweetContentStyles.boardTitle(boardTitle.length)}>
+                      {boardTitle}
+                    </Typography>
+                  </Box>
+                  {validTweets.length === 0 ? (
+                    <Box sx={TweetContentStyles.boardEmptyMessage}>
+                      <Typography variant="body1" color="text.secondary">
+                        No tweets yet. Tap or click anywhere to create one!
+                      </Typography>
+                    </Box>
+                  ) : (
+                    renderedTweets
+                  )}
+                  {tweetPopup.visible && (
+                    <TweetPopup
+                      x={tweetPopup.x}
+                      y={tweetPopup.y}
+                      clientX={tweetPopup.clientX}
+                      clientY={tweetPopup.clientY}
+                      onSubmit={handleTweetCreation}
+                      onClose={() => {
+                        setTweetPopup({ visible: false, x: 0, y: 0, clientX: 0, clientY: 0 });
+                        setReplyTweet(null);
+                      }}
+                      scale={scale}
+                      offset={offset}
+                    />
+                  )}
+                </Box>
+              )}
+            </motion.div>
+
+            {/* Controls */}
+            <Box
+              sx={{
+                ...TweetContentStyles.boardControlsContainer,
+                position: 'fixed',
+                bottom: { xs: 8, sm: 16 },
+                right: { xs: 8, sm: 16 },
+                display: 'flex',
+                flexDirection: 'column',
+                gap: { xs: 0.5, sm: 1 },
+                zIndex: 1000,
+              }}
+            >
+              <Tooltip title={isListView ? 'Switch to board view' : 'Switch to list view'}>
+                <Button
+                  variant="contained"
+                  startIcon={isListView ? <ViewModule /> : <ViewList />}
+                  onClick={handleViewToggle}
+                  aria-label={isListView ? 'Show as board' : 'Show as list'}
+                  sx={{
+                    ...TweetContentStyles.boardViewToggleButton,
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    padding: { xs: '4px 8px', sm: '6px 16px' },
+                  }}
+                >
+                  {isListView ? 'Board' : 'List'}
+                </Button>
+              </Tooltip>
+              <Tooltip title="Refresh board">
+                <IconButton
+                  onClick={debouncedRefresh}
+                  size="small"
+                  aria-label="Refresh board"
+                  sx={TweetContentStyles.boardZoomButton}
+                  disabled={loading}
+                >
+                  <Refresh fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              {!isListView && (
+                <>
+                  <AnimatePresence>
+                    {Math.abs(scale - 1) > 0.01 && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <Tooltip title="Reset zoom">
+                          <IconButton
+                            onClick={() => handleZoomButton('reset')}
+                            size="small"
+                            aria-label="Reset board zoom to 100%"
+                            sx={TweetContentStyles.boardZoomButton}
+                          >
+                            <RestartAlt fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <Tooltip title="Zoom out">
+                    <IconButton
+                      onClick={() => handleZoomButton('out')}
+                      size="small"
+                      aria-label="Zoom out board"
+                      sx={TweetContentStyles.boardZoomButton}
+                    >
+                      <Remove fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Typography
+                    sx={{
+                      ...TweetContentStyles.boardZoomText,
+                      fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    }}
                   >
-                    <Remove fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                <Typography sx={TweetContentStyles.boardZoomText}>
-                  {Math.round(scale * 100)}%
-                </Typography>
-                <Tooltip title="Zoom in">
-                  <IconButton
-                    onClick={() => handleZoomButton('in')}
-                    size="small"
-                    aria-label="Zoom in board"
-                    sx={TweetContentStyles.boardZoomButton}
-                  >
-                    <Add fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </>
-            )}
+                    {Math.round(scale * 100)}%
+                  </Typography>
+                  <Tooltip title="Zoom in">
+                    <IconButton
+                      onClick={() => handleZoomButton('in')}
+                      size="small"
+                      aria-label="Zoom in board"
+                      sx={TweetContentStyles.boardZoomButton}
+                    >
+                      <Add fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              )}
+            </Box>
           </Box>
-        </Box>
+        {/* </motion.div> */}
 
         {/* Edit Tweet Modal */}
         {editTweetModal && (
@@ -712,7 +744,7 @@ const Board = ({
                 label="Tweet Content"
                 value={editTweetModal.content?.value || ''}
                 onChange={(e) =>
-                  setEditTweetModal((prev) => ({
+                  setEditTweetModal((prev)  => ({
                     ...prev,
                     content: { ...prev.content, value: e.target.value },
                   }))

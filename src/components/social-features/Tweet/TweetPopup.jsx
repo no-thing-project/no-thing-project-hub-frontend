@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo, memo } from 'react';
 import PropTypes from 'prop-types';
 import {
-  Paper,
+  Dialog,
   TextField,
   Button,
   Box,
@@ -25,8 +25,6 @@ import { SUPPORTED_MIME_TYPES } from '../../../constants/validations';
 const MAX_TWEET_LENGTH = 1000;
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const RECORDING_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-const POPUP_WIDTH = 320;
-const POPUP_HEIGHT = 400;
 
 const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   const [form, setForm] = useState({ draft: '', scheduledAt: '' });
@@ -203,8 +201,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
             embed_data: null,
           },
         };
-        const position = { x: Math.max(0, x), y: Math.max(0, y) };
-        await onSubmit(content, position.x, position.y, form.scheduledAt || null, files, (progress) =>
+        await onSubmit(content, x, y, form.scheduledAt || null, files, (progress) =>
           setUploadProgress(progress)
         );
         setForm({ draft: '', scheduledAt: '' });
@@ -378,17 +375,14 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   }, [recordingType, recording, loading, handleFileInputChange, startRecording, stopRecording]);
 
   return (
-    <Paper
-      elevation={5}
-      sx={{
-        ...TweetContentStyles.popupPaper,
-        top: y,
-        left: x,
-      }}
-      role="dialog"
+    <Dialog
+      open={true}
+      onClose={onClose}
+      fullScreen={window.innerWidth <= 600}
+      maxWidth="sm"
+      sx={TweetContentStyles.popupModal}
       aria-labelledby="tweet-popup-title"
       ref={dialogRef}
-      tabIndex={-1}
     >
       <Typography id="tweet-popup-title" sx={TweetContentStyles.popupTitle}>
         Create a new tweet
@@ -437,7 +431,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
           <Box sx={TweetContentStyles.popupProgressContainer}>
             <LinearProgress variant="determinate" value={uploadProgress} />
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            Uploading: {uploadProgress}%
+              Uploading: {uploadProgress}%
             </Typography>
           </Box>
         )}
@@ -492,7 +486,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
           </Button>
         </Box>
       </Box>
-    </Paper>
+    </Dialog>
   );
 };
 

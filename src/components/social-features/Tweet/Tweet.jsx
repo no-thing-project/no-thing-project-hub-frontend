@@ -30,14 +30,18 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
     }
   }, [tweet.position?.x, tweet.position?.y, dragging, localPosition, clampPosition]);
 
+  // Permission logic for dragging
   const isDraggable = useMemo(() => {
     if (!tweet || tweet.is_pinned) return false;
-    if (bypassOwnership || ['moderator', 'admin'].includes(userRole)) return true;
-    return (
-      tweet.anonymous_id === currentUser?.anonymous_id ||
-      tweet.user_id === currentUser?.anonymous_id ||
-      (tweet.username && currentUser?.username && tweet.username === currentUser.username)
-    );
+    if (bypassOwnership || ['admin', 'owner'].includes(userRole)) return true;
+    if (userRole === 'viewer') {
+      return (
+        tweet.anonymous_id === currentUser?.anonymous_id ||
+        tweet.user_id === currentUser?.anonymous_id ||
+        (tweet.username && currentUser?.username && tweet.username === currentUser.username)
+      );
+    }
+    return false;
   }, [tweet, bypassOwnership, userRole, currentUser?.anonymous_id, currentUser?.username]);
 
   const debouncedOnStop = useMemo(
@@ -77,7 +81,7 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
       setDragging(false);
       justDroppedRef.current = true;
 
-      if (e.target.closest('.tweet-menu')) return;
+      if (e.target.closest('.tweet-menu, .MuiIconButton-root, .MuiTypography-root, .MuiChip-root')) return;
 
       setTimeout(() => (justDroppedRef.current = false), 100);
       debouncedOnStop(e, data);
@@ -99,6 +103,7 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
       onStart={handleStart}
       onDrag={handleDrag}
       onStop={handleStop}
+      cancel=".tweet-menu, .MuiIconButton-root, .MuiTypography-root, .MuiChip-root"
     >
       <div
         ref={nodeRef}
@@ -110,9 +115,10 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
           cursor: isDraggable ? (dragging ? 'grabbing' : 'grab') : 'default',
           zIndex: dragging || hovered ? 1000 : tweet.is_pinned ? 1100 : 1,
           transition: 'opacity 0.2s ease, transform 0.2s ease',
+          touchAction: isDraggable ? 'none' : 'auto',
         }}
         role="region"
-        aria-label={`Tweet by ${tweet.username || 'Someone'}`}
+        aria-label={`Tweet by ${tweet.username || 'Anonymous'}`}
         aria-disabled={!isDraggable}
         tabIndex={isDraggable ? 0 : -1}
       >

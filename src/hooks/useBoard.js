@@ -8,6 +8,7 @@ const ZOOM_STEP = 0.05;
 const ZOOM_SENSITIVITY = 0.001;
 const MOVE_STEP = 50;
 const ANIMATION_DURATION = 400;
+const PINCH_SENSITIVITY = 0.01;
 
 export const useBoardInteraction = (boardRef) => {
   const [scale, setScale] = useState(1);
@@ -15,7 +16,7 @@ export const useBoardInteraction = (boardRef) => {
   const isDragging = useRef(false);
   const dragStart = useRef(null);
   const touchStart = useRef(null);
-  const pinchStartDistance = useRef(null);
+  const pinchStart = useRef(null);
   const scaleRef = useRef(scale);
   const offsetRef = useRef(offset);
   const animationFrame = useRef(null);
@@ -27,8 +28,10 @@ export const useBoardInteraction = (boardRef) => {
 
   const clampOffset = useCallback((newOffset) => {
     const scaledSize = BOARD_SIZE * scaleRef.current;
-    const minX = window.innerWidth - scaledSize;
-    const minY = window.innerHeight - scaledSize;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const minX = viewportWidth - scaledSize;
+    const minY = viewportHeight - scaledSize;
     return {
       x: Math.max(minX, Math.min(0, newOffset.x)),
       y: Math.max(minY, Math.min(0, newOffset.y)),
@@ -36,9 +39,11 @@ export const useBoardInteraction = (boardRef) => {
   }, []);
 
   const centerBoard = useCallback(() => {
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
     const newOffset = {
-      x: window.innerWidth / 2 - (BOARD_SIZE * scaleRef.current) / 2,
-      y: window.innerHeight / 2 - (BOARD_SIZE * scaleRef.current) / 2,
+      x: (viewportWidth - BOARD_SIZE) / 2,
+      y: (viewportHeight - BOARD_SIZE) / 2,
     };
     setOffset(clampOffset(newOffset));
     setScale(1);
@@ -47,8 +52,8 @@ export const useBoardInteraction = (boardRef) => {
   const restoreBoardState = useCallback(
     (state) => {
       if (!state) return;
-      setScale(state.scale);
-      setOffset(clampOffset(state.offset));
+      setScale(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, state.scale || 1)));
+      setOffset(clampOffset(state.offset || { x: 0, y: 0 }));
     },
     [clampOffset]
   );
@@ -57,9 +62,11 @@ export const useBoardInteraction = (boardRef) => {
     const startScale = scaleRef.current;
     const startOffset = offsetRef.current;
     const targetScale = 1;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
     const targetOffset = {
-      x: window.innerWidth / 2 - (BOARD_SIZE * targetScale) / 2,
-      y: window.innerHeight / 2 - (BOARD_SIZE * targetScale) / 2,
+      x: (viewportWidth - BOARD_SIZE) / 2,
+      y: (viewportHeight - BOARD_SIZE) / 2,
     };
     const startTime = performance.now();
 
@@ -85,17 +92,15 @@ export const useBoardInteraction = (boardRef) => {
     animationFrame.current = requestAnimationFrame(animate);
   }, [clampOffset]);
 
-  const handleZoom = useCallback((delta, mouseX, mouseY) => {
+  const handleZoom = useCallback((delta, clientX, clientY) => {
     setScale((prevScale) => {
       const newScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, prevScale + delta));
+      const focusX = clientX !== undefined ? clientX : window.innerWidth / 2;
+      const focusY = clientY !== undefined ? clientY : window.innerHeight / 2;
       const currentOffset = offsetRef.current;
       setOffset(clampOffset({
-        x: mouseX !== undefined
-          ? mouseX - ((mouseX - currentOffset.x) / prevScale) * newScale
-          : window.innerWidth / 2 - (BOARD_SIZE * newScale) / 2,
-        y: mouseY !== undefined
-          ? mouseY - ((mouseY - currentOffset.y) / prevScale) * newScale
-          : window.innerHeight / 2 - (BOARD_SIZE * newScale) / 2,
+        x: focusX - ((focusX - currentOffset.x) / prevScale) * newScale,
+        y: focusY - ((focusY - currentOffset.y) / prevScale) * newScale,
       }));
       return newScale;
     });
@@ -123,7 +128,8 @@ export const useBoardInteraction = (boardRef) => {
   );
 
   const handleMouseDown = useCallback((e) => {
-    if (!boardRef.current || e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root')) return;
+    if (!boardRef.current || e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root, .MuiButton-root')) return;
+    e.preventDefault();
     dragStart.current = { x: e.clientX, y: e.clientY, offsetX: offset.x, offsetY: offset.y };
     isDragging.current = false;
   }, [offset]);
@@ -155,7 +161,7 @@ export const useBoardInteraction = (boardRef) => {
         const tweetX = (clickX - offset.x) / scale;
         const tweetY = (clickY - offset.y) / scale;
         if (tweetX >= 0 && tweetX <= BOARD_SIZE && tweetY >= 0 && tweetY <= BOARD_SIZE) {
-          onClick(tweetX, tweetY);
+          onClick(tweetX, tweetY, clickX, clickY);
         }
       }
       dragStart.current = null;
@@ -165,20 +171,34 @@ export const useBoardInteraction = (boardRef) => {
   );
 
   const handleTouchStart = useCallback((e) => {
-    if (!boardRef.current) return;
+    if (!boardRef.current || e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root, .MuiButton-root')) return;
+    e.preventDefault();
     if (e.touches.length === 1) {
-      touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, offsetX: offset.x, offsetY: offset.y };
+      touchStart.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+        offsetX: offset.x,
+        offsetY: offset.y,
+      };
       isDragging.current = false;
     } else if (e.touches.length === 2) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      pinchStartDistance.current = Math.sqrt(dx * dx + dy * dy);
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const dx = touch1.clientX - touch2.clientX;
+      const dy = touch1.clientY - touch2.clientY;
+      pinchStart.current = {
+        distance: Math.sqrt(dx * dx + dy * dy),
+        centerX: (touch1.clientX + touch2.clientX) / 2,
+        centerY: (touch1.clientY + touch2.clientY) / 2,
+        scale: scaleRef.current,
+      };
     }
   }, [offset]);
 
   const handleTouchMove = useCallback(
     throttle((e) => {
       if (!boardRef.current) return;
+      e.preventDefault();
       if (e.touches.length === 1 && touchStart.current) {
         const touch = e.touches[0];
         const dx = touch.clientX - touchStart.current.x;
@@ -192,20 +212,24 @@ export const useBoardInteraction = (boardRef) => {
             y: touchStart.current.offsetY + dy,
           }));
         }
-      } else if (e.touches.length === 2 && pinchStartDistance.current) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
+      } else if (e.touches.length === 2 && pinchStart.current) {
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const dx = touch1.clientX - touch2.clientX;
+        const dy = touch1.clientY - touch2.clientY;
         const currentDistance = Math.sqrt(dx * dx + dy * dy);
-        const delta = (currentDistance - pinchStartDistance.current) * ZOOM_SENSITIVITY;
-        handleZoom(
-          delta,
-          (e.touches[0].clientX + e.touches[1].clientX) / 2,
-          (e.touches[0].clientY + e.touches[1].clientY) / 2
-        );
-        pinchStartDistance.current = currentDistance;
+        const scaleChange = (currentDistance / pinchStart.current.distance) * pinchStart.current.scale;
+        const newScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, scaleChange));
+        const centerX = (touch1.clientX + touch2.clientX) / 2;
+        const centerY = (touch1.clientY + touch2.clientY) / 2;
+        setScale(newScale);
+        setOffset(clampOffset({
+          x: centerX - ((centerX - offsetRef.current.x) / scaleRef.current) * newScale,
+          y: centerY - ((centerY - offsetRef.current.y) / scaleRef.current) * newScale,
+        }));
       }
     }, 10),
-    [clampOffset, handleZoom]
+    [clampOffset]
   );
 
   const handleTouchEnd = useCallback(
@@ -224,11 +248,11 @@ export const useBoardInteraction = (boardRef) => {
         const tweetX = (clickX - offset.x) / scale;
         const tweetY = (clickY - offset.y) / scale;
         if (tweetX >= 0 && tweetX <= BOARD_SIZE && tweetY >= 0 && tweetY <= BOARD_SIZE) {
-          onClick(tweetX, tweetY);
+          onClick(tweetX, tweetY, clickX, clickY);
         }
       }
       touchStart.current = null;
-      pinchStartDistance.current = null;
+      pinchStart.current = null;
       isDragging.current = false;
     },
     [boardRef, offset, scale]
@@ -321,7 +345,6 @@ export const useBoardInteraction = (boardRef) => {
     dragging: isDragging.current,
     centerBoard,
     handleZoomButton,
-    handleWheel,
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,

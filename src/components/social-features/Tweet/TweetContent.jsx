@@ -150,7 +150,7 @@ const TweetContent = ({
   boardId,
   isListView = false,
   error = null,
-  getParentTweetText, // New prop for parent tweet text lookup
+  getParentTweetText,
 }) => {
   const [animate, setAnimate] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -229,35 +229,48 @@ const TweetContent = ({
   }, [onReplyHover, tweet.parent_tweet_id, tweet.child_tweet_ids]);
 
   const handleMenuOpen = useCallback((event) => {
-    event.stopPropagation();
     setAnchorEl(event.currentTarget);
   }, []);
 
-  const handleMenuClose = useCallback(() => setAnchorEl(null), []);
+  const handleMenuClose = useCallback((event) => {
+    setAnchorEl(null);
+  }, []);
 
   const handleOpenMediaModal = useCallback((event) => {
-    event.stopPropagation();
     setOpenMediaModal(true);
   }, []);
 
-  const handleCloseMediaModal = useCallback(() => setOpenMediaModal(false), []);
+  const handleCloseMediaModal = useCallback((event) => {
+    setOpenMediaModal(false);
+  }, []);
 
-  const handleEdit = useCallback(() => {
-    onEdit(tweet);
-    handleMenuClose();
-  }, [onEdit, tweet]);
+  const handleEdit = useCallback(
+    (event) => {
+      onEdit(tweet);
+      handleMenuClose(event);
+    },
+    [onEdit, tweet]
+  );
 
-  const handlePin = useCallback(() => {
-    onPinToggle(tweet);
-    handleMenuClose();
-  }, [onPinToggle, tweet]);
+  const handlePin = useCallback(
+    (event) => {
+      onPinToggle(tweet);
+      handleMenuClose(event);
+    },
+    [onPinToggle, tweet]
+  );
 
-  const handleDelete = useCallback(() => {
-    onDelete(tweet.tweet_id);
-    handleMenuClose();
-  }, [onDelete, tweet.tweet_id]);
+  const handleDelete = useCallback(
+    (event) => {
+      onDelete(tweet.tweet_id);
+      handleMenuClose(event);
+    },
+    [onDelete, tweet.tweet_id]
+  );
 
-  const handleToggleExpand = useCallback(() => setIsExpanded((prev) => !prev), []);
+  const handleToggleExpand = useCallback((event) => {
+    setIsExpanded((prev) => !prev);
+  }, []);
 
   const highlightStyle = useMemo(() => {
     if (hovered || isRelated || isParentHighlighted) {
@@ -322,7 +335,9 @@ const TweetContent = ({
               onClick={handleOpenMediaModal}
               role="button"
               tabIndex={0}
-              onKeyPress={(e) => e.key === 'Enter' && handleOpenMediaModal(e)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') handleOpenMediaModal(e);
+              }}
             >
               View all images ({imageFiles.length})
             </Typography>
@@ -362,7 +377,9 @@ const TweetContent = ({
               onClick={handleOpenMediaModal}
               role="button"
               tabIndex={0}
-              onKeyPress={(e) => e.key === 'Enter' && handleOpenMediaModal(e)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') handleOpenMediaModal(e);
+              }}
             >
               View all videos ({videoFiles.length})
             </Typography>
@@ -392,7 +409,9 @@ const TweetContent = ({
               onClick={handleOpenMediaModal}
               role="button"
               tabIndex={0}
-              onKeyPress={(e) => e.key === 'Enter' && handleOpenMediaModal(e)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') handleOpenMediaModal(e);
+              }}
             >
               View all audio ({audioFiles.length})
             </Typography>
@@ -423,7 +442,9 @@ const TweetContent = ({
               onClick={handleOpenMediaModal}
               role="button"
               tabIndex={0}
-              onKeyPress={(e) => e.key === 'Enter' && handleOpenMediaModal(e)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') handleOpenMediaModal(e);
+              }}
             >
               View all files ({otherFiles.length})
             </Typography>
@@ -439,12 +460,16 @@ const TweetContent = ({
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
         {hasText && (
           <Box>
-            <Typography sx={TweetContentStyles.contentText(!!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles)}>
+            <Typography
+              sx={TweetContentStyles.contentText(!!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles)}
+            >
               <Emoji text={previewText + (!isExpanded && remainderText ? '...' : '')} />
             </Typography>
             {remainderText && (
               <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                <Typography sx={TweetContentStyles.contentText(!!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles)}>
+                <Typography
+                  sx={TweetContentStyles.contentText(!!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles)}
+                >
                   <Emoji text={remainderText} />
                 </Typography>
               </Collapse>
@@ -470,7 +495,7 @@ const TweetContent = ({
         {renderOtherFiles}
       </motion.div>
     );
-  }, [previewText, remainderText, isExpanded, renderImages, renderVideos, renderAudio, renderOtherFiles]);
+  }, [previewText, remainderText, isExpanded, renderImages, renderVideos, renderAudio, renderOtherFiles, handleToggleExpand]);
 
   const modalContent = useMemo(() => {
     const files = tweet.content?.metadata?.files || [];
@@ -568,7 +593,9 @@ const TweetContent = ({
         {tweet.is_pinned && (
           <Box sx={TweetContentStyles.pinnedIconContainer}>
             <motion.div whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.95 }}>
-              <PushPinIcon sx={TweetContentStyles.pinnedIcon} />
+              <PushPinIcon
+                sx={TweetContentStyles.pinnedIcon}
+              />
             </motion.div>
           </Box>
         )}
@@ -582,7 +609,10 @@ const TweetContent = ({
               <Typography variant="caption" sx={TweetContentStyles.replyToCaption}>
                 Replying to:
               </Typography>
-              <Typography variant="body2" sx={TweetContentStyles.replyToText}>
+              <Typography
+                variant="body2"
+                sx={TweetContentStyles.replyToText}
+              >
                 <Emoji text={resolvedParentTweetText} />
               </Typography>
             </Box>
@@ -598,7 +628,10 @@ const TweetContent = ({
               aria-label={`Tweet status: ${chipLabel}`}
             />
           </motion.div>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          <Typography
+            variant="caption"
+            sx={{ color: 'text.secondary' }}
+          >
             Author: {tweetAuthor}
           </Typography>
         </Box>
@@ -608,7 +641,6 @@ const TweetContent = ({
               <IconButton
                 size="medium"
                 onClick={(e) => {
-                  e.stopPropagation();
                   onLike(tweet.tweet_id, isLiked);
                 }}
                 aria-label={isLiked ? 'Unlike tweet' : 'Like tweet'}
@@ -617,14 +649,16 @@ const TweetContent = ({
                 <ThumbUpIcon sx={TweetContentStyles.likeIcon(isLiked)} />
               </IconButton>
             </motion.div>
-            <Typography variant="caption" sx={TweetContentStyles.likeCount(isLiked, animate)}>
+            <Typography
+              variant="caption"
+              sx={TweetContentStyles.likeCount(isLiked, animate)}
+            >
               {tweet.stats?.like_count || 0}
             </Typography>
             <motion.div whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.95 }}>
               <IconButton
                 size="medium"
                 onClick={(e) => {
-                  e.stopPropagation();
                   onReply(tweet);
                 }}
                 aria-label="Reply to tweet"
@@ -634,7 +668,10 @@ const TweetContent = ({
               </IconButton>
             </motion.div>
             {hasReplies && (
-              <Typography variant="caption" sx={TweetContentStyles.replyCount}>
+              <Typography
+                variant="caption"
+                sx={TweetContentStyles.replyCount}
+              >
                 {replyLabel}
               </Typography>
             )}
@@ -811,7 +848,7 @@ TweetContent.propTypes = {
   boardId: PropTypes.string,
   isListView: PropTypes.bool,
   error: PropTypes.string,
-  getParentTweetText: PropTypes.func, // New prop for parent tweet text
+  getParentTweetText: PropTypes.func,
 };
 
 TweetContent.defaultProps = {
