@@ -1,8 +1,7 @@
-// src/pages/ProfilePage.jsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Button } from '@mui/material';
-import { Edit } from '@mui/icons-material';
+import { Edit, Refresh } from '@mui/icons-material';
 import AppLayout from '../components/Layout/AppLayout';
 import LoadingSpinner from '../components/Layout/LoadingSpinner';
 import ProfileCard from '../components/Cards/ProfileCard';
@@ -12,12 +11,13 @@ import useProfile from '../hooks/useProfile';
 import { actionButtonStyles, cancelButtonStyle } from '../styles/BaseStyles';
 import { normalizeUserData } from '../utils/profileUtils';
 import { useNotification } from '../context/NotificationContext';
+import { useUserExtras } from '../hooks/useUserExtras';
 
-// Функція для порівняння об’єктів і повернення лише змінених полів
 const getChangedFields = (original, updated) => {
   const changes = {};
+  const protectedFields = ['total_points', 'donated_points'];
   for (const key in updated) {
-    if (Object.prototype.hasOwnProperty.call(updated, key)) {
+    if (Object.prototype.hasOwnProperty.call(updated, key) && !protectedFields.includes(key)) {
       const originalValue = original[key];
       const updatedValue = updated[key];
 
@@ -48,9 +48,10 @@ const ProfilePage = () => {
     clearProfileState,
   } = useProfile(token, currentUser, handleLogout, navigate, updateAuthData);
   const { showNotification } = useNotification();
+  const { refreshPrediction } = useUserExtras(token);
 
   const [isEditing, setIsEditing] = useState(false);
-  const [userData, setUserData] = useState(() => normalizeUserData(currentUser || fetchedProfileData));
+  const [userData, setUserData] = useState(() => normalizeUserData(currentUser || fetchedProfileData, currentUser));
 
   useEffect(() => {
     if (authLoading) return;
@@ -83,7 +84,7 @@ const ProfilePage = () => {
         }
         await Promise.all(promises);
 
-        const normalizedData = normalizeUserData(isOwnProfile ? currentUser : fetchedProfileData);
+        const normalizedData = normalizeUserData(isOwnProfile ? currentUser : fetchedProfileData, isOwnProfile ? currentUser : fetchedProfileData);
         if (!normalizedData) {
           showNotification('Profile not found. Please try again or check the profile ID.', 'error');
           navigate('/not-found', { state: { message: `Profile with ID ${anonymous_id} not found.` } });
@@ -139,7 +140,7 @@ const ProfilePage = () => {
     try {
       const updatedProfile = await updateProfileData(changes);
       if (updatedProfile) {
-        const normalizedProfile = normalizeUserData(updatedProfile);
+        const normalizedProfile = normalizeUserData(updatedProfile, currentUser);
         setUserData(normalizedProfile);
         updateAuthData(normalizedProfile);
         showNotification('Profile updated successfully!', 'success');
@@ -157,6 +158,11 @@ const ProfilePage = () => {
     setIsEditing(false);
   };
 
+  const handleUpdatePrediction = () => {
+    refreshPrediction();
+    showNotification('Prediction updated!', 'success');
+  };
+
   const isLoading = authLoading || (!isOwnProfile && profileLoading);
 
   if (isLoading) return <LoadingSpinner />;
@@ -164,20 +170,30 @@ const ProfilePage = () => {
   if (!userData) return null;
 
   return (
-    <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token} >
+    <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token}>
       <Box sx={{ maxWidth: 1500, margin: '0 auto', p: 2 }}>
         <ProfileHeader user={userData} isOwnProfile={isOwnProfile}>
           {isOwnProfile && (
             <>
               {!isEditing ? (
-                <Button
-                  variant="contained"
-                  onClick={handleEditProfile}
-                  startIcon={<Edit />}
-                  sx={actionButtonStyles}
-                >
-                  Edit Profile
-                </Button>
+                <>
+                  <Button
+                    variant="contained"
+                    onClick={handleEditProfile}
+                    startIcon={<Edit />}
+                    sx={{ ...actionButtonStyles, mr: 1 }}
+                  >
+                    Edit Profile
+                  </Button>
+                  <Button
+                    variant="contained"
+                    onClick={handleUpdatePrediction}
+                    startIcon={<Refresh />}
+                    sx={actionButtonStyles}
+                  >
+                    Update Prediction
+                  </Button>
+                </>
               ) : (
                 <>
                   <Button

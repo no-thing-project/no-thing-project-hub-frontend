@@ -1,5 +1,4 @@
-// src/hooks/useUserExtras.js
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 function generateRandomColor() {
   const letters = "0123456789ABCDEF";
@@ -11,22 +10,30 @@ function generateRandomColor() {
 }
 
 export const useUserExtras = (token) => {
+  const [predictionKey, setPredictionKey] = useState(0);
+
   const randomPrediction = useMemo(() => {
     if (!token) {
       return "Welcome to GATE";
     }
-    const predictionKey = `prediction_${token}`;
-    let savedPrediction = localStorage.getItem(predictionKey);
-    if (!savedPrediction) {
-      savedPrediction =
-        predictions[Math.floor(Math.random() * predictions.length)];
-      localStorage.setItem(predictionKey, savedPrediction);
+    const predictionKeyStorage = `prediction_${token}`;
+    let savedPrediction = localStorage.getItem(predictionKeyStorage);
+    if (!savedPrediction || predictionKey > 0) {
+      savedPrediction = predictions[Math.floor(Math.random() * predictions.length)];
+      localStorage.setItem(predictionKeyStorage, savedPrediction);
     }
     return savedPrediction;
-  }, [token]);
+  }, [token, predictionKey]);
 
-  return { randomPrediction };
+  const refreshPrediction = () => {
+    if (!token) return;
+    setPredictionKey(prev => prev + 1);
+  };
+
+  return { randomPrediction, refreshPrediction };
 };
+
+
 const predictions = [
   "На тебе чекає несподіваний подарунок долі",
   "Твоя уява відкриє двері до великих звершень",

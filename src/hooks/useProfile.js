@@ -1,4 +1,3 @@
-// src/hooks/useProfile.js
 import { useState, useCallback, useMemo } from 'react';
 import {
   fetchProfile,
@@ -12,7 +11,7 @@ const useProfile = (token, currentUser, onLogout, navigate, updateAuthData) => {
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [pointsHistory, setPointsHistory] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null); // Залишаємо для критичних помилок
+  const [error, setError] = useState(null);
 
   const handleAuthError = useCallback(
     (err) => {
@@ -46,6 +45,9 @@ const useProfile = (token, currentUser, onLogout, navigate, updateAuthData) => {
       setLoading(true);
       try {
         const profile = await fetchProfile(anonymous_id, token, signal);
+        const existingPoints = profileData || currentUser;
+        profile.total_points = Number(profile.total_points) >= 0 ? Number(profile.total_points) : (existingPoints?.total_points ?? 0);
+        profile.donated_points = Number(profile.donated_points) >= 0 ? Number(profile.donated_points) : (existingPoints?.donated_points ?? 0);
         const isOwn = anonymous_id === currentUser.anonymous_id;
         setProfileData(profile);
         setIsOwnProfile(isOwn);
@@ -55,6 +57,7 @@ const useProfile = (token, currentUser, onLogout, navigate, updateAuthData) => {
         return { profileData: profile, isOwnProfile: isOwn };
       } catch (err) {
         if (err.name !== 'AbortError') {
+          setError(err.message || 'Failed to fetch profile');
           handleAuthError(err);
         }
         return null;
@@ -62,7 +65,7 @@ const useProfile = (token, currentUser, onLogout, navigate, updateAuthData) => {
         setLoading(false);
       }
     },
-    [token, currentUser, updateAuthData, handleAuthError]
+    [token, currentUser, updateAuthData, handleAuthError, profileData]
   );
 
   const updateProfileData = useCallback(
@@ -73,19 +76,29 @@ const useProfile = (token, currentUser, onLogout, navigate, updateAuthData) => {
       setLoading(true);
       try {
         const updatedProfile = await updateProfile(updates, token, signal);
-        setProfileData(updatedProfile);
-        if (isOwnProfile) updateAuthData(updatedProfile);
-        return updatedProfile;
+        const existingPoints = profileData || currentUser;
+        const mergedProfile = {
+          ...profileData,
+          ...updatedProfile,
+          total_points: Number(updatedProfile.total_points) >= 0 ? Number(updatedProfile.total_points) : (existingPoints?.total_points ?? 0),
+          donated_points: Number(updatedProfile.donated_points) >= 0 ? Number(updatedProfile.donated_points) : (existingPoints?.donated_points ?? 0),
+        };
+        setProfileData(mergedProfile);
+        if (isOwnProfile) {
+          updateAuthData(mergedProfile);
+        }
+        return mergedProfile;
       } catch (err) {
         if (err.name !== 'AbortError') {
-          throw err
+          setError(err.message || 'Failed to update profile');
+          throw err;
         }
         return null;
       } finally {
         setLoading(false);
       }
     },
-    [token, isOwnProfile, updateAuthData]
+    [token, isOwnProfile, updateAuthData, profileData, currentUser]
   );
 
   const deleteProfileData = useCallback(
@@ -101,6 +114,7 @@ const useProfile = (token, currentUser, onLogout, navigate, updateAuthData) => {
         navigate('/');
       } catch (err) {
         if (err.name !== 'AbortError') {
+          setError(err.message || 'Failed to delete profile');
           handleAuthError(err);
         }
       } finally {
@@ -122,6 +136,7 @@ const useProfile = (token, currentUser, onLogout, navigate, updateAuthData) => {
         return history;
       } catch (err) {
         if (err.name !== 'AbortError') {
+          setError(err.message || 'Failed to fetch points history');
           handleAuthError(err);
         }
         return [];
