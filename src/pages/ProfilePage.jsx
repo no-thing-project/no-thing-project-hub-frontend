@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Button } from '@mui/material';
 import { Edit, Refresh } from '@mui/icons-material';
+import _ from 'lodash';
 import AppLayout from '../components/Layout/AppLayout';
 import LoadingSpinner from '../components/Layout/LoadingSpinner';
 import ProfileCard from '../components/Cards/ProfileCard';
@@ -18,16 +19,8 @@ const getChangedFields = (original, updated) => {
   const protectedFields = ['total_points', 'donated_points'];
   for (const key in updated) {
     if (Object.prototype.hasOwnProperty.call(updated, key) && !protectedFields.includes(key)) {
-      const originalValue = original[key];
-      const updatedValue = updated[key];
-
-      if (typeof updatedValue === 'object' && updatedValue !== null && !Array.isArray(updatedValue)) {
-        const nestedChanges = getChangedFields(originalValue || {}, updatedValue);
-        if (Object.keys(nestedChanges).length > 0) {
-          changes[key] = nestedChanges;
-        }
-      } else if (JSON.stringify(originalValue) !== JSON.stringify(updatedValue)) {
-        changes[key] = updatedValue;
+      if (!_.isEqual(original[key], updated[key])) {
+        changes[key] = updated[key];
       }
     }
   }
@@ -53,6 +46,8 @@ const ProfilePage = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [userData, setUserData] = useState(() => normalizeUserData(currentUser || fetchedProfileData, currentUser));
 
+  const isOwnProfile = useMemo(() => anonymous_id === currentUser?.anonymous_id, [anonymous_id, currentUser]);
+
   useEffect(() => {
     if (authLoading) return;
     if (!isAuthenticated || !currentUser || !token) {
@@ -62,18 +57,17 @@ const ProfilePage = () => {
       return;
     }
 
+    if (!anonymous_id) {
+      handleLogout('Anonymous ID is missing. Please log in again.');
+      showNotification('Anonymous ID is missing.', 'error');
+      navigate('/login');
+      return;
+    }
+
     const controller = new AbortController();
     const signal = controller.signal;
 
     const loadData = async () => {
-      if (!anonymous_id) {
-        handleLogout('Anonymous ID is missing. Please log in again.');
-        showNotification('Anonymous ID is missing.', 'error');
-        return;
-      }
-
-      const isOwnProfile = anonymous_id === currentUser.anonymous_id;
-
       try {
         const promises = [];
         if (!isOwnProfile) {
@@ -84,7 +78,7 @@ const ProfilePage = () => {
         }
         await Promise.all(promises);
 
-        const normalizedData = normalizeUserData(isOwnProfile ? currentUser : fetchedProfileData, isOwnProfile ? currentUser : fetchedProfileData);
+        const normalizedData = normalizeUserData(isOwnProfile ? currentUser : fetchedProfileData, currentUser);
         if (!normalizedData) {
           showNotification('Profile not found. Please try again or check the profile ID.', 'error');
           navigate('/not-found', { state: { message: `Profile with ID ${anonymous_id} not found.` } });
@@ -94,11 +88,9 @@ const ProfilePage = () => {
       } catch (err) {
         if (err.name !== 'AbortError') {
           console.error('Error loading profile data in ProfilePage:', err);
+          showNotification(err.message || 'Failed to load profile data', 'error');
           if (err.message === 'Profile not found') {
-            showNotification(`Profile with ID ${anonymous_id} not found.`, 'error');
             navigate('/not-found', { state: { message: `Profile with ID ${anonymous_id} not found.` } });
-          } else {
-            showNotification(err.message || 'Failed to load profile data', 'error');
           }
         }
       }
@@ -113,6 +105,7 @@ const ProfilePage = () => {
     token,
     isAuthenticated,
     authLoading,
+    isOwnProfile,
     navigate,
     fetchProfileData,
     fetchProfilePointsHistory,
@@ -121,8 +114,6 @@ const ProfilePage = () => {
     fetchedProfileData,
     showNotification,
   ]);
-
-  const isOwnProfile = anonymous_id === currentUser?.anonymous_id;
 
   const handleEditProfile = () => {
     setIsEditing(true);
@@ -171,17 +162,17 @@ const ProfilePage = () => {
 
   return (
     <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token}>
-      <Box sx={{ maxWidth: 1500, margin: '0 auto', p: 2 }}>
+      <Box sx={{ maxWidth: 1500, margin: '0 auto', p: { xs: 1, sm: 2 } }}>
         <ProfileHeader user={userData} isOwnProfile={isOwnProfile}>
           {isOwnProfile && (
-            <>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
               {!isEditing ? (
                 <>
                   <Button
                     variant="contained"
                     onClick={handleEditProfile}
                     startIcon={<Edit />}
-                    sx={{ ...actionButtonStyles, mr: 1 }}
+                    sx={{ ...actionButtonStyles, minWidth: { xs: '100px', sm: '120px' } }}
                   >
                     Edit Profile
                   </Button>
@@ -189,7 +180,7 @@ const ProfilePage = () => {
                     variant="contained"
                     onClick={handleUpdatePrediction}
                     startIcon={<Refresh />}
-                    sx={actionButtonStyles}
+                    sx={{ ...actionButtonStyles, minWidth: { xs: '100px', sm: '120px' } }}
                   >
                     Update Prediction
                   </Button>
@@ -199,20 +190,20 @@ const ProfilePage = () => {
                   <Button
                     variant="contained"
                     onClick={handleSaveProfile}
-                    sx={{ ...actionButtonStyles, mr: 1 }}
+                    sx={{ ...actionButtonStyles, minWidth: { xs: '100px', sm: '120px' } }}
                   >
                     Save
                   </Button>
                   <Button
                     variant="contained"
                     onClick={handleCancelEdit}
-                    sx={cancelButtonStyle}
+                    sx={{ ...cancelButtonStyle, minWidth: { xs: '100px', sm: '120px' } }}
                   >
                     Cancel
                   </Button>
                 </>
               )}
-            </>
+            </Box>
           )}
         </ProfileHeader>
         <ProfileCard

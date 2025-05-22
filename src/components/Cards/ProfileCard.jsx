@@ -1,10 +1,9 @@
-// src/components/Cards/ProfileCard.jsx
-import React, { useCallback } from "react";
-import { Box, List, ListItem, ListItemText, Grid2 } from "@mui/material";
-import ProfileSection from "../../sections/ProfileSection/ProfileSection";
-import ProfileField from "../Fields/ProfileField";
-import NotificationToggle from "../Toggles/NotificationToggle";
-import { containerStyles } from "../../styles/ProfileStyles";
+import React, { useCallback } from 'react';
+import { Box, List, ListItem, ListItemText, Grid2 } from '@mui/material';
+import ProfileSection from '../../sections/ProfileSection/ProfileSection';
+import ProfileField from '../Fields/ProfileField';
+import NotificationToggle from '../Toggles/NotificationToggle';
+import { containerStyles } from '../../styles/ProfileStyles';
 
 const ProfileCard = ({
   profileData,
@@ -16,23 +15,27 @@ const ProfileCard = ({
   const handleChange = useCallback(
     (field, subfield) => (e) => {
       const value = e.target.value;
-      setUserData(prev => {
+      setUserData((prev) => {
         if (subfield) {
-          return { ...prev, [field]: { ...prev[field], [subfield]: value } };
-        }
-        if (field === "onlineStatus" || field === "isPublic") {
           return {
             ...prev,
-            [field]:
-              value === "Visible"
-                ? true
-                : value === "Hide" || value === "Anonymous"
-                ? false
-                : prev[field],
+            [field]: {
+              ...prev[field],
+              [subfield]: value,
+            },
           };
         }
-        if (field === "lastSeen") {
-          return { ...prev, [field]: value === "Visible" ? new Date() : null };
+        if (field === 'onlineStatus' || field === 'isPublic') {
+          return {
+            ...prev,
+            [field]: value === 'Visible' ? true : value === 'Hide' || value === 'Anonymous' ? false : value,
+          };
+        }
+        if (field === 'lastSeen') {
+          return {
+            ...prev,
+            [field]: value === 'Visible' ? new Date() : null,
+          };
         }
         return { ...prev, [field]: value };
       });
@@ -42,7 +45,7 @@ const ProfileCard = ({
 
   const handleSwitchChange = useCallback(
     (section, key) => () => {
-      setUserData(prev => ({
+      setUserData((prev) => ({
         ...prev,
         [section]: {
           ...prev[section],
@@ -60,23 +63,23 @@ const ProfileCard = ({
     <Box
       sx={{
         ...containerStyles,
-        display: "grid",
-        gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
-        gap: 3,
-        rowGap: 0
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+        gap: { xs: 2, sm: 3 },
+        rowGap: { xs: 2, sm: 0 },
       }}
     >
       {/* Personal Info */}
-      <Box sx={{ display: "flex" }}>
+      <Box sx={{ display: 'flex' }}>
         <ProfileSection
           title="Personal Info"
-          sx={{ flex: 1, display: "flex", flexDirection: "column" }}
+          sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}
         >
-          <Grid2 container spacing={3} sx={{ flex: 1 }}>
+          <Grid2 container spacing={{ xs: 2, sm: 3 }} sx={{ flex: 1 }}>
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Full Name"
-                value={profileData.fullName || ""}
+                value={profileData.fullName || ''}
                 field="fullName"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
@@ -85,7 +88,7 @@ const ProfileCard = ({
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Username"
-                value={profileData.username || ""}
+                value={profileData.username || ''}
                 field="username"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
@@ -94,7 +97,7 @@ const ProfileCard = ({
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Email"
-                value={profileData.email || ""}
+                value={profileData.email || ''}
                 field="email"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
@@ -103,7 +106,7 @@ const ProfileCard = ({
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Location"
-                value={profileData.location || ""}
+                value={profileData.location || ''}
                 field="location"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
@@ -112,34 +115,34 @@ const ProfileCard = ({
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Timezone"
-                value={profileData.timezone || ""}
+                value={profileData.timezone || ''}
                 field="timezone"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
                 select
-                options={["UTC-12:00", "UTC+00:00", "UTC+14:00"]}
+                options={['UTC-12:00', 'UTC+00:00', 'UTC+14:00']}
               />
             </Grid2>
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Ethnicity"
-                value={profileData.ethnicity || ""}
+                value={profileData.ethnicity || ''}
                 field="ethnicity"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
                 select
-                options={["Asian", "Black", "Other"]}
+                options={['Asian', 'Black', 'Other']}
               />
             </Grid2>
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Gender"
-                value={profileData.gender || ""}
+                value={profileData.gender || ''}
                 field="gender"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
                 select
-                options={["Male", "Female", "Other"]}
+                options={['Male', 'Female', 'Other']}
               />
             </Grid2>
             <Grid2 size={{ xs: 12, sm: 6 }}>
@@ -147,10 +150,8 @@ const ProfileCard = ({
                 label="Date of Birth"
                 value={
                   profileData.dateOfBirth
-                    ? new Date(profileData.dateOfBirth)
-                        .toISOString()
-                        .split("T")[0]
-                    : ""
+                    ? new Date(profileData.dateOfBirth).toISOString().split('T')[0]
+                    : ''
                 }
                 field="dateOfBirth"
                 isEditing={isEditing && isOwnProfile}
@@ -161,7 +162,7 @@ const ProfileCard = ({
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Contact Number"
-                value={profileData.phone || ""}
+                value={profileData.phone || ''}
                 field="phone"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
@@ -170,7 +171,7 @@ const ProfileCard = ({
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Wallet Address"
-                value={profileData.wallet_address || ""}
+                value={profileData.wallet_address || ''}
                 field="wallet_address"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
@@ -181,72 +182,72 @@ const ProfileCard = ({
       </Box>
 
       {/* Social Info */}
-      <Box sx={{ display: "flex" }}>
+      <Box sx={{ display: 'flex' }}>
         <ProfileSection
           title="Social Info"
-          sx={{ flex: 1, display: "flex", flexDirection: "column" }}
+          sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}
         >
-          <Grid2 container spacing={3} sx={{ flex: 1 }}>
+          <Grid2 container spacing={{ xs: 2, sm: 3 }} sx={{ flex: 1 }}>
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Language"
-                value={profileData.preferences?.language || ""}
+                value={profileData.preferences?.language || ''}
                 field="preferences"
                 subfield="language"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
                 select
-                options={["en", "ua", "es"]}
+                options={['en', 'ua', 'es']}
               />
             </Grid2>
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Public Profile"
-                value={profileData.isPublic ? "Visible" : "Anonymous"}
+                value={profileData.isPublic ? 'Visible' : 'Anonymous'}
                 field="isPublic"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
                 select
-                options={["Anonymous", "Visible"]}
+                options={['Anonymous', 'Visible']}
               />
             </Grid2>
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Online Status"
-                value={profileData.onlineStatus ? "Visible" : "Hide"}
+                value={profileData.onlineStatus ? 'Visible' : 'Hide'}
                 field="onlineStatus"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
                 select
-                options={["Hide", "Visible"]}
+                options={['Hide', 'Visible']}
               />
             </Grid2>
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Last Seen"
-                value={profileData.lastSeen ? "Visible" : "Hide"}
+                value={profileData.lastSeen ? 'Visible' : 'Hide'}
                 field="lastSeen"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
                 select
-                options={["Hide", "Visible"]}
+                options={['Hide', 'Visible']}
               />
             </Grid2>
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Name Visibility"
-                value={profileData.nameVisibility || ""}
+                value={profileData.nameVisibility || ''}
                 field="nameVisibility"
                 isEditing={isEditing && isOwnProfile}
                 onChange={handleChange}
                 select
-                options={["Public", "Friends", "Private"]}
+                options={['Public', 'Friends', 'Private']}
               />
             </Grid2>
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Twitter"
-                value={profileData.social_links?.twitter || ""}
+                value={profileData.social_links?.twitter || ''}
                 field="social_links"
                 subfield="twitter"
                 isEditing={isEditing && isOwnProfile}
@@ -256,7 +257,7 @@ const ProfileCard = ({
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="Instagram"
-                value={profileData.social_links?.instagram || ""}
+                value={profileData.social_links?.instagram || ''}
                 field="social_links"
                 subfield="instagram"
                 isEditing={isEditing && isOwnProfile}
@@ -266,7 +267,7 @@ const ProfileCard = ({
             <Grid2 size={{ xs: 12, sm: 6 }}>
               <ProfileField
                 label="LinkedIn"
-                value={profileData.social_links?.linkedin || ""}
+                value={profileData.social_links?.linkedin || ''}
                 field="social_links"
                 subfield="linkedin"
                 isEditing={isEditing && isOwnProfile}
@@ -278,19 +279,19 @@ const ProfileCard = ({
       </Box>
 
       {/* Notifications & Preferences */}
-      <Box sx={{ gridColumn: "2", display: "flex" }}>
+      <Box sx={{ gridColumn: { xs: '1', sm: '2' }, display: 'flex' }}>
         <ProfileSection
           title="Notifications & Preferences"
-          sx={{ flex: 1, display: "flex", flexDirection: "column" }}
+          sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}
         >
-          <Grid2 container spacing={3} sx={{ flex: 1 }}>
-            <Grid2 size={{ xs: 12, md: 6}}>
-              <Grid2 container spacing={4}>
+          <Grid2 container spacing={{ xs: 2, sm: 3 }} sx={{ flex: 1 }}>
+            <Grid2 size={{ xs: 12, sm: 6 }}>
+              <Grid2 container spacing={{ xs: 2, sm: 4 }}>
                 <Grid2 size={12}>
                   <NotificationToggle
                     label="Email"
                     checked={profileData.preferences?.notifications?.email || false}
-                    onChange={handleSwitchChange("preferences", "email")}
+                    onChange={handleSwitchChange('preferences', 'email')}
                     disabled={!isEditing || !isOwnProfile}
                   />
                 </Grid2>
@@ -298,7 +299,7 @@ const ProfileCard = ({
                   <NotificationToggle
                     label="SMS"
                     checked={profileData.preferences?.notifications?.sms || false}
-                    onChange={handleSwitchChange("preferences", "sms")}
+                    onChange={handleSwitchChange('preferences', 'sms')}
                     disabled={!isEditing || !isOwnProfile}
                   />
                 </Grid2>
@@ -306,36 +307,36 @@ const ProfileCard = ({
                   <NotificationToggle
                     label="Push"
                     checked={profileData.preferences?.notifications?.push || false}
-                    onChange={handleSwitchChange("preferences", "push")}
+                    onChange={handleSwitchChange('preferences', 'push')}
                     disabled={!isEditing || !isOwnProfile}
                   />
                 </Grid2>
               </Grid2>
             </Grid2>
-            <Grid2 size={{ xs: 12, md: 6 }}>
-              <Grid2 container spacing={3}>
+            <Grid2 size={{ xs: 12, sm: 6 }}>
+              <Grid2 container spacing={{ xs: 2, sm: 3 }}>
                 <Grid2 size={12}>
                   <ProfileField
                     label="Theme"
-                    value={profileData.preferences?.theme || ""}
+                    value={profileData.preferences?.theme || ''}
                     field="preferences"
                     subfield="theme"
                     isEditing={isEditing && isOwnProfile}
                     onChange={handleChange}
                     select
-                    options={["Light", "Dark", "System"]}
+                    options={['Light', 'Dark', 'System']}
                   />
                 </Grid2>
                 <Grid2 size={12}>
                   <ProfileField
                     label="Content Language"
-                    value={profileData.preferences?.contentLanguage || ""}
+                    value={profileData.preferences?.contentLanguage || ''}
                     field="preferences"
                     subfield="contentLanguage"
                     isEditing={isEditing && isOwnProfile}
                     onChange={handleChange}
                     select
-                    options={["en", "ua", "es"]}
+                    options={['en', 'ua', 'es']}
                   />
                 </Grid2>
               </Grid2>
@@ -346,20 +347,18 @@ const ProfileCard = ({
 
       {/* Points History */}
       {isOwnProfile && pointsHistory?.length > 0 && (
-        <Box sx={{ gridColumn: "1 / -1", display: "flex" }}>
+        <Box sx={{ gridColumn: '1 / -1', display: 'flex' }}>
           <ProfileSection
             title="Points History"
-            sx={{ flex: 1, display: "flex", flexDirection: "column" }}
+            sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}
           >
-            <Box sx={{ flex: 1, overflowY: "auto" }}>
+            <Box sx={{ flex: 1, overflowY: 'auto' }}>
               <List>
                 {pointsHistory.map((entry, idx) => (
                   <ListItem key={idx}>
                     <ListItemText
                       primary={`Points: ${entry.points}`}
-                      secondary={`Reason: ${entry.reason} | Date: ${new Date(
-                        entry.created_at
-                      ).toLocaleDateString()}`}
+                      secondary={`Action: ${entry.action} | Date: ${new Date(entry.timestamp).toLocaleDateString()}`}
                     />
                   </ListItem>
                 ))}
