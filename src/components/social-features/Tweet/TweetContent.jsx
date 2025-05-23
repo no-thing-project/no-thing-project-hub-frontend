@@ -30,7 +30,7 @@ import { LazyLoadImage } from 'react-lazy-load-image-component';
 import Emoji from 'react-emoji-render';
 import TweetContentStyles from './TweetContentStyles';
 import { isEqual } from 'lodash';
-import ModalStyles from './modalStyles';
+import ModalStyles from './ModalStyles';
 
 const MAX_TWEET_LENGTH = 1000;
 
