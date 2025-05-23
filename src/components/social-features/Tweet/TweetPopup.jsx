@@ -402,7 +402,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose, parentTweet, onBoardUpdate }) => 
         open={true}
         onClose={onClose}
         PaperProps={{ sx: TweetPopupStyles.popupDialogPaper }} 
-        style={{ '& .MuiBackdrop-root': TweetPopupStyles.popupDialogBackdrop }} 
+        style={{ '&.MuiBackdropRoot': TweetPopupStyles.popupDialogBackdrop }} 
         aria-labelledby="tweet-popup-title"
         ref={dialogRef}
       >

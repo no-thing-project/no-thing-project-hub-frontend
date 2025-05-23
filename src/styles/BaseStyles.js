@@ -74,15 +74,15 @@ export const inputStyles = {
   "& .MuiInputLabel-root.Mui-focused": {
     color: "primary.main",
   },
-  "& .MuiOutlinedInput-root": {
+  "& .MuiOutlinedInputRoot": {
     borderRadius: theme.shape.borderRadiusSmall,
-    "& .MuiOutlinedInput-notchedOutline": {
+    "& .MuiOutlinedInputNotchedOutline": {
       border: "none",
     },
-    "&:hover .MuiOutlinedInput-notchedOutline": {
+    "&:hover .MuiOutlinedInputNotchedOutline": {
       border: "none",
     },
-    "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+    "&MuiOutlinedInputNotchedOutline": {
       border: "none",
     },
   },
@@ -108,13 +108,13 @@ export const inputStylesWhite = {
   },
   "& .MuiOutlinedInput-root": {
     borderRadius: theme.shape.borderRadiusSmall,
-    "& .MuiOutlinedInput-notchedOutline": {
+    "& .MuiOutlinedInputNotchedOutline": {
       border: "none",
     },
-    "&:hover .MuiOutlinedInput-notchedOutline": {
+    "&:hover .MuiOutlinedInputNotchedOutline": {
       border: "none",
     },
-    "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+    "&.MuiOutlinedInputNotchedOutline": {
       border: "none",
     },
   },

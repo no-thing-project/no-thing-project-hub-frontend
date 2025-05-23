@@ -30,7 +30,7 @@ export const fieldStyles = {
   container: { mb: 2 },
   label: { fontWeight: 400, mb: 0.5 },
   input: {
-    "& .MuiOutlinedInput-notchedOutline": { border: "none" },
+    "& .MuiOutlinedInputNotchedOutline": { border: "none" },
     backgroundColor: "background.default",
     borderRadius: 0.8,
   },

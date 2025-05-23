@@ -71,7 +71,7 @@ const TweetPopupStyles = {
       zIndex: POPUP_Z_INDEX,
       ...baseHoverEffect,
     },
-    '& .MuiBackdrop-root': {
+    '&.MuiBackdropRoot': {
       backgroundColor: (theme) => alpha(theme.palette.grey[900], 0.4),
     },
   },
@@ -79,19 +79,19 @@ const TweetPopupStyles = {
     display: 'none', // Hidden for accessibility
   },
   popupTextField: {
-    '& .MuiInputBase-root': {
+    '& .MuiInputBaseRoot': {
       borderRadius: '24px',
       padding: '12px 16px',
       bgcolor: (theme) => theme.palette.grey[100],
       transition: 'all 0.2s ease',
     },
-    '& .MuiOutlinedInput-notchedOutline': {
+    '& .MuiOutlinedInputNotchedOutline': {
       borderColor: (theme) => theme.palette.grey[300],
     },
-    '&:hover .MuiOutlinedInput-notchedOutline': {
+    '&:hover .MuiOutlinedInputNotchedOutline': {
       borderColor: 'primary.main',
     },
-    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+    '&MuiOutlinedInputNotchedOutline': {
       boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.1)}`,
       borderColor: 'primary.main',
     },

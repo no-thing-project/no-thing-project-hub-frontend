@@ -30,6 +30,7 @@ import { LazyLoadImage } from 'react-lazy-load-image-component';
 import Emoji from 'react-emoji-render';
 import TweetContentStyles from './TweetContentStyles';
 import { isEqual } from 'lodash';
+import ModalStyles from './modalStyles';
 
 const MAX_TWEET_LENGTH = 1000;
 
@@ -464,7 +465,7 @@ const TweetContent = ({
   const modalContent = useMemo(() => {
     const files = tweet.content?.metadata?.files || [];
     return (
-      <Box sx={{ ...TweetContentStyles.mediaModalContent, maxHeight: '80vh', overflowY: 'auto' }}>
+      <Box sx={{ ...ModalStyles.mediaModalContent, maxHeight: '80vh', overflowY: 'auto' }}>
         {files.length === 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
             No media available
@@ -483,9 +484,9 @@ const TweetContent = ({
                 src={file.url}
                 alt={`Media ${idx + 1}`}
                 effect="blur"
-                style={{ ...TweetContentStyles.modalImage, maxWidth: '100%' }}
+                style={{ ...ModalStyles.modalImage, maxWidth: '100%' }}
                 placeholder={
-                  <Box sx={{ ...TweetContentStyles.modalImagePlaceholder, borderRadius: '10px' }}>
+                  <Box sx={{ ...ModalStyles.modalImagePlaceholder, borderRadius: '10px' }}>
                     <CircularProgress size={24} />
                   </Box>
                 }
@@ -515,15 +516,15 @@ const TweetContent = ({
   }, [tweet.content?.metadata?.files]);
 
   const optionsModalContent = useMemo(() => (
-    <Box sx={TweetContentStyles.optionsModalContent}>
-      <Typography variant="h6" sx={TweetContentStyles.optionsModalTitle}>
+    <Box sx={ModalStyles.optionsModalContent}>
+      <Typography variant="h6" sx={ModalStyles.optionsModalTitle}>
         Tweet Options
       </Typography>
       <List>
         <ListItem
           button
           onClick={handleEdit}
-          style={TweetContentStyles.optionsModalItem}
+          style={ModalStyles.optionsModalItem}
           aria-label="Edit tweet"
         >
           <ListItemText primary="Edit Tweet" />
@@ -531,7 +532,7 @@ const TweetContent = ({
         <ListItem
           button
           onClick={handlePin}
-          style={TweetContentStyles.optionsModalItem}
+          style={ModalStyles.optionsModalItem}
           aria-label={tweet.is_pinned ? 'Unpin tweet' : 'Pin tweet'}
         >
           <ListItemText primary={tweet.is_pinned ? 'Unpin Tweet' : 'Pin Tweet'} />
@@ -539,7 +540,7 @@ const TweetContent = ({
         <ListItem
           button
           onClick={handleDelete}
-          sx={{ ...TweetContentStyles.optionsModalItem, color: 'error.main' }}
+          sx={{ ...ModalStyles.optionsModalItem, color: 'error.main' }}
           aria-label="Delete tweet"
         >
           <ListItemText primary="Delete" />
@@ -696,18 +697,18 @@ const TweetContent = ({
       >
         <Fade in={openMediaModal}>
           <Box
-            sx={TweetContentStyles.mediaModalContainer}
+            sx={ModalStyles.mediaModalContainer}
             role="dialog"
             aria-labelledby="media-modal-title"
           >
             <IconButton
               onClick={handleCloseMediaModal}
-              style={TweetContentStyles.mediaModalCloseButton}
+              style={ModalStyles.mediaModalCloseButton}
               aria-label="Close media modal"
             >
               <CloseIcon />
             </IconButton>
-            <Typography id="media-modal-title" sx={TweetContentStyles.mediaModalTitle}>
+            <Typography id="media-modal-title" sx={ModalStyles.mediaModalTitle}>
               All Media
             </Typography>
             {modalContent}
@@ -725,18 +726,18 @@ const TweetContent = ({
       >
         <Fade in={openOptionsModal}>
           <Box
-            sx={TweetContentStyles.optionsModalContainer}
+            sx={ModalStyles.optionsModalContainer}
             role="dialog"
             aria-labelledby="options-modal-title"
           >
             <IconButton
               onClick={handleCloseOptionsModal}
-              style={TweetContentStyles.optionsModalCloseButton}
+              style={ModalStyles.optionsModalCloseButton}
               aria-label="Close options modal"
             >
               <CloseIcon />
             </IconButton>
-            <Typography id="options-modal-title" sx={TweetContentStyles.optionsModalHiddenTitle}>
+            <Typography id="options-modal-title" sx={ModalStyles.optionsModalHiddenTitle}>
               Tweet Options
             </Typography>
             {optionsModalContent}
