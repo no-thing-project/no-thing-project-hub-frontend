@@ -40,7 +40,7 @@ const baseModalStyles = {
 };
 
 const ModalStyles = {
-  optionsModalBox: {
+  optionsModalContainer: {
     ...baseModalStyles,
     position: 'absolute',
     top: '50%',
@@ -49,47 +49,46 @@ const ModalStyles = {
     width: { xs: '90vw', sm: '340px' },
     maxWidth: '95vw',
     p: { xs: 2.5, sm: 3 },
-    zIndex: MODAL_Z_INDEX,
-    touchAction: 'none', // Prevent touch events from passing through
   },
   optionsModalContent: {
-    p: { xs: 2, sm: 2.5 },
+    p: { xs: 2.5, sm: 3 },
     display: 'flex',
     flexDirection: 'column',
     gap: 1.5,
   },
+
   optionsModalTitle: {
     ...baseTypographyStyles,
-    mb: 2,
+    mb: 1.5,
     fontWeight: 600,
-    fontSize: { xs: '1.1rem', sm: '1.25rem' },
+    fontSize: { xs: '0.95rem', sm: '1rem', md: '1.1rem' },
   },
   optionsModalHiddenTitle: {
-    display: 'none', // For accessibility
+    display: 'none',
   },
   optionsModalItem: {
     borderRadius: 3,
-    p: { xs: 1.5, sm: 2 },
+    p: { xs: 1.25, sm: 1.5 },
+    minHeight: 48,
     transition: 'all 0.2s ease',
     '&:hover': {
       bgcolor: (theme) => alpha(theme.palette.grey[100], 0.8),
-      transform: 'scale(1.02)',
+      transform: 'scale(1.03)',
       boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
     },
     '&:active': {
-      transform: 'scale(0.98)', // Feedback for touch
+      transform: 'scale(0.98)',
     },
     '&:focus': {
       outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
       outlineOffset: 2,
     },
-    minHeight: 48, // Larger tap area for mobile
   },
   optionsModalCloseButton: {
     position: 'absolute',
     top: 10,
     right: 10,
-    zIndex: MODAL_Z_INDEX + 1,
+    zIndex: 130,
     p: { xs: 1, sm: 1.25 },
     borderRadius: '50%',
     transition: 'all 0.2s ease',
@@ -105,6 +104,7 @@ const ModalStyles = {
       outlineOffset: 2,
     },
   },
+
   mediaModalBox: {
     ...baseModalStyles,
     position: 'absolute',
