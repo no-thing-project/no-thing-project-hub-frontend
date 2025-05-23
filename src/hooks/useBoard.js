@@ -1,14 +1,16 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { throttle } from 'lodash';
+import { animate } from 'framer-motion';
 
 export const BOARD_SIZE = 10000;
 const ZOOM_MIN = 0.3;
 const ZOOM_MAX = 2;
-const ZOOM_STEP = 0.05;
-const ZOOM_SENSITIVITY = 0.001;
+const ZOOM_STEP = 0.1;
+const ZOOM_SENSITIVITY = 0.0005;
 const MOVE_STEP = 50;
+const PINCH_SENSITIVITY = 0.005;
 const ANIMATION_DURATION = 400;
-const PINCH_SENSITIVITY = 0.01;
+
 
 export const useBoardInteraction = (boardRef) => {
   const [scale, setScale] = useState(1);
@@ -19,124 +21,143 @@ export const useBoardInteraction = (boardRef) => {
   const pinchStart = useRef(null);
   const scaleRef = useRef(scale);
   const offsetRef = useRef(offset);
-  const animationFrame = useRef(null);
+  const viewportSize = useRef({ width: window.innerWidth, height: window.innerHeight });
+  const history = useRef([]);
+  const historyIndex = useRef(-1);
 
+  // Update refs
   useEffect(() => {
     scaleRef.current = scale;
     offsetRef.current = offset;
   }, [scale, offset]);
 
+  // Update viewport size on resize
+  useEffect(() => {
+    const updateViewport = () => {
+      viewportSize.current = { width: window.innerWidth, height: window.innerHeight };
+    };
+    window.addEventListener('resize', updateViewport);
+    updateViewport();
+    return () => window.removeEventListener('resize', updateViewport);
+  }, []);
+
+  // Clamp offset to keep board within viewport
   const clampOffset = useCallback((newOffset) => {
     const scaledSize = BOARD_SIZE * scaleRef.current;
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const minX = viewportWidth - scaledSize;
-    const minY = viewportHeight - scaledSize;
+    const { width, height } = viewportSize.current;
+    const minX = width - scaledSize;
+    const minY = height - scaledSize;
     return {
       x: Math.max(minX, Math.min(0, newOffset.x)),
       y: Math.max(minY, Math.min(0, newOffset.y)),
     };
   }, []);
 
+  // Center board in viewport
   const centerBoard = useCallback(() => {
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
+    const { width, height } = viewportSize.current;
     const newOffset = {
-      x: (viewportWidth - BOARD_SIZE) / 2,
-      y: (viewportHeight - BOARD_SIZE) / 2,
+      x: width / 2 - (BOARD_SIZE * scaleRef.current) / 2,
+      y: height / 2 - (BOARD_SIZE * scaleRef.current) / 2,
     };
     setOffset(clampOffset(newOffset));
-    setScale(1);
   }, [clampOffset]);
 
-  const restoreBoardState = useCallback(
-    (state) => {
-      if (!state) return;
-      setScale(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, state.scale || 1)));
-      setOffset(clampOffset(state.offset || { x: 0, y: 0 }));
-    },
-    [clampOffset]
-  );
+  // Restore board state
+  const restoreBoardState = useCallback((state) => {
+    if (!state) return;
+    setScale(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, state.scale || 1)));
+    setOffset(clampOffset(state.offset || { x: 0, y: 0 }));
+  }, [clampOffset]);
 
+  // Export board state
+  const exportBoardState = useCallback(() => {
+    return { scale, offset, timestamp: new Date().toISOString() };
+  }, [scale, offset]);
+
+  // Animate reset to default view
   const animateReset = useCallback(() => {
     const startScale = scaleRef.current;
     const startOffset = offsetRef.current;
     const targetScale = 1;
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
+    const { width, height } = viewportSize.current;
     const targetOffset = {
-      x: (viewportWidth - BOARD_SIZE) / 2,
-      y: (viewportHeight - BOARD_SIZE) / 2,
-    };
-    const startTime = performance.now();
-
-    const animate = (currentTime) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / ANIMATION_DURATION, 1);
-      const easedProgress = 1 - Math.pow(1 - progress, 3);
-
-      setScale(startScale + (targetScale - startScale) * easedProgress);
-      setOffset(clampOffset({
-        x: startOffset.x + (targetOffset.x - startOffset.x) * easedProgress,
-        y: startOffset.y + (targetOffset.y - startOffset.y) * easedProgress,
-      }));
-
-      if (progress < 1) {
-        animationFrame.current = requestAnimationFrame(animate);
-      } else {
-        animationFrame.current = null;
-      }
+      x: width / 2 - (BOARD_SIZE * targetScale) / 2,
+      y: height / 2 - (BOARD_SIZE * targetScale) / 2,
     };
 
-    if (animationFrame.current) cancelAnimationFrame(animationFrame.current);
-    animationFrame.current = requestAnimationFrame(animate);
+    animate(0, 1, {
+      duration: ANIMATION_DURATION / 1000,
+      ease: 'easeInOut',
+      onUpdate: (progress) => {
+        const easedProgress = 1 - Math.pow(1 - progress, 3);
+        setScale(startScale + (targetScale - startScale) * easedProgress);
+        setOffset(clampOffset({
+          x: startOffset.x + (targetOffset.x - startOffset.x) * easedProgress,
+          y: startOffset.y + (targetOffset.y - startOffset.y) * easedProgress,
+        }));
+      },
+    });
   }, [clampOffset]);
 
-  const handleZoom = useCallback((delta, clientX, clientY) => {
+  // Handle zoom with focus point
+  const handleZoom = useCallback((delta, mouseX, mouseY) => {
     setScale((prevScale) => {
       const newScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, prevScale + delta));
-      const focusX = clientX !== undefined ? clientX : window.innerWidth / 2;
-      const focusY = clientY !== undefined ? clientY : window.innerHeight / 2;
       const currentOffset = offsetRef.current;
-      setOffset(clampOffset({
-        x: focusX - ((focusX - currentOffset.x) / prevScale) * newScale,
-        y: focusY - ((focusY - currentOffset.y) / prevScale) * newScale,
-      }));
+      let newOffset;
+      if (mouseX !== undefined && mouseY !== undefined) {
+        const boardX = (mouseX - currentOffset.x) / prevScale;
+        const boardY = (mouseY - currentOffset.y) / prevScale;
+        newOffset = clampOffset({
+          x: mouseX - boardX * newScale,
+          y: mouseY - boardY * newScale,
+        });
+      } else {
+        newOffset = clampOffset({
+          x: window.innerWidth / 2 - (BOARD_SIZE * newScale) / 2,
+          y: window.innerHeight / 2 - (BOARD_SIZE * newScale) / 2,
+        });
+      }
+      setOffset(newOffset);
       return newScale;
     });
   }, [clampOffset]);
 
+  // Handle zoom buttons
   const handleZoomButton = useCallback((direction) => {
     if (direction === 'reset') {
       animateReset();
     } else {
       handleZoom(
         direction === 'in' ? ZOOM_STEP : -ZOOM_STEP,
-        window.innerWidth / 2,
-        window.innerHeight / 2
+        viewportSize.current.width / 2,
+        viewportSize.current.height / 2
       );
     }
   }, [handleZoom, animateReset]);
 
+  // Handle wheel zoom
   const handleWheel = useCallback(
     throttle((e) => {
-      if (!boardRef.current) return;
       e.preventDefault();
-      handleZoom(-e.deltaY * ZOOM_SENSITIVITY, e.clientX, e.clientY);
-    }, 50),
-    [handleZoom, boardRef]
+      const delta = -e.deltaY * ZOOM_SENSITIVITY;
+      handleZoom(delta, e.clientX, e.clientY);
+    }, 16),
+    [handleZoom]
   );
 
+  // Handle mouse drag start
   const handleMouseDown = useCallback((e) => {
-    if (!boardRef.current || e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root, .MuiButton-root')) return;
-    e.preventDefault();
+    if (e.target.closest('.tweet-card, .tweet-popup, .return-button, .user_points, .zoom-controls, .board-top-controls, .MuiIconButton-root, .MuiButton-root')) return;
     dragStart.current = { x: e.clientX, y: e.clientY, offsetX: offset.x, offsetY: offset.y };
     isDragging.current = false;
   }, [offset]);
 
+  // Handle mouse drag move
   const handleMouseMove = useCallback(
     throttle((e) => {
-      if (!dragStart.current || !boardRef.current) return;
+      if (!dragStart.current) return;
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
       if (!isDragging.current && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
@@ -148,10 +169,11 @@ export const useBoardInteraction = (boardRef) => {
           y: dragStart.current.offsetY + dy,
         }));
       }
-    }, 10),
+    }, 16),
     [clampOffset]
   );
 
+  // Handle mouse drag end
   const handleMouseUp = useCallback(
     (e, onClick) => {
       if (!isDragging.current && dragStart.current && onClick && boardRef.current) {
@@ -161,7 +183,7 @@ export const useBoardInteraction = (boardRef) => {
         const tweetX = (clickX - offset.x) / scale;
         const tweetY = (clickY - offset.y) / scale;
         if (tweetX >= 0 && tweetX <= BOARD_SIZE && tweetY >= 0 && tweetY <= BOARD_SIZE) {
-          onClick(tweetX, tweetY, clickX, clickY);
+          onClick(tweetX, tweetY, e.clientX, e.clientY);
         }
       }
       dragStart.current = null;
@@ -170,9 +192,9 @@ export const useBoardInteraction = (boardRef) => {
     [boardRef, offset, scale]
   );
 
+  // Handle touch start
   const handleTouchStart = useCallback((e) => {
-    if (!boardRef.current || e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root, .MuiButton-root')) return;
-    e.preventDefault();
+    if (e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root, .MuiButton-root')) return;
     if (e.touches.length === 1) {
       touchStart.current = {
         x: e.touches[0].clientX,
@@ -195,10 +217,10 @@ export const useBoardInteraction = (boardRef) => {
     }
   }, [offset]);
 
+  // Handle touch move
   const handleTouchMove = useCallback(
     throttle((e) => {
-      if (!boardRef.current) return;
-      e.preventDefault();
+      if (!touchStart.current && !pinchStart.current) return;
       if (e.touches.length === 1 && touchStart.current) {
         const touch = e.touches[0];
         const dx = touch.clientX - touchStart.current.x;
@@ -228,10 +250,11 @@ export const useBoardInteraction = (boardRef) => {
           y: centerY - ((centerY - offsetRef.current.y) / scaleRef.current) * newScale,
         }));
       }
-    }, 10),
+    }, 16),
     [clampOffset]
   );
 
+  // Handle touch end
   const handleTouchEnd = useCallback(
     (e, onClick) => {
       if (
@@ -248,7 +271,7 @@ export const useBoardInteraction = (boardRef) => {
         const tweetX = (clickX - offset.x) / scale;
         const tweetY = (clickY - offset.y) / scale;
         if (tweetX >= 0 && tweetX <= BOARD_SIZE && tweetY >= 0 && tweetY <= BOARD_SIZE) {
-          onClick(tweetX, tweetY, clickX, clickY);
+          onClick(tweetX, tweetY, touch.clientX, touch.clientY);
         }
       }
       touchStart.current = null;
@@ -258,6 +281,7 @@ export const useBoardInteraction = (boardRef) => {
     [boardRef, offset, scale]
   );
 
+  // Handle keyboard navigation
   const handleKeyDown = useCallback(
     (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -265,11 +289,11 @@ export const useBoardInteraction = (boardRef) => {
         case '+':
         case '=':
           e.preventDefault();
-          handleZoom(ZOOM_STEP, window.innerWidth / 2, window.innerHeight / 2);
+          handleZoom(ZOOM_STEP, viewportSize.current.width / 2, viewportSize.current.height / 2);
           break;
         case '-':
           e.preventDefault();
-          handleZoom(-ZOOM_STEP, window.innerWidth / 2, window.innerHeight / 2);
+          handleZoom(-ZOOM_STEP, viewportSize.current.width / 2, viewportSize.current.height / 2);
           break;
         case 'ArrowUp':
           e.preventDefault();
@@ -287,6 +311,24 @@ export const useBoardInteraction = (boardRef) => {
           e.preventDefault();
           setOffset((prev) => clampOffset({ ...prev, x: prev.x - MOVE_STEP }));
           break;
+        case 'z':
+          if (e.ctrlKey && historyIndex.current > 0) {
+            e.preventDefault();
+            historyIndex.current -= 1;
+            const state = history.current[historyIndex.current];
+            setScale(state.scale);
+            setOffset(state.offset);
+          }
+          break;
+        case 'y':
+          if (e.ctrlKey && historyIndex.current < history.current.length - 1) {
+            e.preventDefault();
+            historyIndex.current += 1;
+            const state = history.current[historyIndex.current];
+            setScale(state.scale);
+            setOffset(state.offset);
+          }
+          break;
         default:
           break;
       }
@@ -294,10 +336,24 @@ export const useBoardInteraction = (boardRef) => {
     [handleZoom, clampOffset]
   );
 
-  const handleResize = useCallback(() => {
-    centerBoard();
-  }, [centerBoard]);
+  // Handle context menu
+  const handleContextMenu = useCallback(
+    (e, onContextMenu) => {
+      if (e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root, .MuiButton-root')) return;
+      e.preventDefault();
+      const boardRect = boardRef.current.getBoundingClientRect();
+      const clickX = e.clientX - boardRect.left;
+      const clickY = e.clientY - boardRect.top;
+      const tweetX = (clickX - offset.x) / scale;
+      const tweetY = (clickY - offset.y) / scale;
+      if (tweetX >= 0 && tweetX <= BOARD_SIZE && tweetY >= 0 && tweetY <= BOARD_SIZE) {
+        onContextMenu(tweetX, tweetY, e.clientX, e.clientY);
+      }
+    },
+    [boardRef, offset, scale]
+  );
 
+  // Event listeners
   useEffect(() => {
     const boardElement = boardRef.current;
     if (boardElement) {
@@ -310,7 +366,6 @@ export const useBoardInteraction = (boardRef) => {
     window.addEventListener('touchmove', handleTouchMove, { passive: false });
     window.addEventListener('touchend', handleTouchEnd);
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('resize', handleResize);
 
     return () => {
       if (boardElement) {
@@ -323,8 +378,6 @@ export const useBoardInteraction = (boardRef) => {
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleTouchEnd);
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('resize', handleResize);
-      if (animationFrame.current) cancelAnimationFrame(animationFrame.current);
     };
   }, [
     handleWheel,
@@ -335,22 +388,25 @@ export const useBoardInteraction = (boardRef) => {
     handleTouchMove,
     handleTouchEnd,
     handleKeyDown,
-    handleResize,
     boardRef,
   ]);
 
   return {
     scale,
     offset,
+    setOffset,
     dragging: isDragging.current,
     centerBoard,
     handleZoomButton,
+    handleWheel,
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
+    handleContextMenu,
     restoreBoardState,
+    exportBoardState,
   };
 };
