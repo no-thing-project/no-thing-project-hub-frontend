@@ -15,12 +15,14 @@ import {
   Collapse,
   Button,
   CircularProgress,
+  Icon,
 } from '@mui/material';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import PushPinIcon from '@mui/icons-material/PushPin';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import CloseIcon from '@mui/icons-material/Close';
 import { motion } from 'framer-motion';
 import PropTypes from 'prop-types';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
@@ -46,10 +48,34 @@ const mediaVariants = {
   exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } },
 };
 
+// Reusable View All Button Component
+const ViewAllButton = ({ label, onClick, sx }) => (
+  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+    <Typography
+      variant="caption"
+      sx={{ ...sx, cursor: 'pointer' }}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyPress={(e) => e.key === 'Enter' && onClick(e)}
+      aria-label={label}
+    >
+      {label}
+    </Typography>
+  </motion.div>
+);
+
+ViewAllButton.propTypes = {
+  label: PropTypes.string.isRequired,
+  onClick: PropTypes.func.isRequired,
+  sx: PropTypes.object.isRequired,
+};
+
+// Memoized Media Components
 const CircularVideoPlayer = memo(({ src, duration, ariaLabel }) => (
   <motion.div variants={mediaVariants} initial="initial" animate="animate" exit="exit">
     <Box sx={TweetContentStyles.mediaWrapper} role="region" aria-label={ariaLabel}>
-      <Box sx={TweetContentStyles.circleVideoContainer}>
+      <Box sx={{ ...TweetContentStyles.circleVideoContainer, display: 'flex', justifyContent: 'center' }}>
         <video
           src={src}
           controls
@@ -71,7 +97,7 @@ CircularVideoPlayer.propTypes = {
 const StandardVideoPlayer = memo(({ src, duration, ariaLabel }) => (
   <motion.div variants={mediaVariants} initial="initial" animate="animate" exit="exit">
     <Box sx={TweetContentStyles.mediaWrapper} role="region" aria-label={ariaLabel}>
-      <Box sx={TweetContentStyles.videoInner}>
+      <Box sx={{ ...TweetContentStyles.videoInner, display: 'flex', justifyContent: 'center' }}>
         <video
           src={src}
           controls
@@ -91,7 +117,7 @@ StandardVideoPlayer.propTypes = {
 };
 
 const AudioPlayer = memo(({ src }) => (
-  <Box sx={TweetContentStyles.audioPlayer}>
+  <Box sx={{ ...TweetContentStyles.audioPlayer, maxWidth: '100%' }}>
     <audio src={src} controls style={{ width: '100%' }} preload="metadata" />
   </Box>
 ));
@@ -200,7 +226,6 @@ const TweetContent = ({
   const chipColor = statusColorMap[rawStatus] || 'default';
   const chipLabel = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
 
-  // Resolve parent tweet text
   const resolvedParentTweetText = useMemo(() => {
     if (!tweet.parent_tweet_id) return null;
     return parentTweetText || getParentTweetText?.(tweet.parent_tweet_id) || 'Parent tweet not found';
@@ -232,43 +257,34 @@ const TweetContent = ({
     setAnchorEl(event.currentTarget);
   }, []);
 
-  const handleMenuClose = useCallback((event) => {
+  const handleMenuClose = useCallback(() => {
     setAnchorEl(null);
   }, []);
 
-  const handleOpenMediaModal = useCallback((event) => {
+  const handleOpenMediaModal = useCallback(() => {
     setOpenMediaModal(true);
   }, []);
 
-  const handleCloseMediaModal = useCallback((event) => {
+  const handleCloseMediaModal = useCallback(() => {
     setOpenMediaModal(false);
   }, []);
 
-  const handleEdit = useCallback(
-    (event) => {
-      onEdit(tweet);
-      handleMenuClose(event);
-    },
-    [onEdit, tweet]
-  );
+  const handleEdit = useCallback(() => {
+    onEdit(tweet);
+    handleMenuClose();
+  }, [onEdit, tweet]);
 
-  const handlePin = useCallback(
-    (event) => {
-      onPinToggle(tweet);
-      handleMenuClose(event);
-    },
-    [onPinToggle, tweet]
-  );
+  const handlePin = useCallback(() => {
+    onPinToggle(tweet);
+    handleMenuClose();
+  }, [onPinToggle, tweet]);
 
-  const handleDelete = useCallback(
-    (event) => {
-      onDelete(tweet.tweet_id);
-      handleMenuClose(event);
-    },
-    [onDelete, tweet.tweet_id]
-  );
+  const handleDelete = useCallback(() => {
+    onDelete(tweet.tweet_id);
+    handleMenuClose();
+  }, [onDelete, tweet.tweet_id]);
 
-  const handleToggleExpand = useCallback((event) => {
+  const handleToggleExpand = useCallback(() => {
     setIsExpanded((prev) => !prev);
   }, []);
 
@@ -302,8 +318,8 @@ const TweetContent = ({
     const imageFiles = tweet.content?.metadata?.files?.filter((f) => f.contentType?.startsWith('image')) || [];
     if (!imageFiles.length) return null;
     return (
-      <Box sx={TweetContentStyles.imageContainer(!!tweet.content?.value)} role="region" aria-label="Images">
-        <Grid container spacing={1}>
+      <Box sx={{ ...TweetContentStyles.imageContainer(!!tweet.content?.value), display: 'flex', justifyContent: 'center' }} role="region" aria-label="Images">
+        <Grid container spacing={1} sx={{ maxWidth: '100%' }}>
           {imageFiles.slice(0, 4).map((file, index) => (
             <Grid
               item
@@ -311,37 +327,29 @@ const TweetContent = ({
               sm={imageFiles.length === 1 ? 12 : 3}
               key={file.fileKey || `img-${index}`}
             >
-              <motion.div variants={mediaVariants} initial="initial" animate="animate" exit="exit">
+              <motion.div variants={mediaVariants} initial="initial" animate="animate" exit="exit" whileHover={{ scale: 1.02 }}>
                 <LazyLoadImage
                   src={file.url}
                   alt={`Image ${index + 1}`}
                   effect="blur"
                   style={TweetContentStyles.image(imageFiles.length === 1)}
                   placeholder={
-                    <Box sx={TweetContentStyles.imagePlaceholder}>
+                    <Box sx={{ ...TweetContentStyles.imagePlaceholder, borderRadius: '10px' }}>
                       <CircularProgress size={24} />
                     </Box>
                   }
+                  role="img"
                 />
               </motion.div>
             </Grid>
           ))}
         </Grid>
         {imageFiles.length > 4 && (
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Typography
-              variant="caption"
-              sx={TweetContentStyles.imageViewAll}
-              onClick={handleOpenMediaModal}
-              role="button"
-              tabIndex={0}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') handleOpenMediaModal(e);
-              }}
-            >
-              View all images ({imageFiles.length})
-            </Typography>
-          </motion.div>
+          <ViewAllButton
+            label={`View all images (${imageFiles.length})`}
+            onClick={handleOpenMediaModal}
+            sx={TweetContentStyles.imageViewAll}
+          />
         )}
       </Box>
     );
@@ -352,7 +360,7 @@ const TweetContent = ({
     if (!videoFiles.length) return null;
     return (
       <Box
-        sx={TweetContentStyles.videoContainer(!!tweet.content?.value || renderImages)}
+        sx={{ ...TweetContentStyles.videoContainer(!!tweet.content?.value || renderImages), display: 'flex', justifyContent: 'center' }}
         role="region"
         aria-label="Videos"
       >
@@ -370,20 +378,11 @@ const TweetContent = ({
           />
         )}
         {videoFiles.length > 1 && (
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Typography
-              variant="caption"
-              sx={TweetContentStyles.videoViewAll}
-              onClick={handleOpenMediaModal}
-              role="button"
-              tabIndex={0}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') handleOpenMediaModal(e);
-              }}
-            >
-              View all videos ({videoFiles.length})
-            </Typography>
-          </motion.div>
+          <ViewAllButton
+            label={`View all videos (${videoFiles.length})`}
+            onClick={handleOpenMediaModal}
+            sx={TweetContentStyles.videoViewAll}
+          />
         )}
       </Box>
     );
@@ -394,28 +393,21 @@ const TweetContent = ({
     if (!audioFiles.length) return null;
     return (
       <Box
-        sx={TweetContentStyles.audioContainer(
-          !!tweet.content?.value || renderImages || renderVideos
-        )}
+        sx={{
+          ...TweetContentStyles.audioContainer(!!tweet.content?.value || renderImages || renderVideos),
+          display: 'flex',
+          justifyContent: 'center',
+        }}
         role="region"
         aria-label="Audio"
       >
         <AudioPlayer src={audioFiles[0].url} />
         {audioFiles.length > 1 && (
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Typography
-              variant="caption"
-              sx={TweetContentStyles.audioViewAll}
-              onClick={handleOpenMediaModal}
-              role="button"
-              tabIndex={0}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') handleOpenMediaModal(e);
-              }}
-            >
-              View all audio ({audioFiles.length})
-            </Typography>
-          </motion.div>
+          <ViewAllButton
+            label={`View all audio (${audioFiles.length})`}
+            onClick={handleOpenMediaModal}
+            sx={TweetContentStyles.audioViewAll}
+          />
         )}
       </Box>
     );
@@ -430,25 +422,16 @@ const TweetContent = ({
     ) || [];
     if (!otherFiles.length) return null;
     return (
-      <Box sx={TweetContentStyles.otherFilesContainer(!!tweet.content?.value)} role="region" aria-label="Files">
+      <Box sx={{ ...TweetContentStyles.otherFilesContainer(!!tweet.content?.value), maxWidth: '100%' }} role="region" aria-label="Files">
         {otherFiles.slice(0, 2).map((file, idx) => (
           <FileItem file={file} index={idx} key={file.fileKey || `other-${idx}`} />
         ))}
         {otherFiles.length > 2 && (
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Typography
-              variant="caption"
-              sx={TweetContentStyles.otherFilesViewAll}
-              onClick={handleOpenMediaModal}
-              role="button"
-              tabIndex={0}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') handleOpenMediaModal(e);
-              }}
-            >
-              View all files ({otherFiles.length})
-            </Typography>
-          </motion.div>
+          <ViewAllButton
+            label={`View all files (${otherFiles.length})`}
+            onClick={handleOpenMediaModal}
+            sx={TweetContentStyles.otherFilesViewAll}
+          />
         )}
       </Box>
     );
@@ -475,17 +458,11 @@ const TweetContent = ({
               </Collapse>
             )}
             {remainderText && (
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button
-                  onClick={handleToggleExpand}
-                  size="small"
-                  variant="text"
-                  sx={TweetContentStyles.readMoreButton}
-                  aria-label={isExpanded ? 'Show less text' : 'Read more text'}
-                >
-                  {isExpanded ? 'Show less' : 'Read more'}
-                </Button>
-              </motion.div>
+              <ViewAllButton
+                label={isExpanded ? 'Show less' : 'Read more'}
+                onClick={handleToggleExpand}
+                sx={TweetContentStyles.readMoreButton}
+              />
             )}
           </Box>
         )}
@@ -500,7 +477,12 @@ const TweetContent = ({
   const modalContent = useMemo(() => {
     const files = tweet.content?.metadata?.files || [];
     return (
-      <Box sx={TweetContentStyles.mediaModalContent}>
+      <Box sx={{ ...TweetContentStyles.mediaModalContent, maxHeight: '80vh', overflowY: 'auto' }}>
+        {files.length === 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+            No media available
+          </Typography>
+        )}
         {files.map((file, idx) => (
           <motion.div
             key={file.fileKey || `media-${idx}`}
@@ -514,12 +496,13 @@ const TweetContent = ({
                 src={file.url}
                 alt={`Media ${idx + 1}`}
                 effect="blur"
-                style={TweetContentStyles.modalImage}
+                style={{ ...TweetContentStyles.modalImage, maxWidth: '100%' }}
                 placeholder={
-                  <Box sx={TweetContentStyles.modalImagePlaceholder}>
+                  <Box sx={{ ...TweetContentStyles.modalImagePlaceholder, borderRadius: '10px' }}>
                     <CircularProgress size={24} />
                   </Box>
                 }
+                role="img"
               />
             ) : file.contentType === 'video/webm' ? (
               <CircularVideoPlayer
@@ -548,9 +531,11 @@ const TweetContent = ({
     return (
       <Paper sx={TweetContentStyles.tweetCard(false, isListView)} role="article">
         <Typography sx={TweetContentStyles.tweetTitle}>Error</Typography>
-        <Typography variant="body2" color="error">
-          {error}
-        </Typography>
+        <Box sx={{ p: 2, textAlign: 'center' }}>
+          <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
+            {error}
+          </Typography>
+        </Box>
       </Paper>
     );
   }
@@ -559,9 +544,11 @@ const TweetContent = ({
     return (
       <Paper sx={TweetContentStyles.tweetCard(false, isListView)} role="article">
         <Typography sx={TweetContentStyles.tweetTitle}>Invalid Tweet</Typography>
-        <Typography variant="body2" color="error">
-          This tweet is missing required data.
-        </Typography>
+        <Box sx={{ p: 2, textAlign: 'center' }}>
+          <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
+            This tweet is missing required data.
+          </Typography>
+        </Box>
       </Paper>
     );
   }
@@ -593,9 +580,7 @@ const TweetContent = ({
         {tweet.is_pinned && (
           <Box sx={TweetContentStyles.pinnedIconContainer}>
             <motion.div whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.95 }}>
-              <PushPinIcon
-                sx={TweetContentStyles.pinnedIcon}
-              />
+              <PushPinIcon sx={TweetContentStyles.pinnedIcon} />
             </motion.div>
           </Box>
         )}
@@ -609,17 +594,14 @@ const TweetContent = ({
               <Typography variant="caption" sx={TweetContentStyles.replyToCaption}>
                 Replying to:
               </Typography>
-              <Typography
-                variant="body2"
-                sx={TweetContentStyles.replyToText}
-              >
+              <Typography variant="body2" sx={TweetContentStyles.replyToText}>
                 <Emoji text={resolvedParentTweetText} />
               </Typography>
             </Box>
           </motion.div>
         )}
         {renderContent}
-        <Box sx={TweetContentStyles.statusContainer}>
+        <Box sx={{ ...TweetContentStyles.statusContainer, justifyContent: 'space-between' }}>
           <motion.div whileHover={{ scale: 1.05 }}>
             <Chip
               label={chipLabel}
@@ -628,21 +610,16 @@ const TweetContent = ({
               aria-label={`Tweet status: ${chipLabel}`}
             />
           </motion.div>
-          <Typography
-            variant="caption"
-            sx={{ color: 'text.secondary' }}
-          >
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
             Author: {tweetAuthor}
           </Typography>
         </Box>
-        <Box sx={TweetContentStyles.actionsContainer}>
+        <Box sx={{ ...TweetContentStyles.actionsContainer, justifyContent: 'space-between' }}>
           <Box sx={TweetContentStyles.actionButtons}>
             <motion.div whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.95 }}>
               <IconButton
                 size="medium"
-                onClick={(e) => {
-                  onLike(tweet.tweet_id, isLiked);
-                }}
+                onClick={() => onLike(tweet.tweet_id, isLiked)}
                 aria-label={isLiked ? 'Unlike tweet' : 'Like tweet'}
                 sx={TweetContentStyles.likeButton}
               >
@@ -658,9 +635,7 @@ const TweetContent = ({
             <motion.div whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.95 }}>
               <IconButton
                 size="medium"
-                onClick={(e) => {
-                  onReply(tweet);
-                }}
+                onClick={() => onReply(tweet)}
                 aria-label="Reply to tweet"
                 sx={TweetContentStyles.replyButton}
               >
@@ -737,10 +712,18 @@ const TweetContent = ({
               width: { xs: '90vw', sm: '80vw', md: '900px' },
               maxWidth: '95vw',
               p: { xs: 2, sm: 3 },
+              position: 'relative',
             }}
             role="dialog"
             aria-labelledby="media-modal-title"
           >
+            <IconButton
+              onClick={handleCloseMediaModal}
+              sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}
+              aria-label="Close media modal"
+            >
+              <CloseIcon />
+            </IconButton>
             <Typography id="media-modal-title" sx={TweetContentStyles.mediaModalTitle}>
               All Media
             </Typography>
@@ -757,12 +740,6 @@ const arePropsEqual = (prevProps, nextProps) => {
     isEqual(prevProps.tweet, nextProps.tweet) &&
     isEqual(prevProps.currentUser, nextProps.currentUser) &&
     prevProps.userRole === nextProps.userRole &&
-    prevProps.onLike === nextProps.onLike &&
-    prevProps.onDelete === nextProps.onDelete &&
-    prevProps.onReply === nextProps.onReply &&
-    prevProps.onReplyHover === nextProps.onReplyHover &&
-    prevProps.onEdit === nextProps.onEdit &&
-    prevProps.onPinToggle === nextProps.onPinToggle &&
     prevProps.isParentHighlighted === nextProps.isParentHighlighted &&
     prevProps.replyCount === nextProps.replyCount &&
     prevProps.parentTweetText === nextProps.parentTweetText &&
@@ -771,8 +748,7 @@ const arePropsEqual = (prevProps, nextProps) => {
     isEqual(prevProps.availableBoards, nextProps.availableBoards) &&
     prevProps.boardId === nextProps.boardId &&
     prevProps.isListView === nextProps.isListView &&
-    prevProps.error === nextProps.error &&
-    prevProps.getParentTweetText === nextProps.getParentTweetText
+    prevProps.error === nextProps.error
   );
 };
 

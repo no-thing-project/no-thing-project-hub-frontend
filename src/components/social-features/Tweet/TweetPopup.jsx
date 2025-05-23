@@ -13,6 +13,7 @@ import {
   LinearProgress,
   Chip,
   Collapse,
+  Tooltip,
 } from '@mui/material';
 import { PhotoCamera, Mic, Videocam, Stop, Schedule } from '@mui/icons-material';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
@@ -25,6 +26,8 @@ import { SUPPORTED_MIME_TYPES } from '../../../constants/validations';
 const MAX_TWEET_LENGTH = 1000;
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const RECORDING_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+const POPUP_WIDTH = 320;
+const POPUP_HEIGHT = 400;
 
 const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   const [form, setForm] = useState({ draft: '', scheduledAt: '' });
@@ -201,7 +204,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
             embed_data: null,
           },
         };
-        await onSubmit(content, x, y, form.scheduledAt || null, files, (progress) =>
+        await onSubmit(content, x, y , form.scheduledAt || null, files, (progress) =>
           setUploadProgress(progress)
         );
         setForm({ draft: '', scheduledAt: '' });
@@ -215,7 +218,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         setUploadProgress(0);
       }
     },
-    [form, files, x, y, onSubmit, cleanup, onClose, fileUrlsRef]
+    [form, files, onSubmit, cleanup, onClose, fileUrlsRef]
   );
 
   // Handle key press for submit
@@ -247,19 +250,19 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
 
       return (
         <Grid item xs={6} sm={3} key={`file-${index}`}>
-          <Box sx={{ position: 'relative', borderRadius: 2, overflow: 'hidden' }}>
+          <Box sx={{ position: 'relative', borderRadius: 2, overflow: 'hidden', aspectRatio: '1/1' }}>
             {file.type.startsWith('image') ? (
               <LazyLoadImage
                 src={fileUrl}
                 alt={`Preview ${index + 1}`}
-                style={TweetContentStyles.popupPreviewMedia}
+                style={{ ...TweetContentStyles.popupPreviewMedia, objectFit: 'cover', width: '100%', height: '100%' }}
                 effect="blur"
                 placeholder={<Box sx={TweetContentStyles.popupPreviewPlaceholder}>Loading Image...</Box>}
               />
             ) : file.type.startsWith('video') ? (
               <video
                 src={fileUrl}
-                style={TweetContentStyles.popupCirclePreviewMedia}
+                style={{ ...TweetContentStyles.popupCirclePreviewMedia, objectFit: 'cover', width: '100%', height: '100%' }}
                 controls
                 preload="metadata"
                 poster={fileUrl + '#t=0.1'}
@@ -305,25 +308,29 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
       .padStart(2, '0')}`;
 
     return (
-      <Box sx={{ mt: 1 }}>
+      <Box sx={TweetContentStyles.popupRecordingContainer}>
         <Chip
           label={label}
           sx={TweetContentStyles.popupRecordingChip}
           aria-label={`Recording ${recordingType} duration`}
         />
         {recordingType === 'video_message' ? (
-          <video
-            ref={videoPreviewRef}
-            style={TweetContentStyles.popupLivePreview}
-            muted
-            autoPlay
-            aria-label="Live video recording preview"
-          />
+          <Box sx={TweetContentStyles.popupVideoPreviewContainer}>
+            <video
+              ref={videoPreviewRef}
+              style={TweetContentStyles.popupLivePreview}
+              muted
+              autoPlay
+              aria-label="Live video recording preview"
+            />
+          </Box>
         ) : (
-          <Box sx={TweetContentStyles.popupAudioVisualizer} aria-label="Audio recording visualizer">
-            {[...Array(10)].map((_, i) => (
-              <Box key={i} sx={TweetContentStyles.popupVisualizerBar(i)} />
-            ))}
+          <Box sx={TweetContentStyles.popupAudioPreviewContainer}>
+            <Box sx={TweetContentStyles.popupAudioVisualizer}>
+              {[...Array(12)].map((_, i) => (
+                <Box key={i} sx={TweetContentStyles.popupVisualizerBar(i)} />
+              ))}
+            </Box>
           </Box>
         )}
       </Box>
@@ -336,7 +343,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
       recordingType === type ? stopRecording() : startRecording(type);
 
     return (
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Box sx={TweetContentStyles.popupInputBar}>
         <input
           type="file"
           accept={SUPPORTED_MIME_TYPES.join(',')}
@@ -346,30 +353,36 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
           ref={fileInputRef}
           disabled={loading || recording}
         />
-        <IconButton
-          onClick={() => fileInputRef.current.click()}
-          sx={TweetContentStyles.popupMediaButton(false)}
-          aria-label="Upload media"
-          disabled={loading || recording}
-        >
-          <PhotoCamera fontSize="small" />
-        </IconButton>
-        <IconButton
-          onClick={toggleRecording('voice')}
-          sx={TweetContentStyles.popupMediaButton(recordingType === 'voice')}
-          aria-label={recordingType === 'voice' ? 'Stop audio recording' : 'Start audio recording'}
-          disabled={loading}
-        >
-          {recordingType === 'voice' ? <Stop fontSize="small" /> : <Mic fontSize="small" />}
-        </IconButton>
-        <IconButton
-          onClick={toggleRecording('video_message')}
-          sx={TweetContentStyles.popupMediaButton(recordingType === 'video_message')}
-          aria-label={recordingType === 'video_message' ? 'Stop video recording' : 'Start video recording'}
-          disabled={loading}
-        >
-          {recordingType === 'video_message' ? <Stop fontSize="small" /> : <Videocam fontSize="small" />}
-        </IconButton>
+        <Tooltip title="Upload Media" placement="top">
+          <IconButton
+            onClick={() => fileInputRef.current.click()}
+            sx={TweetContentStyles.popupMediaButton(false)}
+            aria-label="Upload media"
+            disabled={loading || recording}
+          >
+            <PhotoCamera fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={recordingType === 'voice' ? 'Stop Audio Recording' : 'Start Audio Recording'} placement="top">
+          <IconButton
+            onClick={toggleRecording('voice')}
+            sx={TweetContentStyles.popupMediaButton(recordingType === 'voice')}
+            aria-label={recordingType === 'voice' ? 'Stop audio recording' : 'Start audio recording'}
+            disabled={loading}
+          >
+            {recordingType === 'voice' ? <Stop fontSize="small" /> : <Mic fontSize="small" />}
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={recordingType === 'video_message' ? 'Stop Video Recording' : 'Start Video Recording'} placement="top">
+          <IconButton
+            onClick={toggleRecording('video_message')}
+            sx={TweetContentStyles.popupMediaButton(recordingType === 'video_message')}
+            aria-label={recordingType === 'video_message' ? 'Stop video recording' : 'Start video recording'}
+            disabled={loading}
+          >
+            {recordingType === 'video_message' ? <Stop fontSize="small" /> : <Videocam fontSize="small" />}
+          </IconButton>
+        </Tooltip>
       </Box>
     );
   }, [recordingType, recording, loading, handleFileInputChange, startRecording, stopRecording]);
@@ -378,9 +391,20 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
     <Dialog
       open={true}
       onClose={onClose}
-      fullScreen={window.innerWidth <= 600}
-      maxWidth="sm"
-      sx={TweetContentStyles.popupModal}
+      PaperProps={{
+        sx: {
+          position: 'absolute',
+          m: 0,
+          width: { xs: '90vw', sm: POPUP_WIDTH },
+          maxHeight: { xs: '80vh', sm: POPUP_HEIGHT },
+          overflowY: 'auto',
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(8px)',
+          borderRadius: 2,
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+        },
+      }}
+      sx={{ '& .MuiBackdrop-root': { backgroundColor: 'transparent' } }}
       aria-labelledby="tweet-popup-title"
       ref={dialogRef}
     >

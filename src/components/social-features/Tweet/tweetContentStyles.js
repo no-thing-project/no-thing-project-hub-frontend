@@ -13,25 +13,36 @@ const dynamicCharCountColor = (isError) => ({
 
 const dynamicMediaButtonColor = (isActive) => ({
   color: isActive ? 'primary.main' : 'text.secondary',
-  bgcolor: isActive ? 'primary.light' : 'transparent',
+  bgcolor: isActive
+    ? (theme) => alpha(theme.palette.primary.main, 0.1)
+    : (theme) => alpha(theme.palette.grey[200], 0.5),
+  '&:hover': {
+    bgcolor: isActive
+      ? (theme) => alpha(theme.palette.primary.main, 0.2)
+      : (theme) => alpha(theme.palette.grey[300], 0.7),
+  },
 });
 
 const TweetContentStyles = {
   // ===============================
   // TweetPopup Styles
   // ===============================
-  popupPaper: {
-    position: 'absolute',
-    p: 2,
-    minWidth: { xs: '280px', sm: '320px' },
-    maxWidth: { xs: '90vw', sm: '400px' },
-    bgcolor: 'background.paper',
-    borderRadius: 2,
-    zIndex: 1400,
-    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-    '&:hover': {
-      transform: 'translateY(-2px)',
-      boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
+  popupModal: {
+    '& .MuiDialog-paper': {
+      position: 'absolute',
+      minWidth: { xs: '280px', sm: POPUP_WIDTH },
+      maxWidth: { xs: '90vw', sm: '400px' },
+      bgcolor: (theme) => alpha(theme.palette.background.paper, 0.95),
+      backdropFilter: 'blur(8px)',
+      borderRadius: 2,
+      boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+      transition: 'all 0.3s ease',
+      '&:hover': {
+        boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
+      },
+    },
+    '& .MuiBackdrop-root': {
+      backgroundColor: 'transparent',
     },
   },
   popupTitle: {
@@ -39,12 +50,13 @@ const TweetContentStyles = {
   },
   popupTextField: {
     '& .MuiInputBase-root': {
-      borderRadius: '20px',
-      padding: '8px 16px',
-      bgcolor: 'background.default',
+      borderRadius: '24px',
+      padding: '10px 16px',
+      bgcolor: (theme) => theme.palette.grey[100],
+      transition: 'all 0.2s ease',
     },
     '& .MuiOutlinedInput-notchedOutline': {
-      borderColor: 'grey.300',
+      borderColor: (theme) => theme.palette.grey[300],
     },
     '&:hover .MuiOutlinedInput-notchedOutline': {
       borderColor: 'primary.main',
@@ -60,10 +72,11 @@ const TweetContentStyles = {
   }),
   popupFilePreviewContainer: {
     mt: 1,
-    bgcolor: 'grey.100',
+    bgcolor: (theme) => theme.palette.grey[100],
     borderRadius: 2,
     p: 1,
-    '&:hover': { bgcolor: 'grey.200' },
+    transition: 'background-color 0.2s ease',
+    '&:hover': { bgcolor: (theme) => theme.palette.grey[200] },
   },
   popupPreviewMedia: {
     width: '100%',
@@ -71,7 +84,8 @@ const TweetContentStyles = {
     objectFit: 'cover',
     borderRadius: 4,
     border: '1px solid',
-    borderColor: 'grey.300',
+    borderColor: (theme) => theme.palette.grey[300],
+    transition: 'transform 0.2s ease',
     '&:hover': { transform: 'scale(1.02)' },
   },
   popupCirclePreviewMedia: {
@@ -80,14 +94,15 @@ const TweetContentStyles = {
     objectFit: 'cover',
     borderRadius: '50%',
     border: '1px solid',
-    borderColor: 'grey.300',
+    borderColor: (theme) => theme.palette.grey[300],
     backgroundColor: 'black',
+    transition: 'transform 0.2s ease',
     '&:hover': { transform: 'scale(1.02)' },
   },
   popupPreviewPlaceholder: {
     width: '100%',
     height: '80px',
-    bgcolor: 'grey.200',
+    bgcolor: (theme) => theme.palette.grey[200],
     borderRadius: 4,
     display: 'flex',
     alignItems: 'center',
@@ -99,85 +114,135 @@ const TweetContentStyles = {
     position: 'absolute',
     top: 4,
     right: 4,
-    bgcolor: 'error.main',
+    bgcolor: (theme) => theme.palette.error.main,
     color: 'white',
-    '&:hover': { bgcolor: 'error.dark' },
+    transition: 'background-color 0.2s ease',
+    '&:hover': { bgcolor: (theme) => theme.palette.error.dark },
     p: 0.5,
   },
   popupActionButton: {
-    borderRadius: 2,
+    borderRadius: '24px',
     textTransform: 'none',
     px: 3,
     py: 1,
     fontWeight: 500,
-    '&:hover': { bgcolor: 'primary.dark' },
+    transition: 'all 0.2s ease',
+    '&:hover': { bgcolor: 'primary.dark', transform: 'scale(1.02)' },
   },
   popupCancelButton: {
-    borderRadius: 2,
+    borderRadius: '24px',
     textTransform: 'none',
     px: 3,
     py: 1,
-    bgcolor: 'grey.300',
+    bgcolor: (theme) => theme.palette.grey[300],
     color: 'text.primary',
-    '&:hover': { bgcolor: 'grey.400' },
+    transition: 'all 0.2s ease',
+    '&:hover': { bgcolor: (theme) => theme.palette.grey[400], transform: 'scale(1.02)' },
+  },
+  popupInputBar: {
+    display: 'flex',
+    gap: 1,
+    alignItems: 'center',
+    bgcolor: (theme) => theme.palette.grey[100],
+    borderRadius: '24px',
+    p: 1,
+    mt: 1,
+    position: 'sticky',
+    bottom: 0,
+    zIndex: 1,
   },
   popupMediaButton: (isActive) => ({
-    p: 1,
+    p: 1.5,
     borderRadius: '50%',
+    transition: 'all 0.2s ease',
     ...dynamicMediaButtonColor(isActive),
-    '&:hover': { color: 'primary.main' },
+    '&:hover': { transform: 'scale(1.1)' },
   }),
-  popupRecordingChip: {
-    bgcolor: 'error.main',
-    color: 'white',
-    fontWeight: 500,
-    borderRadius: 1,
-    px: 1,
-    py: 0.5,
-  },
-  popupProgressContainer: {
-    mt: 1,
+  popupRecordingContainer: {
+    mt: 2,
     display: 'flex',
     flexDirection: 'column',
-    gap: 0.5,
+    alignItems: 'center',
+    gap: 1,
+  },
+  popupRecordingChip: {
+    bgcolor: (theme) => theme.palette.error.main,
+    color: 'white',
+    fontWeight: 500,
+    borderRadius: '16px',
+    px: 2,
+    py: 0.5,
+    animation: 'pulse 2s infinite',
+    '@keyframes pulse': {
+      '0%': { transform: 'scale(0.95)' },
+      '50%': { transform: 'scale(1.05)' },
+      '100%': { transform: 'scale(0.95)' },
+    },
+  },
+  popupVideoPreviewContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    mt: 1,
+    animation: 'fadeIn 0.3s ease-in',
+    '@keyframes fadeIn': {
+      from: { opacity: 0, transform: 'scale(0.9)' },
+      to: { opacity: 1, transform: 'scale(1)' },
+    },
   },
   popupLivePreview: {
-    width: '120px',
-    height: '120px',
+    width: '200px',
+    height: '200px',
     borderRadius: '50%',
-    border: '1px solid',
-    borderColor: 'grey.300',
+    border: '2px solid',
+    borderColor: (theme) => theme.palette.grey[300],
     bgcolor: 'black',
-    display: 'block',
-    mt: 1,
     objectFit: 'cover',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+    transition: 'all 0.3s ease',
+  },
+  popupAudioPreviewContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    mt: 1,
+    width: '200px',
+    height: '200px',
+    borderRadius: '50%',
+    bgcolor: (theme) => theme.palette.grey[900],
+    border: '2px solid',
+    borderColor: (theme) => theme.palette.grey[300],
+    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+    animation: 'fadeIn 0.3s ease-in',
+    '@keyframes fadeIn': {
+      from: { opacity: 0, transform: 'scale(0.9)' },
+      to: { opacity: 1, transform: 'scale(1)' },
+    },
   },
   popupAudioVisualizer: {
-    width: '100%',
-    height: '60px',
-    borderRadius: 4,
-    bgcolor: 'grey.900',
+    width: '80%',
+    height: '60%',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    mt: 1,
-    overflow: 'hidden',
+    gap: '2px',
   },
   popupVisualizerBar: (index) => ({
     width: '4px',
     height: '100%',
     bgcolor: 'primary.main',
-    mx: '1px',
-    animation: `pulse${index} 0.5s ease-in-out infinite alternate`,
+    borderRadius: '2px',
+    animation: `pulse${index} 0.7s ease-in-out infinite alternate`,
+    animationDelay: `${index * 0.05}s`,
     [`@keyframes pulse${index}`]: {
-      '0%': { transform: 'scaleY(0.3)' },
+      '0%': { transform: 'scaleY(0.2)' },
       '100%': { transform: 'scaleY(1)' },
     },
   }),
   popupAudioPlayer: {
     width: '100%',
     height: '48px',
-    bgcolor: 'grey.100',
+    bgcolor: (theme) => theme.palette.grey[100],
     borderRadius: '10px',
     p: 1,
     '& audio': {
@@ -187,6 +252,12 @@ const TweetContentStyles = {
         backgroundColor: 'transparent',
       },
     },
+  },
+  popupProgressContainer: {
+    mt: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 0.5,
   },
 
   // ===============================
@@ -298,14 +369,14 @@ const TweetContentStyles = {
     },
   }),
   imagePlaceholder: {
-    bgcolor: 'grey.200',
+    bgcolor: (theme) => theme.palette.grey[200],
     width: '100%',
     height: '100%',
     borderRadius: '10px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: 'grey.500',
+    color: (theme) => theme.palette.grey[500],
     fontSize: { xs: '0.85rem', sm: '0.9rem' },
   },
   imageViewAll: {
@@ -393,7 +464,7 @@ const TweetContentStyles = {
   audioPlayer: {
     width: '100%',
     height: '48px',
-    bgcolor: 'grey.100',
+    bgcolor: (theme) => theme.palette.grey[100],
     borderRadius: '10px',
     p: 1,
     '& audio': {
@@ -430,7 +501,7 @@ const TweetContentStyles = {
     p: 1,
     borderRadius: 2,
     '&:hover': {
-      bgcolor: 'grey.100',
+      bgcolor: (theme) => theme.palette.grey[100],
       boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
     },
   }),
@@ -536,7 +607,7 @@ const TweetContentStyles = {
     minWidth: 0,
     borderRadius: '50%',
     '&:hover': {
-      bgcolor: 'grey.100',
+      bgcolor: (theme) => theme.palette.grey[100],
       transform: 'scale(1.15)',
     },
     '&:focus': {
@@ -603,14 +674,14 @@ const TweetContentStyles = {
     },
   },
   modalImagePlaceholder: {
-    bgcolor: 'grey.200',
+    bgcolor: (theme) => theme.palette.grey[200],
     width: '100%',
     height: { xs: '320px', sm: '420px' },
     borderRadius: '10px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: 'grey.500',
+    color: (theme) => theme.palette.grey[500],
   },
   modalVideo: {
     width: '100%',
@@ -626,7 +697,7 @@ const TweetContentStyles = {
   modalAudioPlayer: {
     width: '100%',
     height: '48px',
-    bgcolor: 'grey.100',
+    bgcolor: (theme) => theme.palette.grey[100],
     borderRadius: '10px',
     p: 1,
     '& audio': {
@@ -644,7 +715,7 @@ const TweetContentStyles = {
     p: 1.5,
     borderRadius: 2,
     '&:hover': {
-      bgcolor: 'grey.100',
+      bgcolor: (theme) => theme.palette.grey[100],
       boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
     },
   },
@@ -677,7 +748,7 @@ const TweetContentStyles = {
     overflow: isListView ? 'auto' : 'hidden',
     cursor: isListView ? 'default' : dragging ? 'grabbing' : 'grab',
     touchAction: isListView ? 'auto' : 'none',
-    bgcolor: isListView ? 'grey.50' : 'background.paper',
+    bgcolor: isListView ? (theme) => theme.palette.grey[50] : 'background.paper',
   }),
   boardCanvas: (scale, offset) => ({
     position: 'absolute',
@@ -701,7 +772,7 @@ const TweetContentStyles = {
     textAlign: 'center',
   }),
   boardTitle: (titleLength) => ({
-    color: 'grey.300',
+    color: (theme) => theme.palette.grey[300],
     fontSize: `${Math.min(16, 100 / (titleLength || 1))}vw`,
     fontWeight: 700,
     whiteSpace: 'nowrap',
@@ -727,7 +798,7 @@ const TweetContentStyles = {
     fontSize: { xs: '1.25rem', sm: '1.5rem' },
     bgcolor: 'background.paper',
     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    '&:hover': { bgcolor: 'grey.100', transform: 'scale(1.1)' },
+    '&:hover': { bgcolor: (theme) => theme.palette.grey[100], transform: 'scale(1.1)' },
   },
   boardControlsContainer: {
     position: 'fixed',
@@ -749,7 +820,7 @@ const TweetContentStyles = {
     textTransform: 'none',
     px: { xs: 1.5, sm: 2 },
     py: 0.5,
-    bgcolor: 'grey.100',
+    bgcolor: (theme) => theme.palette.grey[100],
     color: 'text.primary',
     '&:hover': {
       bgcolor: 'primary.light',
@@ -759,8 +830,8 @@ const TweetContentStyles = {
     '@media (max-width: 600px)': { fontSize: '0.75rem', px: 1 },
   },
   boardZoomButton: {
-    bgcolor: 'grey.100',
-    '&:hover': { bgcolor: 'grey.200', transform: 'scale(1.1)' },
+    bgcolor: (theme) => theme.palette.grey[100],
+    '&:hover': { bgcolor: (theme) => theme.palette.grey[200], transform: 'scale(1.1)' },
   },
   boardZoomText: {
     fontSize: { xs: '0.8rem', sm: '0.875rem' },
@@ -840,7 +911,7 @@ const TweetContentStyles = {
     textTransform: 'none',
     px: 3,
     color: 'text.secondary',
-    '&:hover': { bgcolor: 'grey.100', transform: 'scale(1.03)' },
+    '&:hover': { bgcolor: (theme) => theme.palette.grey[100], transform: 'scale(1.03)' },
   },
   boardEditSaveButton: {
     borderRadius: 2,
@@ -852,7 +923,7 @@ const TweetContentStyles = {
       transform: 'scale(1.03)',
       bgcolor: 'primary.light',
     },
-    '&:disabled': { bgcolor: 'grey.300', color: 'grey.500', boxShadow: 'none' },
+    '&:disabled': { bgcolor: (theme) => theme.palette.grey[300], color: (theme) => theme.palette.grey[500], boxShadow: 'none' },
   },
 };
 
