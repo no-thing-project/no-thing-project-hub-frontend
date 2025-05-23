@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import Draggable from 'react-draggable';
 import debounce from 'lodash/debounce';
 import { BOARD_SIZE } from '../../../hooks/useBoard';
+import TweetContentStyles from './TweetContentStyles';
 
 const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypassOwnership = false }) => {
   const nodeRef = useRef(null);
@@ -109,14 +110,7 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
         ref={nodeRef}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        style={{
-          position: 'absolute',
-          transform: 'translate(-50%, -50%)',
-          cursor: isDraggable ? (dragging ? 'grabbing' : 'grab') : 'default',
-          zIndex: dragging || hovered ? 1000 : tweet.is_pinned ? 1100 : 1,
-          transition: 'opacity 0.2s ease, transform 0.2s ease',
-          touchAction: isDraggable ? 'none' : 'auto',
-        }}
+        style={TweetContentStyles.draggableContainer(isDraggable, dragging, hovered, tweet.is_pinned)}
         role="region"
         aria-label={`Tweet by ${tweet.username || 'Anonymous'}`}
         aria-disabled={!isDraggable}

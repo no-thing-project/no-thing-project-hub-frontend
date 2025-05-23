@@ -16,20 +16,20 @@ import {
   Tooltip,
 } from '@mui/material';
 import { PhotoCamera, Mic, Videocam, Stop, Schedule } from '@mui/icons-material';
+import { motion } from 'framer-motion';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import { isEqual } from 'lodash';
-import TweetContentStyles from './tweetContentStyles';
+import TweetPopupStyles from './TweetPopupStyles'; // Updated import
 import { useFileUpload } from '../../../hooks/useFileUpload';
 import { SUPPORTED_MIME_TYPES } from '../../../constants/validations';
 
-// Constants
 const MAX_TWEET_LENGTH = 1000;
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const RECORDING_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 const POPUP_WIDTH = 320;
 const POPUP_HEIGHT = 400;
 
-const TweetPopup = ({ x, y, onSubmit, onClose }) => {
+const TweetPopup = ({ x, y, onSubmit, onClose, parentTweet, onBoardUpdate }) => {
   const [form, setForm] = useState({ draft: '', scheduledAt: '' });
   const [recording, setRecording] = useState(null);
   const [recordingType, setRecordingType] = useState(null);
@@ -38,6 +38,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   const [error, setError] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const dialogRef = useRef(null);
@@ -45,7 +46,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   const recordingTimerRef = useRef(null);
   const { files, handleFileChange, removeFile, cleanup, fileUrlsRef } = useFileUpload();
 
-  // Cleanup on unmount
   useEffect(() => {
     dialogRef.current?.focus();
     return () => {
@@ -54,7 +54,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
     };
   }, [cleanup]);
 
-  // Recording timer
   useEffect(() => {
     if (recording) {
       recordingTimerRef.current = setInterval(() => {
@@ -71,7 +70,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
     return () => clearInterval(recordingTimerRef.current);
   }, [recording]);
 
-  // Attach live video preview
   useEffect(() => {
     if (recording && recordingType === 'video_message' && videoPreviewRef.current) {
       videoPreviewRef.current.srcObject = recording;
@@ -87,7 +85,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
     };
   }, [recording, recordingType]);
 
-  // Start recording (audio or video)
   const startRecording = useCallback(
     async (type) => {
       try {
@@ -124,7 +121,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
     [handleFileChange]
   );
 
-  // Stop recording
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
@@ -142,7 +138,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
     clearInterval(recordingTimerRef.current);
   }, [recording]);
 
-  // Handle file input change with validation
   const handleFileInputChange = useCallback(
     (e) => {
       const selectedFiles = Array.from(e.target.files);
@@ -166,7 +161,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
     [handleFileChange]
   );
 
-  // Submit handler
   const handleSubmit = useCallback(
     async () => {
       if (!form.draft.trim() && !files.length) {
@@ -204,12 +198,28 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
             embed_data: null,
           },
         };
-        await onSubmit(content, x, y , form.scheduledAt || null, files, (progress) =>
-          setUploadProgress(progress)
+        const position = parentTweet
+          ? { x: parentTweet.position.x, y: parentTweet.position.y + 180 } // Position below parent
+          : { x, y: y + 180 };
+        const newTweet = await onSubmit(
+          content,
+          position.x,
+          position.y,
+          form.scheduledAt || null,
+          files,
+          (progress) => setUploadProgress(progress),
+          parentTweet?.tweet_id || null
         );
-        setForm({ draft: '', scheduledAt: '' });
-        cleanup();
-        onClose();
+        if (onBoardUpdate && newTweet) {
+          onBoardUpdate(newTweet); // Update board state
+        }
+        setSubmitSuccess(true);
+        setTimeout(() => {
+          setForm({ draft: '', scheduledAt: '' });
+          cleanup();
+          onClose();
+          setSubmitSuccess(false);
+        }, 500); // Delay for success animation
       } catch (err) {
         setError(err.message || 'Failed to submit tweet.');
         console.error('Submit error:', err);
@@ -218,10 +228,9 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         setUploadProgress(0);
       }
     },
-    [form, files, onSubmit, cleanup, onClose, fileUrlsRef]
+    [form, files, onSubmit, cleanup, onClose, fileUrlsRef, parentTweet, x, y, onBoardUpdate]
   );
 
-  // Handle key press for submit
   const handleKeyPress = useCallback(
     (e) => {
       if (e.key === 'Enter' && !e.shiftKey && !recording) {
@@ -232,7 +241,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
     [handleSubmit, recording]
   );
 
-  // Memoized submit button disabled state
   const isSubmitDisabled = useMemo(
     () =>
       loading ||
@@ -242,7 +250,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
     [loading, form.draft, files, recording]
   );
 
-  // Memoized file preview rendering
   const renderFilePreview = useCallback(
     (file, index) => {
       const fileUrl = fileUrlsRef.current.get(file) || URL.createObjectURL(file);
@@ -250,26 +257,26 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
 
       return (
         <Grid item xs={6} sm={3} key={`file-${index}`}>
-          <Box sx={{ position: 'relative', borderRadius: 2, overflow: 'hidden', aspectRatio: '1/1' }}>
+          <Box sx={TweetPopupStyles.popupFilePreviewContainer}> 
             {file.type.startsWith('image') ? (
               <LazyLoadImage
                 src={fileUrl}
                 alt={`Preview ${index + 1}`}
-                style={{ ...TweetContentStyles.popupPreviewMedia, objectFit: 'cover', width: '100%', height: '100%' }}
+                style={TweetPopupStyles.popupPreviewMedia} 
                 effect="blur"
-                placeholder={<Box sx={TweetContentStyles.popupPreviewPlaceholder}>Loading Image...</Box>}
+                placeholder={<Box sx={TweetPopupStyles.popupPreviewPlaceholder}>Loading Image...</Box>} 
               />
             ) : file.type.startsWith('video') ? (
               <video
                 src={fileUrl}
-                style={{ ...TweetContentStyles.popupCirclePreviewMedia, objectFit: 'cover', width: '100%', height: '100%' }}
+                style={TweetPopupStyles.popupCirclePreviewMedia} 
                 controls
                 preload="metadata"
                 poster={fileUrl + '#t=0.1'}
                 aria-label={`Video preview ${index + 1}`}
               />
             ) : file.type.startsWith('audio') ? (
-              <Box sx={TweetContentStyles.popupAudioPlayer}>
+              <Box sx={TweetPopupStyles.popupAudioPlayer}> 
                 <audio
                   src={fileUrl}
                   controls
@@ -279,14 +286,14 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
                 />
               </Box>
             ) : (
-              <Box sx={TweetContentStyles.popupPreviewPlaceholder}>
+              <Box sx={TweetPopupStyles.popupPreviewPlaceholder}> 
                 <Typography variant="caption">File: {file.name}</Typography>
               </Box>
             )}
             <IconButton
               size="small"
               onClick={() => removeFile(index)}
-              sx={TweetContentStyles.popupDeleteFileButton}
+              sx={TweetPopupStyles.popupDeleteFileButton} 
               aria-label={`Remove file ${index + 1}`}
             >
               <Stop fontSize="small" />
@@ -298,7 +305,6 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
     [removeFile, fileUrlsRef]
   );
 
-  // Memoized recording status and preview
   const recordingStatus = useMemo(() => {
     if (!recording) return null;
     const minutes = Math.floor(recordingTime / 60);
@@ -308,27 +314,27 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
       .padStart(2, '0')}`;
 
     return (
-      <Box sx={TweetContentStyles.popupRecordingContainer}>
+      <Box sx={TweetPopupStyles.popupRecordingContainer}> 
         <Chip
           label={label}
-          sx={TweetContentStyles.popupRecordingChip}
+          sx={TweetPopupStyles.popupRecordingChip} 
           aria-label={`Recording ${recordingType} duration`}
         />
         {recordingType === 'video_message' ? (
-          <Box sx={TweetContentStyles.popupVideoPreviewContainer}>
+          <Box sx={TweetPopupStyles.popupVideoPreviewContainer}> 
             <video
               ref={videoPreviewRef}
-              style={TweetContentStyles.popupLivePreview}
+              style={TweetPopupStyles.popupLivePreview} 
               muted
               autoPlay
               aria-label="Live video recording preview"
             />
           </Box>
         ) : (
-          <Box sx={TweetContentStyles.popupAudioPreviewContainer}>
-            <Box sx={TweetContentStyles.popupAudioVisualizer}>
+          <Box sx={TweetPopupStyles.popupAudioPreviewContainer}> 
+            <Box sx={TweetPopupStyles.popupAudioVisualizer}> 
               {[...Array(12)].map((_, i) => (
-                <Box key={i} sx={TweetContentStyles.popupVisualizerBar(i)} />
+                <Box key={i} sx={TweetPopupStyles.popupVisualizerBar(i)} /> 
               ))}
             </Box>
           </Box>
@@ -337,13 +343,12 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
     );
   }, [recording, recordingType, recordingTime]);
 
-  // Memoized media buttons
   const renderMediaButtons = useMemo(() => {
     const toggleRecording = (type) => () =>
       recordingType === type ? stopRecording() : startRecording(type);
 
     return (
-      <Box sx={TweetContentStyles.popupInputBar}>
+      <Box sx={TweetPopupStyles.popupInputBar}> 
         <input
           type="file"
           accept={SUPPORTED_MIME_TYPES.join(',')}
@@ -356,7 +361,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         <Tooltip title="Upload Media" placement="top">
           <IconButton
             onClick={() => fileInputRef.current.click()}
-            sx={TweetContentStyles.popupMediaButton(false)}
+            sx={TweetPopupStyles.popupMediaButton(false)} 
             aria-label="Upload media"
             disabled={loading || recording}
           >
@@ -366,7 +371,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         <Tooltip title={recordingType === 'voice' ? 'Stop Audio Recording' : 'Start Audio Recording'} placement="top">
           <IconButton
             onClick={toggleRecording('voice')}
-            sx={TweetContentStyles.popupMediaButton(recordingType === 'voice')}
+            sx={TweetPopupStyles.popupMediaButton(recordingType === 'voice')} 
             aria-label={recordingType === 'voice' ? 'Stop audio recording' : 'Start audio recording'}
             disabled={loading}
           >
@@ -376,7 +381,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
         <Tooltip title={recordingType === 'video_message' ? 'Stop Video Recording' : 'Start Video Recording'} placement="top">
           <IconButton
             onClick={toggleRecording('video_message')}
-            sx={TweetContentStyles.popupMediaButton(recordingType === 'video_message')}
+            sx={TweetPopupStyles.popupMediaButton(recordingType === 'video_message')} 
             aria-label={recordingType === 'video_message' ? 'Stop video recording' : 'Start video recording'}
             disabled={loading}
           >
@@ -388,147 +393,156 @@ const TweetPopup = ({ x, y, onSubmit, onClose }) => {
   }, [recordingType, recording, loading, handleFileInputChange, startRecording, stopRecording]);
 
   return (
-    <Dialog
-      open={true}
-      onClose={onClose}
-      PaperProps={{
-        sx: {
-          position: 'absolute',
-          m: 0,
-          width: { xs: '90vw', sm: POPUP_WIDTH },
-          maxHeight: { xs: '80vh', sm: POPUP_HEIGHT },
-          overflowY: 'auto',
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(8px)',
-          borderRadius: 2,
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
-        },
-      }}
-      sx={{ '& .MuiBackdrop-root': { backgroundColor: 'transparent' } }}
-      aria-labelledby="tweet-popup-title"
-      ref={dialogRef}
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: submitSuccess ? 1.05 : 1 }}
+      transition={{ duration: 0.3 }}
     >
-      <Typography id="tweet-popup-title" sx={TweetContentStyles.popupTitle}>
-        Create a new tweet
-      </Typography>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: { xs: 1.5, sm: 2 } }}>
-        {error && (
-          <Alert severity="error" onClose={() => setError(null)} sx={{ borderRadius: 2 }}>
-            {error}
-          </Alert>
-        )}
-        <TextField
-          placeholder="What's on your mind?"
-          value={form.draft}
-          onChange={(e) => setForm((prev) => ({ ...prev, draft: e.target.value }))}
-          onKeyPress={handleKeyPress}
-          autoFocus
-          fullWidth
-          multiline
-          maxRows={4}
-          variant="outlined"
-          sx={TweetContentStyles.popupTextField}
-          inputProps={{ maxLength: MAX_TWEET_LENGTH }}
-          aria-label="Tweet content"
-          disabled={loading}
-        />
-        <Typography
-          variant="caption"
-          sx={TweetContentStyles.popupCharCount(form.draft.length > MAX_TWEET_LENGTH)}
-        >
-          {form.draft.length}/{MAX_TWEET_LENGTH}
+      <Dialog
+        open={true}
+        onClose={onClose}
+        PaperProps={{ sx: TweetPopupStyles.popupDialogPaper }} 
+        style={{ '& .MuiBackdrop-root': TweetPopupStyles.popupDialogBackdrop }} 
+        aria-labelledby="tweet-popup-title"
+        ref={dialogRef}
+      >
+        <Typography id="tweet-popup-title" sx={TweetPopupStyles.popupTitle}> 
+          {parentTweet ? 'Reply to Tweet' : 'Create a new tweet'}
         </Typography>
-        {files.length > 0 && (
-          <Box sx={TweetContentStyles.popupFilePreviewContainer}>
-            <Grid container spacing={1}>
-              {files.slice(0, 4).map((file, index) => renderFilePreview(file, index))}
-            </Grid>
-            {files.length > 4 && (
-              <Typography variant="caption" sx={{ mt: 1, color: 'text.secondary' }}>
-                +{files.length - 4} more file(s)
-              </Typography>
-            )}
-          </Box>
-        )}
-        {recordingStatus}
-        {loading && uploadProgress > 0 && (
-          <Box sx={TweetContentStyles.popupProgressContainer}>
-            <LinearProgress variant="determinate" value={uploadProgress} />
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              Uploading: {uploadProgress}%
+        <Box sx={TweetPopupStyles.popupContentBox}> 
+          {error && (
+            <Alert severity="error" onClose={() => setError(null)} sx={TweetPopupStyles.popupErrorAlert}> 
+              {error}
+            </Alert>
+          )}
+          {parentTweet && (
+            <Typography variant="caption" sx={TweetPopupStyles.popupParentTweetCaption}> 
+              Replying to {parentTweet.username || 'Anonymous'}
             </Typography>
-          </Box>
-        )}
-        {renderMediaButtons}
-        <Button
-          onClick={() => setShowSchedule((prev) => !prev)}
-          startIcon={<Schedule />}
-          variant="text"
-          size="small"
-          sx={{
-            alignSelf: 'flex-start',
-            textTransform: 'none',
-            color: 'primary.main',
-          }}
-          aria-label={showSchedule ? 'Hide schedule' : 'Show schedule'}
-        >
-          {showSchedule ? 'Hide Schedule' : 'Schedule Post'}
-        </Button>
-        <Collapse in={showSchedule} timeout="auto">
+          )}
           <TextField
-            label="Schedule (optional)"
-            type="datetime-local"
-            value={form.scheduledAt}
-            onChange={(e) => setForm((prev) => ({ ...prev, scheduledAt: e.target.value }))}
+            placeholder={parentTweet ? 'Write your reply...' : "What's on your mind?"}
+            value={form.draft}
+            onChange={(e) => setForm((prev) => ({ ...prev, draft: e.target.value }))}
+            onKeyPress={handleKeyPress}
+            autoFocus
             fullWidth
-            InputLabelProps={{ shrink: true }}
-            sx={TweetContentStyles.popupTextField}
-            inputProps={{ min: new Date().toISOString().slice(0, 16) }}
-            aria-label="Schedule tweet"
-            disabled={loading || recording}
-          />
-        </Collapse>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2, gap: 1 }}>
-          <Button
-            onClick={handleSubmit}
-            variant="contained"
-            color="primary"
-            sx={TweetContentStyles.popupActionButton}
-            disabled={isSubmitDisabled}
-            aria-label="Submit tweet"
-          >
-            {loading ? <CircularProgress size={24} color="inherit" /> : 'Add Post'}
-          </Button>
-          <Button
-            onClick={onClose}
-            variant="contained"
-            sx={TweetContentStyles.popupCancelButton}
-            aria-label="Cancel tweet creation"
+            multiline
+            maxRows={4}
+            variant="outlined"
+            sx={TweetPopupStyles.popupTextField} 
+            inputProps={{ maxLength: MAX_TWEET_LENGTH }}
+            aria-label={parentTweet ? 'Reply content' : 'Tweet content'}
             disabled={loading}
+          />
+          <Typography
+            variant="caption"
+            sx={TweetPopupStyles.popupCharCount(form.draft.length > MAX_TWEET_LENGTH)} 
           >
-            Cancel
+            {form.draft.length}/{MAX_TWEET_LENGTH}
+          </Typography>
+          {files.length > 0 && (
+            <Box sx={TweetPopupStyles.popupFilePreviewContainer}> 
+              <Grid container spacing={1}>
+                {files.slice(0, 4).map((file, index) => renderFilePreview(file, index))}
+              </Grid>
+              {files.length > 4 && (
+                <Typography variant="caption" sx={{ mt: 1, color: 'text.secondary' }}>
+                  +{files.length - 4} more file(s)
+                </Typography>
+              )}
+            </Box>
+          )}
+          {recordingStatus}
+          {loading && uploadProgress > 0 && (
+            <Box sx={TweetPopupStyles.popupProgressContainer}> 
+              <LinearProgress variant="determinate" value={uploadProgress} />
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                Uploading: {uploadProgress}%
+              </Typography>
+            </Box>
+          )}
+          {renderMediaButtons}
+          <Button
+            onClick={() => setShowSchedule((prev) => !prev)}
+            startIcon={<Schedule />}
+            variant="text"
+            size="small"
+            style={TweetPopupStyles.popupScheduleButton} 
+            aria-label={showSchedule ? 'Hide schedule' : 'Show schedule'}
+          >
+            {showSchedule ? 'Hide Schedule' : 'Schedule Post'}
           </Button>
+          <Collapse in={showSchedule} timeout="auto">
+            <TextField
+              label="Schedule (optional)"
+              type="datetime-local"
+              value={form.scheduledAt}
+              onChange={(e) => setForm((prev) => ({ ...prev, scheduledAt: e.target.value }))}
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+              style={TweetPopupStyles.popupTextField} 
+              inputProps={{ min: new Date().toISOString().slice(0, 16) }}
+              aria-label="Schedule tweet"
+              disabled={loading || recording}
+            />
+          </Collapse>
+          <Box sx={TweetPopupStyles.popupButtonContainer}> 
+            <Button
+              onClick={handleSubmit}
+              variant="contained"
+              color="primary"
+              style={TweetPopupStyles.popupActionButton} 
+              disabled={isSubmitDisabled}
+              aria-label={parentTweet ? 'Submit reply' : 'Submit tweet'}
+            >
+              {loading ? <CircularProgress size={24} color="inherit" /> : parentTweet ? 'Reply' : 'Add Post'}
+            </Button>
+            <Button
+              onClick={onClose}
+              variant="contained"
+              style={TweetPopupStyles.popupCancelButton} 
+              aria-label="Cancel tweet creation"
+              disabled={loading}
+            >
+              Cancel
+            </Button>
+          </Box>
         </Box>
-      </Box>
-    </Dialog>
+      </Dialog>
+    </motion.div>
   );
 };
 
-// PropTypes
 TweetPopup.propTypes = {
   x: PropTypes.number.isRequired,
   y: PropTypes.number.isRequired,
   onSubmit: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
+  parentTweet: PropTypes.shape({
+    tweet_id: PropTypes.string,
+    username: PropTypes.string,
+    position: PropTypes.shape({
+      x: PropTypes.number,
+      y: PropTypes.number,
+    }),
+  }),
+  onBoardUpdate: PropTypes.func,
 };
 
-// Custom comparison for memo
+TweetPopup.defaultProps = {
+  parentTweet: null,
+  onBoardUpdate: null,
+};
+
 const arePropsEqual = (prevProps, nextProps) => {
   return (
     prevProps.x === nextProps.x &&
     prevProps.y === nextProps.y &&
     prevProps.onSubmit === nextProps.onSubmit &&
-    prevProps.onClose === nextProps.onClose
+    prevProps.onClose === nextProps.onClose &&
+    isEqual(prevProps.parentTweet, nextProps.parentTweet) &&
+    prevProps.onBoardUpdate === nextProps.onBoardUpdate
   );
 };
 

@@ -414,7 +414,7 @@ const BoardPage = memo(() => {
           gap: 1,
           flexWrap: 'wrap',
           justifyContent: 'flex-end',
-          zIndex: 1200,
+          zIndex: 100,
           '@media (max-width: 600px)': { transform: 'scale(0.8)' },
         }}
       >
@@ -527,7 +527,7 @@ const BoardPage = memo(() => {
           position: 'absolute',
           bottom: 16,
           left: 16,
-          zIndex: 1100,
+          zIndex: 100,
           display: 'flex',
           alignItems: 'center',
           gap: 1,
@@ -535,28 +535,21 @@ const BoardPage = memo(() => {
         }}
       >
         <AnimatePresence>
-          {pointsVisible ? (
-            pointsLoading ? (
-              <Skeleton variant="circular" width={40} height={40} />
-            ) : (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Tooltip title="Available points">
-                  <IconButton size="small" aria-label={`Available points: ${pointsData?.total_points || 0}`}>
-                    <Toll />
-                  </IconButton>
-                </Tooltip>
-                <AnimatedPoints points={pointsData?.total_points || 0} />
-                {pointsSpent > 0 && <PointsDeductionAnimation pointsSpent={pointsSpent} />}
-              </motion.div>
-            )
-          ) : (
-            <Skeleton variant="circular" width={40} height={40} />
-          )}
+            <motion.div
+              key="points"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Tooltip title="Available points">
+                <IconButton size="small" aria-label={`Available points: ${pointsData?.total_points || 0}`}>
+                  <Toll />
+                </IconButton>
+              </Tooltip>
+              <AnimatedPoints points={pointsData?.total_points || 0} />
+              {pointsSpent > 0 && <PointsDeductionAnimation pointsSpent={pointsSpent} />}
+            </motion.div>
         </AnimatePresence>
       </Box>
 

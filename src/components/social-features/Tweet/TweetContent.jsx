@@ -4,8 +4,6 @@ import {
   Typography,
   Box,
   IconButton,
-  Menu,
-  MenuItem,
   Modal,
   Grid,
   Backdrop,
@@ -16,6 +14,9 @@ import {
   Button,
   CircularProgress,
   Icon,
+  List,
+  ListItem,
+  ListItemText,
 } from '@mui/material';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
@@ -27,7 +28,7 @@ import { motion } from 'framer-motion';
 import PropTypes from 'prop-types';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import Emoji from 'react-emoji-render';
-import TweetContentStyles from './tweetContentStyles';
+import TweetContentStyles from './TweetContentStyles';
 import { isEqual } from 'lodash';
 
 const MAX_TWEET_LENGTH = 1000;
@@ -48,12 +49,11 @@ const mediaVariants = {
   exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } },
 };
 
-// Reusable View All Button Component
 const ViewAllButton = ({ label, onClick, sx }) => (
   <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
     <Typography
       variant="caption"
-      sx={{ ...sx, cursor: 'pointer' }}
+      style={{ ...sx, cursor: 'pointer' }}
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -71,7 +71,6 @@ ViewAllButton.propTypes = {
   sx: PropTypes.object.isRequired,
 };
 
-// Memoized Media Components
 const CircularVideoPlayer = memo(({ src, duration, ariaLabel }) => (
   <motion.div variants={mediaVariants} initial="initial" animate="animate" exit="exit">
     <Box sx={TweetContentStyles.mediaWrapper} role="region" aria-label={ariaLabel}>
@@ -118,7 +117,7 @@ StandardVideoPlayer.propTypes = {
 
 const AudioPlayer = memo(({ src }) => (
   <Box sx={{ ...TweetContentStyles.audioPlayer, maxWidth: '100%' }}>
-    <audio src={src} controls style={{ width: '100%' }} preload="metadata" />
+    <audio src={src} controls sx={{ width: '100%' }} preload="metadata" />
   </Box>
 ));
 
@@ -140,7 +139,7 @@ const FileItem = memo(({ file, index }) => (
         href={file.url}
         target="_blank"
         rel="noopener noreferrer"
-        sx={TweetContentStyles.otherFileLink}
+        style={TweetContentStyles.otherFileLink}
         aria-label={`Download file ${file.fileKey || `File ${index + 1}`}`}
       >
         {file.fileKey || `File ${index + 1}`}
@@ -180,7 +179,7 @@ const TweetContent = ({
 }) => {
   const [animate, setAnimate] = useState(false);
   const [hovered, setHovered] = useState(false);
-  const [anchorEl, setAnchorEl] = useState(null);
+  const [openOptionsModal, setOpenOptionsModal] = useState(false);
   const [openMediaModal, setOpenMediaModal] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -253,12 +252,12 @@ const TweetContent = ({
     }
   }, [onReplyHover, tweet.parent_tweet_id, tweet.child_tweet_ids]);
 
-  const handleMenuOpen = useCallback((event) => {
-    setAnchorEl(event.currentTarget);
+  const handleOpenOptionsModal = useCallback(() => {
+    setOpenOptionsModal(true);
   }, []);
 
-  const handleMenuClose = useCallback(() => {
-    setAnchorEl(null);
+  const handleCloseOptionsModal = useCallback(() => {
+    setOpenOptionsModal(false);
   }, []);
 
   const handleOpenMediaModal = useCallback(() => {
@@ -271,34 +270,22 @@ const TweetContent = ({
 
   const handleEdit = useCallback(() => {
     onEdit(tweet);
-    handleMenuClose();
+    handleCloseOptionsModal();
   }, [onEdit, tweet]);
 
   const handlePin = useCallback(() => {
     onPinToggle(tweet);
-    handleMenuClose();
+    handleCloseOptionsModal();
   }, [onPinToggle, tweet]);
 
   const handleDelete = useCallback(() => {
     onDelete(tweet.tweet_id);
-    handleMenuClose();
+    handleCloseOptionsModal();
   }, [onDelete, tweet.tweet_id]);
 
   const handleToggleExpand = useCallback(() => {
     setIsExpanded((prev) => !prev);
   }, []);
-
-  const highlightStyle = useMemo(() => {
-    if (hovered || isRelated || isParentHighlighted) {
-      return {
-        zIndex: 999,
-        boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
-        transform: 'translateY(-4px)',
-        background: 'linear-gradient(145deg, #FFFFFF, #F5F8FA)',
-      };
-    }
-    return {};
-  }, [hovered, isRelated, isParentHighlighted]);
 
   const { previewText, remainderText } = useMemo(() => {
     const text = tweet.content?.value || '';
@@ -348,7 +335,7 @@ const TweetContent = ({
           <ViewAllButton
             label={`View all images (${imageFiles.length})`}
             onClick={handleOpenMediaModal}
-            sx={TweetContentStyles.imageViewAll}
+            style={TweetContentStyles.imageViewAll}
           />
         )}
       </Box>
@@ -381,7 +368,7 @@ const TweetContent = ({
           <ViewAllButton
             label={`View all videos (${videoFiles.length})`}
             onClick={handleOpenMediaModal}
-            sx={TweetContentStyles.videoViewAll}
+            style={TweetContentStyles.videoViewAll}
           />
         )}
       </Box>
@@ -406,7 +393,7 @@ const TweetContent = ({
           <ViewAllButton
             label={`View all audio (${audioFiles.length})`}
             onClick={handleOpenMediaModal}
-            sx={TweetContentStyles.audioViewAll}
+            style={TweetContentStyles.audioViewAll}
           />
         )}
       </Box>
@@ -461,7 +448,7 @@ const TweetContent = ({
               <ViewAllButton
                 label={isExpanded ? 'Show less' : 'Read more'}
                 onClick={handleToggleExpand}
-                sx={TweetContentStyles.readMoreButton}
+                style={TweetContentStyles.readMoreButton}
               />
             )}
           </Box>
@@ -527,6 +514,40 @@ const TweetContent = ({
     );
   }, [tweet.content?.metadata?.files]);
 
+  const optionsModalContent = useMemo(() => (
+    <Box sx={TweetContentStyles.optionsModalContent}>
+      <Typography variant="h6" sx={TweetContentStyles.optionsModalTitle}>
+        Tweet Options
+      </Typography>
+      <List>
+        <ListItem
+          button
+          onClick={handleEdit}
+          style={TweetContentStyles.optionsModalItem}
+          aria-label="Edit tweet"
+        >
+          <ListItemText primary="Edit Tweet" />
+        </ListItem>
+        <ListItem
+          button
+          onClick={handlePin}
+          style={TweetContentStyles.optionsModalItem}
+          aria-label={tweet.is_pinned ? 'Unpin tweet' : 'Pin tweet'}
+        >
+          <ListItemText primary={tweet.is_pinned ? 'Unpin Tweet' : 'Pin Tweet'} />
+        </ListItem>
+        <ListItem
+          button
+          onClick={handleDelete}
+          sx={{ ...TweetContentStyles.optionsModalItem, color: 'error.main' }}
+          aria-label="Delete tweet"
+        >
+          <ListItemText primary="Delete" />
+        </ListItem>
+      </List>
+    </Box>
+  ), [handleEdit, handlePin, handleDelete, tweet.is_pinned]);
+
   if (error) {
     return (
       <Paper sx={TweetContentStyles.tweetCard(false, isListView)} role="article">
@@ -566,10 +587,8 @@ const TweetContent = ({
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         sx={{
-          position: 'relative',
-          overflow: 'visible',
           ...TweetContentStyles.tweetCard(tweet.is_pinned, isListView),
-          ...highlightStyle,
+          ...TweetContentStyles.tweetHighlight(hovered || isRelated || isParentHighlighted),
         }}
         role="article"
         aria-labelledby={`tweet-title-${tweet.tweet_id}`}
@@ -610,7 +629,7 @@ const TweetContent = ({
               aria-label={`Tweet status: ${chipLabel}`}
             />
           </motion.div>
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+          <Typography variant="caption" sx={TweetContentStyles.tweetAuthorTypography}>
             Author: {tweetAuthor}
           </Typography>
         </Box>
@@ -621,7 +640,7 @@ const TweetContent = ({
                 size="medium"
                 onClick={() => onLike(tweet.tweet_id, isLiked)}
                 aria-label={isLiked ? 'Unlike tweet' : 'Like tweet'}
-                sx={TweetContentStyles.likeButton}
+                style={TweetContentStyles.likeButton}
               >
                 <ThumbUpIcon sx={TweetContentStyles.likeIcon(isLiked)} />
               </IconButton>
@@ -637,7 +656,7 @@ const TweetContent = ({
                 size="medium"
                 onClick={() => onReply(tweet)}
                 aria-label="Reply to tweet"
-                sx={TweetContentStyles.replyButton}
+                style={TweetContentStyles.replyButton}
               >
                 <ChatBubbleOutlineIcon sx={TweetContentStyles.replyIcon} />
               </IconButton>
@@ -645,7 +664,7 @@ const TweetContent = ({
             {hasReplies && (
               <Typography
                 variant="caption"
-                sx={TweetContentStyles.replyCount}
+                style={TweetContentStyles.replyCount}
               >
                 {replyLabel}
               </Typography>
@@ -655,45 +674,15 @@ const TweetContent = ({
             <motion.div whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.95 }}>
               <IconButton
                 size="medium"
-                onClick={handleMenuOpen}
+                onClick={handleOpenOptionsModal}
                 className="tweet-menu"
                 aria-label="Tweet options"
-                aria-controls={`tweet-menu-${tweet.tweet_id}`}
-                aria-haspopup="true"
-                sx={TweetContentStyles.menuButton}
+                style={TweetContentStyles.menuButton}
               >
                 <MoreVertIcon sx={TweetContentStyles.menuIcon} />
               </IconButton>
             </motion.div>
           )}
-          <Menu
-            id={`tweet-menu-${tweet.tweet_id}`}
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={handleMenuClose}
-            slotProps={{
-              paper: { sx: TweetContentStyles.menuPaper },
-            }}
-            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-          >
-            <MenuItem onClick={handleEdit} aria-label="Edit tweet">
-              Edit Tweet
-            </MenuItem>
-            <MenuItem
-              onClick={handlePin}
-              aria-label={tweet.is_pinned ? 'Unpin tweet' : 'Pin tweet'}
-            >
-              {tweet.is_pinned ? 'Unpin Tweet' : 'Pin Tweet'}
-            </MenuItem>
-            <MenuItem
-              onClick={handleDelete}
-              sx={TweetContentStyles.deleteMenuItem}
-              aria-label="Delete tweet"
-            >
-              Delete
-            </MenuItem>
-          </Menu>
         </Box>
       </Paper>
 
@@ -707,19 +696,13 @@ const TweetContent = ({
       >
         <Fade in={openMediaModal}>
           <Box
-            sx={{
-              ...TweetContentStyles.mediaModalBox,
-              width: { xs: '90vw', sm: '80vw', md: '900px' },
-              maxWidth: '95vw',
-              p: { xs: 2, sm: 3 },
-              position: 'relative',
-            }}
+            sx={TweetContentStyles.mediaModalContainer}
             role="dialog"
             aria-labelledby="media-modal-title"
           >
             <IconButton
               onClick={handleCloseMediaModal}
-              sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}
+              style={TweetContentStyles.mediaModalCloseButton}
               aria-label="Close media modal"
             >
               <CloseIcon />
@@ -728,6 +711,35 @@ const TweetContent = ({
               All Media
             </Typography>
             {modalContent}
+          </Box>
+        </Fade>
+      </Modal>
+
+      <Modal
+        open={openOptionsModal}
+        onClose={handleCloseOptionsModal}
+        closeAfterTransition
+        slots={{ backdrop: Backdrop }}
+        slotProps={{ backdrop: { timeout: 500 } }}
+        aria-labelledby="options-modal-title"
+      >
+        <Fade in={openOptionsModal}>
+          <Box
+            sx={TweetContentStyles.optionsModalContainer}
+            role="dialog"
+            aria-labelledby="options-modal-title"
+          >
+            <IconButton
+              onClick={handleCloseOptionsModal}
+              style={TweetContentStyles.optionsModalCloseButton}
+              aria-label="Close options modal"
+            >
+              <CloseIcon />
+            </IconButton>
+            <Typography id="options-modal-title" sx={TweetContentStyles.optionsModalHiddenTitle}>
+              Tweet Options
+            </Typography>
+            {optionsModalContent}
           </Box>
         </Fade>
       </Modal>
