@@ -221,18 +221,20 @@ const TweetContent = ({
   }, [tweet.stats?.like_count]);
 
   const handleMouseEnter = useCallback(() => {
+    if (openOptionsDialog || openMediaDialog) return; // Prevent hover when dialogs are open
     setHovered(true);
     if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
       onReplyHover(tweet.tweet_id);
     }
-  }, [onReplyHover, tweet.tweet_id, tweet.parent_tweet_id, tweet.child_tweet_ids]);
+  }, [onReplyHover, tweet.tweet_id, tweet.parent_tweet_id, tweet.child_tweet_ids, openOptionsDialog, openMediaDialog]);
 
   const handleMouseLeave = useCallback(() => {
+    if (openOptionsDialog || openMediaDialog) return; // Prevent hover state change when dialogs are open
     setHovered(false);
     if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
       onReplyHover(null);
     }
-  }, [onReplyHover, tweet.parent_tweet_id, tweet.child_tweet_ids]);
+  }, [onReplyHover, tweet.parent_tweet_id, tweet.child_tweet_ids, openOptionsDialog, openMediaDialog]);
 
   const handleOpenOptionsDialog = useCallback(() => {
     setOpenOptionsDialog(true);
@@ -253,17 +255,17 @@ const TweetContent = ({
   const handleEdit = useCallback(() => {
     onEdit(tweet);
     handleCloseOptionsDialog();
-  }, [onEdit, tweet]);
+  }, [onEdit, tweet, handleCloseOptionsDialog]);
 
   const handlePin = useCallback(() => {
     onPinToggle(tweet);
     handleCloseOptionsDialog();
-  }, [onPinToggle, tweet]);
+  }, [onPinToggle, tweet, handleCloseOptionsDialog]);
 
   const handleDelete = useCallback(() => {
     onDelete(tweet.tweet_id);
     handleCloseOptionsDialog();
-  }, [onDelete, tweet.tweet_id]);
+  }, [onDelete, tweet.tweet_id, handleCloseOptionsDialog]);
 
   const handleToggleExpand = useCallback(() => {
     setIsExpanded((prev) => !prev);
@@ -565,6 +567,7 @@ const TweetContent = ({
         sx={{
           ...TweetContentStyles.tweetCard(tweet.is_pinned, isListView),
           ...TweetContentStyles.tweetHighlight(hovered || isRelated || isParentHighlighted),
+          pointerEvents: openOptionsDialog || openMediaDialog ? 'none' : 'auto', // Disable interactions when dialogs are open
         }}
         role="article"
         aria-labelledby={`tweet-title-${tweet.tweet_id}`}
@@ -617,6 +620,7 @@ const TweetContent = ({
                 onClick={() => onLike(tweet.tweet_id, isLiked)}
                 aria-label={isLiked ? 'Unlike tweet' : 'Like tweet'}
                 sx={TweetContentStyles.likeButton}
+                disabled={openOptionsDialog || openMediaDialog} // Disable when dialogs are open
               >
                 <ThumbUpIcon sx={TweetContentStyles.likeIcon(isLiked)} />
               </IconButton>
@@ -633,6 +637,7 @@ const TweetContent = ({
                 onClick={() => onReply(tweet)}
                 aria-label="Reply to tweet"
                 sx={TweetContentStyles.replyButton}
+                disabled={openOptionsDialog || openMediaDialog} // Disable when dialogs are open
               >
                 <ChatBubbleOutlineIcon sx={TweetContentStyles.replyIcon} />
               </IconButton>
@@ -654,6 +659,7 @@ const TweetContent = ({
                 className="tweet-menu"
                 aria-label="Tweet options"
                 sx={TweetContentStyles.menuButton}
+                disabled={openOptionsDialog || openMediaDialog} // Disable when dialogs are open
               >
                 <MoreVertIcon sx={TweetContentStyles.menuIcon} />
               </IconButton>
@@ -672,7 +678,15 @@ const TweetContent = ({
         transitionDuration={500}
         aria-labelledby="media-dialog-title"
         aria-describedby="media-dialog-description"
-        PaperProps={{ sx: ModalStyles.mediaDialogContainer }}
+        PaperProps={{ 
+          sx: { 
+            ...ModalStyles.mediaDialogContainer, 
+            zIndex: 110, // Align with Z_INDEX.MODAL from Board.js
+          },
+          onClick: (e) => e.stopPropagation(), // Prevent clicks from reaching the board
+          onMouseDown: (e) => e.stopPropagation(),
+          onTouchStart: (e) => e.stopPropagation(),
+        }}
       >
         <DialogTitle id="media-dialog-title" sx={ModalStyles.mediaDialogTitle}>
           All Media
@@ -682,6 +696,7 @@ const TweetContent = ({
             View all media files attached to the tweet.
           </Typography>
           {mediaDialogContent}
+Michael McDonald
         </DialogContent>
         <DialogActions sx={ModalStyles.dialogActions}>
           <IconButton
@@ -703,7 +718,15 @@ const TweetContent = ({
         transitionDuration={500}
         aria-labelledby="options-dialog-title"
         aria-describedby="options-dialog-description"
-        PaperProps={{ sx: ModalStyles.optionsDialogContainer }}
+        PaperProps={{ 
+          sx: { 
+            ...ModalStyles.optionsDialogContainer, 
+            zIndex: 110, // Align with Z_INDEX.MODAL from Board.js
+          },
+          onClick: (e) => e.stopPropagation(), // Prevent clicks from reaching the board
+          onMouseDown: (e) => e.stopPropagation(),
+          onTouchStart: (e) => e.stopPropagation(),
+        }}
       >
         <DialogTitle id="options-dialog-title" sx={ModalStyles.optionsDialogTitle}>
           Tweet Options

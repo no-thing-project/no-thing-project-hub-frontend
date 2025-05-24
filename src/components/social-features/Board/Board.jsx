@@ -31,7 +31,6 @@ import { useBoards } from '../../../hooks/useBoards';
 import { useNotification } from '../../../context/NotificationContext';
 import throttle from 'lodash/throttle';
 import debounce from 'lodash/debounce';
-import ReactDOM from 'react-dom';
 
 // Constants
 const MAX_TWEET_LENGTH = 1000;
@@ -40,6 +39,7 @@ const Z_INDEX = {
   TWEET: 99,
   POPUP: 100,
   MODAL: 110,
+  OVERLAY: 109, // New z-index for the overlay, below modals but above tweets
 };
 
 // Reducer for tweet popup state
@@ -146,6 +146,8 @@ const Board = ({
   const [boards, setBoards] = useState(availableBoards);
   const [isSaving, setIsSaving] = useState(false);
   const [highlightedTweetId, setHighlightedTweetId] = useState(null);
+  // New state to track open modals for blocking interactions
+  const openModals = useRef(new Set());
 
   // Split reducers for better state isolation
   const [popupState, dispatchPopup] = useReducer(popupReducer, {
@@ -162,6 +164,20 @@ const Board = ({
     newStatus: '',
     selectedBoardId: '',
   });
+
+  // New: Track whether any modal or popup is open
+  const isOverlayOpen = useMemo(() => {
+    return popupState.visible || !!editModalState.tweet || openModals.current.size > 0;
+  }, [popupState.visible, editModalState.tweet]);
+
+  // New: Callback to handle modal state changes from TweetContent
+  const handleModalStateChange = useCallback((tweetId, isOpen) => {
+    if (isOpen) {
+      openModals.current.add(tweetId);
+    } else {
+      openModals.current.delete(tweetId);
+    }
+  }, []);
 
   const {
     tweets,
@@ -186,12 +202,12 @@ const Board = ({
     dragging,
     centerBoard,
     handleZoomButton,
-    handleMouseDown,
-    handleMouseMove,
-    handleMouseUp,
-    handleTouchStart,
-    handleTouchMove,
-    handleTouchEnd,
+    handleMouseDown: originalHandleMouseDown,
+    handleMouseMove: originalHandleMouseMove,
+    handleMouseUp: originalHandleMouseUp,
+    handleTouchStart: originalHandleTouchStart,
+    handleTouchMove: originalHandleTouchMove,
+    handleTouchEnd: originalHandleTouchEnd,
   } = useBoardInteraction(boardMainRef);
 
   // Permissions
@@ -267,6 +283,17 @@ const Board = ({
     fetchBoards();
     return () => controller.abort();
   }, [editModalState.tweet, boards, fetchBoardsList, showNotification, permissions.canMoveBoard]);
+
+  // New: Block wheel events when any modal is open
+  useEffect(() => {
+    const handleWheel = (e) => {
+      if (isOverlayOpen) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [isOverlayOpen]);
 
   const handleOptimisticUpdate = useCallback(
     async (tweet, optimisticUpdateFn, serverUpdateFn, rollbackFn, isNewTweet = false) => {
@@ -373,26 +400,71 @@ const Board = ({
     [permissions.canCreate, showNotification]
   );
 
-  const handleMouseUpWithPopup = useCallback(
+  // Modified: Block mouse events when overlay is open
+  const handleMouseDown = useCallback(
     (e) => {
-      if (e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root, .MuiButton-root')) {
-        handleMouseUp(e);
+      if (isOverlayOpen) {
+        e.preventDefault();
         return;
       }
-      handleMouseUp(e, throttlePopup);
+      originalHandleMouseDown(e);
     },
-    [handleMouseUp, throttlePopup]
+    [isOverlayOpen, originalHandleMouseDown]
+  );
+
+  const handleMouseMove = useCallback(
+    (e) => {
+      if (isOverlayOpen) return;
+      originalHandleMouseMove(e);
+    },
+    [isOverlayOpen, originalHandleMouseMove]
+  );
+
+  const handleMouseUpWithPopup = useCallback(
+    (e) => {
+      if (isOverlayOpen) return;
+      if (e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root, .MuiButton-root')) {
+        originalHandleMouseUp(e);
+        return;
+      }
+      originalHandleMouseUp(e, throttlePopup);
+    },
+    [isOverlayOpen, originalHandleMouseUp, throttlePopup]
+  );
+
+  // Modified: Block touch events when overlay is open
+  const handleTouchStart = useCallback(
+    (e) => {
+      if (isOverlayOpen) {
+        // e.preventDefault();
+        return;
+      }
+      originalHandleTouchStart(e);
+    },
+    [isOverlayOpen, originalHandleTouchStart]
+  );
+
+  const handleTouchMove = useCallback(
+    (e) => {
+      if (isOverlayOpen) {
+        e.preventDefault();
+        return;
+      }
+      originalHandleTouchMove(e);
+    },
+    [isOverlayOpen, originalHandleTouchMove]
   );
 
   const handleTouchEndWithPopup = useCallback(
     (e) => {
+      if (isOverlayOpen) return;
       if (e.target.closest('.tweet-card, .tweet-popup, .MuiIconButton-root, .MuiButton-root')) {
-        handleTouchEnd(e);
+        originalHandleTouchEnd(e);
         return;
       }
-      handleTouchEnd(e, throttlePopup);
+      originalHandleTouchEnd(e, throttlePopup);
     },
-    [handleTouchEnd, throttlePopup]
+    [isOverlayOpen, originalHandleTouchEnd, throttlePopup]
   );
 
   const handleEditTweet = useCallback(
@@ -562,20 +634,21 @@ const Board = ({
       availableBoards: editModalState.tweet?.availableBoards || boards,
       boardId,
       isListView,
+      onModalStateChange: handleModalStateChange, // New: Pass modal state change handler
     }),
     [
-      currentUser.anonymous_id,
-      currentUser.username,
+      currentUser,
       userRole,
       toggleLikeTweet,
       deleteExistingTweet,
       handleReply,
       handleEditTweet,
       handlePinToggle,
-      editModalState.tweet?.availableBoards,
-      boards.length,
+      editModalState.tweet,
+      boards,
       boardId,
       isListView,
+      handleModalStateChange,
     ]
   );
 
@@ -629,7 +702,7 @@ const Board = ({
         </DraggableTweet>
       );
     },
-    [highlightedTweetId, getRelatedTweetIds, tweets, tweetProps, updateExistingTweet, currentUser.anonymous_id, currentUser.username, userRole, isListView]
+    [highlightedTweetId, getRelatedTweetIds, tweets, tweetProps, updateExistingTweet, currentUser, userRole, isListView]
   );
 
   const renderedTweets = useMemo(() => {
@@ -672,6 +745,26 @@ const Board = ({
       }}
     >
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        {/* New: Overlay to block interactions when modals are open */}
+        {isOverlayOpen && (
+          <Box
+            sx={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.1)', // Dimmed background
+              zIndex: Z_INDEX.OVERLAY,
+              pointerEvents: 'auto', // Capture all events
+            }}
+            onClick={(e) => e.stopPropagation()} // Prevent clicks from reaching the board
+            onMouseDown={(e) => e.preventDefault()}
+            onTouchStart={(e) => e.preventDefault()}
+            aria-hidden="true"
+          />
+        )}
+
         <Box sx={BoardStyles.boardBackButtonContainer}>
           <Tooltip title="Go back">
             <IconButton
@@ -688,11 +781,11 @@ const Board = ({
           ref={boardMainRef}
           sx={{
             ...BoardStyles.boardMain(isListView, dragging),
-            touchAction: 'none',
+            touchAction: isOverlayOpen ? 'none' : 'auto', // Disable touch when overlay is open
             userSelect: 'none',
             height: '100%',
             width: '100%',
-            overflowY: isListView ? 'auto' : 'hidden',
+            overflowY: isListView && !isOverlayOpen ? 'auto' : 'hidden', // Disable scroll when overlay is open
           }}
           onMouseDown={isListView ? undefined : handleMouseDown}
           onMouseMove={isListView ? undefined : handleMouseMove}
@@ -734,7 +827,7 @@ const Board = ({
                         onClick={handleLoadMore}
                         sx={{ mt: 2, alignSelf: 'center' }}
                         aria-label="Load more tweets"
-                        disabled={isLoading}
+                        disabled={isLoading || isOverlayOpen} // Disable when overlay is open
                       >
                         Load More
                       </Button>
@@ -784,6 +877,7 @@ const Board = ({
               display: 'flex',
               flexDirection: 'column',
               gap: { xs: 0.5, sm: 1 },
+              pointerEvents: isOverlayOpen ? 'none' : 'auto', // Disable controls when overlay is open
             }}
           >
             <Tooltip title={isListView ? 'Switch to board view' : 'Switch to list view'}>
@@ -796,7 +890,9 @@ const Board = ({
                   ...BoardStyles.boardViewToggleButton,
                   fontSize: { xs: '0.75rem', sm: '0.875rem' },
                   padding: { xs: '4px 8px', sm: '6px 16px' },
+                  pointerEvents: 'auto', // Ensure button is clickable
                 }}
+                disabled={isOverlayOpen}
               >
                 {isListView ? 'Board' : 'List'}
               </Button>
@@ -806,8 +902,8 @@ const Board = ({
                 onClick={debouncedRefresh}
                 size="small"
                 aria-label="Refresh board"
-                sx={BoardStyles.boardZoomButton}
-                disabled={isLoading}
+                sx={{ ...BoardStyles.boardZoomButton, pointerEvents: 'auto' }}
+                disabled={isLoading || isOverlayOpen}
               >
                 <Refresh fontSize="small" />
               </IconButton>
@@ -827,7 +923,8 @@ const Board = ({
                           onClick={() => handleZoomButton('reset')}
                           size="small"
                           aria-label="Reset board zoom to 100%"
-                          sx={BoardStyles.boardZoomButton}
+                          sx={{ ...BoardStyles.boardZoomButton, pointerEvents: 'auto' }}
+                          disabled={isOverlayOpen}
                         >
                           <RestartAlt fontSize="small" />
                         </IconButton>
@@ -840,7 +937,8 @@ const Board = ({
                     onClick={() => handleZoomButton('out')}
                     size="small"
                     aria-label="Zoom out board"
-                    sx={BoardStyles.boardZoomButton}
+                    sx={{ ...BoardStyles.boardZoomButton, pointerEvents: 'auto' }}
+                    disabled={isOverlayOpen}
                   >
                     <Remove fontSize="small" />
                   </IconButton>
@@ -858,7 +956,8 @@ const Board = ({
                     onClick={() => handleZoomButton('in')}
                     size="small"
                     aria-label="Zoom in board"
-                    sx={BoardStyles.boardZoomButton}
+                    sx={{ ...BoardStyles.boardZoomButton, pointerEvents: 'auto' }}
+                    disabled={isOverlayOpen}
                   >
                     <Add fontSize="small" />
                   </IconButton>
@@ -875,8 +974,9 @@ const Board = ({
             maxWidth="sm"
             fullWidth
             sx={{ ...BoardStyles.boardEditDialog, zIndex: Z_INDEX.MODAL }}
-            onKeyDown={(e) => e.key === 'Escape' && dispatchEditModal({ type: 'CLEAR_EDIT_MODAL' })}
+            onKeyDown={(e) => e.key === 'Escape' && !isSaving && dispatchEditModal({ type: 'CLEAR_EDIT_MODAL' })}
             aria-describedby="edit-tweet-description"
+            disableEscapeKeyDown={isSaving}
           >
             <DialogTitle sx={BoardStyles.boardEditDialogTitle}>Edit Tweet</DialogTitle>
             <DialogContent sx={BoardStyles.boardEditDialogContent}>
