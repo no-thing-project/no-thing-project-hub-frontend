@@ -2,12 +2,12 @@ import { alpha } from '@mui/material';
 
 // Constants for reuse
 const MAX_TWEET_LENGTH = 1000;
-const POPUP_WIDTH = 360; // Slightly increased for better spacing on mobile
-const POPUP_HEIGHT = 440; // Adjusted for better content fit
-const BASE_Z_INDEX = 10; // Board
-const POPUP_Z_INDEX = 100; // TweetPopup
+const POPUP_WIDTH = 360;
+const POPUP_HEIGHT = 440;
+const BASE_Z_INDEX = 10;
+const POPUP_Z_INDEX = 100;
 const MODAL_SHADOW = '0 8px 28px rgba(0,0,0,0.22)';
-const MEDIA_PREVIEW_SIZE = 250; // Unified size for all circular previews (video, audio, recording)
+const MEDIA_PREVIEW_SIZE = 250;
 
 // Reusable style objects
 const baseModalStyles = {
@@ -27,6 +27,7 @@ const baseButtonStyles = {
   textTransform: 'none',
   transition: 'all 0.2s ease',
   '&:hover': { transform: 'scale(1.02)' },
+  '&:active': { transform: 'scale(0.98)' },
 };
 
 const baseHoverEffect = {
@@ -49,12 +50,13 @@ const dynamicMediaButtonColor = (isActive) => ({
   color: isActive ? 'primary.main' : 'text.secondary',
   bgcolor: isActive
     ? (theme) => alpha(theme.palette.primary.main, 0.1)
-    : (theme) => alpha(theme.palette.grey[200], 0.5),
+    : 'transparent',
   '&:hover': {
-    bgcolor: isActive
-      ? (theme) => alpha(theme.palette.primary.main, 0.2)
-      : (theme) => alpha(theme.palette.grey[300], 0.7),
+    bgcolor: (theme) => alpha(theme.palette.primary.main, 0.2),
     transform: 'scale(1.1)',
+  },
+  '&:active': {
+    transform: 'scale(0.95)',
   },
 });
 
@@ -63,37 +65,39 @@ const TweetPopupStyles = {
     '& .MuiDialog-paper': {
       ...baseModalStyles,
       position: 'absolute',
-      minWidth: { xs: '300px', sm: POPUP_WIDTH, md: '420px' },
-      maxWidth: { xs: '95vw', sm: '420px' },
-      bgcolor: (theme) => alpha(theme.palette.background.paper, 0.95),
-      backdropFilter: 'blur(8px)',
-      p: { xs: 2.5, sm: 3 },
+      minWidth: '300px',
+      maxWidth: '95vw',
+      bgcolor: (theme) => alpha(theme.palette.background.paper, 0.98),
+      backdropFilter: 'blur(12px)',
+      p: 2,
       zIndex: POPUP_Z_INDEX,
       ...baseHoverEffect,
     },
     '&.MuiBackdropRoot': {
-      backgroundColor: (theme) => alpha(theme.palette.grey[900], 0.4),
+      backgroundColor: (theme) => alpha(theme.palette.grey[900], 0.5),
     },
   },
   popupTitle: {
-    display: 'none', // Hidden for accessibility
+    display: 'none',
   },
   popupTextField: {
-    '& .MuiInputBaseRoot': {
-      borderRadius: '24px',
-      padding: '12px 16px',
-      bgcolor: (theme) => theme.palette.grey[100],
+    '& .MuiInputBase-root': {
+      borderRadius: '16px',
+      padding: '10px 14px',
+      bgcolor: (theme) => theme.palette.grey[50],
       transition: 'all 0.2s ease',
+      minHeight: '48px',
     },
-    '& .MuiOutlinedInputNotchedOutline': {
-      borderColor: (theme) => theme.palette.grey[300],
+    '& .MuiOutlinedInput-notchedOutline': {
+      borderColor: (theme) => theme.palette.grey[200],
     },
     '&:hover .MuiOutlinedInputNotchedOutline': {
       borderColor: 'primary.main',
+      boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.1)}`,
     },
-    '&MuiOutlinedInputNotchedOutline': {
-      boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.1)}`,
+    '&.Mui-focused .MuiOutlinedInputNotchedOutline': {
       borderColor: 'primary.main',
+      boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.15)}`,
     },
   },
   popupCharCount: (isError) => ({
@@ -102,12 +106,11 @@ const TweetPopupStyles = {
     ...dynamicCharCountColor(isError),
   }),
   popupFilePreviewContainer: {
-    mt: 1.5,
-    bgcolor: (theme) => theme.palette.grey[100],
-    borderRadius: 3,
-    p: 1.5,
-    transition: 'background-color 0.2s ease',
-    '&:hover': { bgcolor: (theme) => theme.palette.grey[200] },
+    mt: 1,
+    bgcolor: 'transparent',
+    borderRadius: 8,
+    p: 0.5,
+    transition: 'all 0.2s ease',
   },
   popupPreviewMedia: {
     width: '100%',
@@ -115,9 +118,9 @@ const TweetPopupStyles = {
     objectFit: 'cover',
     borderRadius: 4,
     border: '1px solid',
-    borderColor: (theme) => theme.palette.grey[300],
+    borderColor: (theme) => theme.palette.grey[200],
     transition: 'transform 0.2s ease',
-    '&:hover': { transform: 'scale(1.02)' },
+    '&:hover': { transform: 'scale(1.01)' },
   },
   popupCirclePreviewMedia: {
     width: MEDIA_PREVIEW_SIZE,
@@ -125,15 +128,15 @@ const TweetPopupStyles = {
     objectFit: 'cover',
     borderRadius: '50%',
     border: '1px solid',
-    borderColor: (theme) => theme.palette.grey[300],
+    borderColor: (theme) => theme.palette.grey[200],
     backgroundColor: 'black',
     transition: 'transform 0.2s ease',
-    '&:hover': { transform: 'scale(1.02)' },
+    '&:hover': { transform: 'scale(1.01)' },
   },
   popupPreviewPlaceholder: {
     width: '100%',
     height: MEDIA_PREVIEW_SIZE,
-    bgcolor: (theme) => theme.palette.grey[200],
+    bgcolor: (theme) => theme.palette.grey[100],
     borderRadius: 4,
     display: 'flex',
     alignItems: 'center',
@@ -142,61 +145,65 @@ const TweetPopupStyles = {
     color: 'text.secondary',
   },
   popupDeleteFileButton: {
-    position: 'relative',
-    top: 6,
-    right: 6,
-    bgcolor: (theme) => theme.palette.error.main,
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    bgcolor: (theme) => alpha(theme.palette.error.main, 0.8),
     color: 'white',
-    p: 0.75,
-    transition: 'background-color 0.2s ease',
+    p: 0.5,
+    transition: 'all 0.2s ease',
     '&:hover': { bgcolor: (theme) => theme.palette.error.dark },
   },
   popupActionButton: {
     ...baseButtonStyles,
-    px: 3.5,
-    py: 1.25,
-    fontWeight: 500,
+    px: 3,
+    py: 1,
+    fontWeight: 600,
+    borderRadius: '16px',
     '&:hover': { bgcolor: 'primary.dark' },
   },
   popupCancelButton: {
     ...baseButtonStyles,
-    px: 3.5,
-    py: 1.25,
-    bgcolor: (theme) => theme.palette.grey[300],
+    px: 3,
+    py: 1,
+    bgcolor: (theme) => theme.palette.grey[200],
     color: 'text.primary',
-    '&:hover': { bgcolor: (theme) => theme.palette.grey[400] },
+    borderRadius: '16px',
+    '&:hover': { bgcolor: (theme) => theme.palette.grey[300] },
   },
   popupInputBar: {
     display: 'flex',
-    gap: 1.5,
     alignItems: 'center',
-    bgcolor: (theme) => theme.palette.grey[100],
-    borderRadius: '24px',
-    p: 1.25,
-    mt: 1.5,
+    bgcolor: (theme) => theme.palette.grey[50],
+    borderRadius: '16px',
+    p: 0.75,
+    mt: 1,
     position: 'sticky',
     bottom: 0,
     zIndex: BASE_Z_INDEX + 1,
+    boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
+    transition: 'all 0.2s ease',
+    '&:hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.15)' },
   },
   popupMediaButton: (isActive) => ({
-    p: 1.75,
+    p: 1,
     borderRadius: '50%',
     ...dynamicMediaButtonColor(isActive),
   }),
   popupRecordingContainer: {
-    mt: 2,
+    mt: 1,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 1.5,
+    gap: 1,
   },
   popupRecordingChip: {
     bgcolor: (theme) => theme.palette.error.main,
     color: 'white',
     fontWeight: 500,
-    borderRadius: '16px',
-    px: 2.5,
-    py: 0.75,
+    borderRadius: '12px',
+    px: 2,
+    py: 0.5,
     animation: 'pulse 2s infinite',
     '@keyframes pulse': {
       '0%': { transform: 'scale(0.95)' },
@@ -204,10 +211,16 @@ const TweetPopupStyles = {
       '100%': { transform: 'scale(0.95)' },
     },
   },
-  popupVideoPreviewContainer: {
+  popupRecordingControls: {
     display: 'flex',
+    gap: 1,
+    mt: 0.5,
+    justifyContent: 'center',
+  },
+  popupVideoPreviewContainer: {
     justifyContent: 'center',
     alignItems: 'center',
+    border: '50%',
     mt: 1.5,
     animation: 'fadeIn 0.3s ease-in',
     '@keyframes fadeIn': {
@@ -226,27 +239,20 @@ const TweetPopupStyles = {
     boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
     transition: 'all 0.3s ease',
   },
-  popupAudioPreviewContainer: {
+  popupAudioVisualizer: (isLive = false) => ({
+    position: 'absolute',
+    width: '30%',
+    height: '30%',
+    display: 'flex',
     alignItems: 'center',
-    animation: 'fadeIn 0.3s ease-in',
-    transition: 'all 0.2s ease',
-    '&:hover': {
-      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-    },
-    '@keyframes fadeIn': {
-      from: { opacity: 0, transform: 'scale(0.9)' },
-      to: { opacity: 1, transform: 'scale(1)' },
-    },
-    animation: 'pulse 2s infinite',
-    '@keyframes pulse': {
-      '0%': { backgroundColor: (theme) => alpha(theme.palette.error.light, 0.2) },
-      '50%': { backgroundColor: (theme) => alpha(theme.palette.error.light, 0.4) },
-      '100%': { backgroundColor: (theme) => alpha(theme.palette.error.light, 0.2) },
-    },
-  },
+    gap: '2px',
+    opacity: isLive ? 1 : 0,
+    transition: 'opacity 0.2s ease',
+    pointerEvents: 'none',
+  }),
   popupVisualizerBar: (index) => ({
-    width: '2px',
-    height: '100%',
+    width: '40px',
+    height: '30%',
     bgcolor: 'primary.main',
     borderRadius: '1px',
     animation: `pulse${index} ${0.5 + (index % 5) * 0.15}s ease-in-out infinite alternate`,
@@ -259,14 +265,15 @@ const TweetPopupStyles = {
   popupAudioPlayer: {
     width: '100%',
     height: '40px',
-    bgcolor: (theme) => theme.palette.grey[100],
+    bgcolor: (theme) => theme.palette.grey[50],
     borderRadius: '16px',
-    p: 1,
+    p: 0.75,
     position: 'relative',
     overflow: 'hidden',
     transition: 'all 0.2s ease',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.1)',
     '&:hover': {
-      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
     },
     '& audio': {
       width: '100%',
@@ -279,45 +286,33 @@ const TweetPopupStyles = {
       },
     },
   },
-  popupAudioVisualizer: (isLive = false) => ({
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1px',
-    padding: '0 4px',
-    opacity: isLive ? 1 : 0,
-    transition: 'opacity 0.2s ease',
-    pointerEvents: 'none',
-  }),
   popupProgressContainer: {
-    mt: 1.5,
+    mt: 1,
     display: 'flex',
     flexDirection: 'column',
-    gap: 0.75,
+    gap: 0.5,
   },
   popupDialogPaper: {
     position: 'absolute',
-    m: 0,
-    width: { xs: '95vw', sm: POPUP_WIDTH },
-    maxHeight: { xs: '85vh', sm: POPUP_HEIGHT },
+    m: 1,
+    padding: '5px',
+    width: { xs: '95vw', sm: '600px' },
+    maxWidth: { sm: '90vw' },
+    maxHeight: '90vh',
     overflowY: 'auto',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    backdropFilter: 'blur(8px)',
+    backgroundColor: (theme) => alpha(theme.palette.background.paper, 0.98),
+    backdropFilter: 'blur(12px)',
     borderRadius: 3,
     boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
     zIndex: POPUP_Z_INDEX,
   },
   popupDialogBackdrop: {
-    backgroundColor: (theme) => alpha(theme.palette.grey[900], 0.4),
+    backgroundColor: (theme) => alpha(theme.palette.grey[900], 0.5),
   },
   popupContentBox: {
     display: 'flex',
     flexDirection: 'column',
-    gap: 2,
+    gap: 1.5,
     p: { xs: 2, sm: 2.5 },
   },
   popupErrorAlert: {
@@ -336,9 +331,9 @@ const TweetPopupStyles = {
   },
   popupButtonContainer: {
     display: 'flex',
-    justifyContent: 'space-between',
-    mt: 2.5,
-    gap: 1.5,
+    justifyContent: 'flex-end',
+    mt: 1.5,
+    gap: 1,
   },
 };
 
