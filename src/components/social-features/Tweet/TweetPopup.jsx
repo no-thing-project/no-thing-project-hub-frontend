@@ -18,7 +18,7 @@ import {
   MenuItem,
   useMediaQuery,
 } from '@mui/material';
-import { PhotoCamera, Mic, Videocam, Stop, Schedule, Pause, Delete, PlayArrow, Close } from '@mui/icons-material';
+import { Mic, Videocam, Stop, Schedule, Pause, Delete, PlayArrow, Close, AttachFile } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import { isEqual } from 'lodash';
@@ -449,7 +449,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose, parentTweet, onBoardUpdate }) => 
             aria-label="Upload media"
             disabled={loading || recording}
           >
-            <PhotoCamera fontSize="small" />
+            <AttachFile fontSize="small" />
           </IconButton>
         </Tooltip>
         <Box sx={{ position: 'relative', flex: 1 }}>
