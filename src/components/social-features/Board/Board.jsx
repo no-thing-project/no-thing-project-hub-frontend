@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback, useMemo, useReducer, memo } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo, memo, useReducer } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -31,7 +31,7 @@ import { useBoards } from '../../../hooks/useBoards';
 import { useNotification } from '../../../context/NotificationContext';
 import throttle from 'lodash/throttle';
 import debounce from 'lodash/debounce';
-import { useDeferredValue } from 'react';
+import ReactDOM from 'react-dom';
 
 // Constants
 const MAX_TWEET_LENGTH = 1000;
@@ -42,37 +42,45 @@ const Z_INDEX = {
   MODAL: 110,
 };
 
-// Reducer for tweet-related state
-const tweetReducer = (state, action) => {
+// Reducer for tweet popup state
+const popupReducer = (state, action) => {
   switch (action.type) {
     case 'OPEN_POPUP':
       return {
-        ...state,
-        tweetPopup: { visible: true, x: action.x, y: action.y, clientX: action.clientX, clientY: action.clientY },
+        visible: true,
+        x: action.x,
+        y: action.y,
+        clientX: action.clientX,
+        clientY: action.clientY,
         replyTweet: action.replyTweet || null,
       };
     case 'CLOSE_POPUP':
-      return { ...state, tweetPopup: { visible: false, x: 0, y: 0, clientX: 0, clientY: 0 }, replyTweet: null };
+      return { visible: false, x: 0, y: 0, clientX: 0, clientY: 0, replyTweet: null };
+    default:
+      return state;
+  }
+};
+
+// Reducer for edit modal state
+const editModalReducer = (state, action) => {
+  switch (action.type) {
     case 'SET_EDIT_MODAL':
       return {
-        ...state,
-        editTweetModal: action.payload,
+        tweet: action.payload,
         newStatus: action.payload?.status || 'approved',
         selectedBoardId: action.payload?.board_id || '',
       };
     case 'CLEAR_EDIT_MODAL':
-      return { ...state, editTweetModal: null, newStatus: '', selectedBoardId: '' };
+      return { tweet: null, newStatus: '', selectedBoardId: '' };
     case 'UPDATE_EDIT_CONTENT':
       return {
         ...state,
-        editTweetModal: { ...state.editTweetModal, content: { ...state.editTweetModal.content, value: action.value } },
+        tweet: { ...state.tweet, content: { ...state.tweet.content, value: action.value } },
       };
     case 'SET_NEW_STATUS':
       return { ...state, newStatus: action.status };
     case 'SET_SELECTED_BOARD':
       return { ...state, selectedBoardId: action.boardId };
-    case 'SET_HIGHLIGHTED_TWEET':
-      return { ...state, highlightedTweetId: action.tweetId };
     default:
       return state;
   }
@@ -85,7 +93,6 @@ const usePermissions = (userRole, currentUser, tweet = null, tweets = null, bypa
     const isModerator = userRole === 'moderator';
     const isViewer = userRole === 'viewer';
 
-    // Compute permissions for a single tweet
     const computePermissions = (t) => {
       const isTweetOwner =
         t &&
@@ -107,7 +114,6 @@ const usePermissions = (userRole, currentUser, tweet = null, tweets = null, bypa
       };
     };
 
-    // If tweets array is provided, return a Map of permissions
     if (tweets && Array.isArray(tweets)) {
       const permissionsMap = new Map();
       tweets.forEach((t) => {
@@ -118,9 +124,8 @@ const usePermissions = (userRole, currentUser, tweet = null, tweets = null, bypa
       return permissionsMap;
     }
 
-    // Otherwise, return permissions for a single tweet or general permissions
     return computePermissions(tweet);
-  }, [userRole, currentUser, tweet, tweets, bypassOwnership]);
+  }, [userRole, currentUser?.anonymous_id, currentUser?.username, tweet?.tweet_id, tweets?.length, bypassOwnership]);
 };
 
 const Board = ({
@@ -140,20 +145,27 @@ const Board = ({
   const [page, setPage] = useState(1);
   const [boards, setBoards] = useState(availableBoards);
   const [isSaving, setIsSaving] = useState(false);
+  const [highlightedTweetId, setHighlightedTweetId] = useState(null);
 
-  // Tweet state management with reducer
-  const [tweetState, dispatch] = useReducer(tweetReducer, {
-    tweetPopup: { visible: false, x: 0, y: 0, clientX: 0, clientY: 0 },
+  // Split reducers for better state isolation
+  const [popupState, dispatchPopup] = useReducer(popupReducer, {
+    visible: false,
+    x: 0,
+    y: 0,
+    clientX: 0,
+    clientY: 0,
     replyTweet: null,
-    highlightedTweetId: null,
-    editTweetModal: null,
+  });
+
+  const [editModalState, dispatchEditModal] = useReducer(editModalReducer, {
+    tweet: null,
     newStatus: '',
     selectedBoardId: '',
   });
 
   const {
     tweets,
-    setTweets,
+    updateTweet,
     loading: isLoading,
     error,
     fetchTweets,
@@ -185,7 +197,6 @@ const Board = ({
   // Permissions
   const permissions = usePermissions(userRole, currentUser);
   const tweetPermissionsMap = usePermissions(userRole, currentUser, null, tweets);
-  const deferredTweets = useDeferredValue(tweets);
 
   // Debounced refresh function
   const debouncedRefresh = useMemo(
@@ -201,16 +212,12 @@ const Board = ({
         } catch (err) {
           if (err.name !== 'AbortError') {
             showNotification(err.message || 'Failed to refresh board', 'error');
-            if (err.message?.includes('Board not found')) {
-              showNotification('Board not found, redirecting to boards list...', 'error');
-              setTimeout(() => navigate('/boards'), 2000);
-            }
           }
         } finally {
           isFetching.current = false;
         }
       }, 1000),
-    [fetchTweets, showNotification, navigate, centerBoard]
+    [fetchTweets, showNotification, centerBoard]
   );
 
   // Initial fetch and centering
@@ -227,10 +234,6 @@ const Board = ({
       } catch (err) {
         if (err.name !== 'AbortError') {
           showNotification(err.message || 'Failed to load tweets', 'error');
-          if (err.message?.includes('Board not found')) {
-            showNotification('Board not found, redirecting to boards list...', 'error');
-            setTimeout(() => navigate('/boards'), 2000);
-          }
         }
       } finally {
         isFetching.current = false;
@@ -242,11 +245,11 @@ const Board = ({
       controller.abort();
       debouncedRefresh.cancel();
     };
-  }, [token, boardId, fetchTweets, showNotification, navigate, centerBoard, debouncedRefresh]);
+  }, [token, boardId, fetchTweets, showNotification, centerBoard, debouncedRefresh]);
 
   // Fetch boards list for edit modal
   useEffect(() => {
-    if (!tweetState.editTweetModal || boards.length > 0 || !permissions.canMoveBoard) return;
+    if (!editModalState.tweet || boards.length > 0 || !permissions.canMoveBoard) return;
 
     const controller = new AbortController();
     const fetchBoards = async () => {
@@ -263,77 +266,35 @@ const Board = ({
 
     fetchBoards();
     return () => controller.abort();
-  }, [tweetState.editTweetModal, boards, fetchBoardsList, showNotification, permissions.canMoveBoard]);
+  }, [editModalState.tweet, boards, fetchBoardsList, showNotification, permissions.canMoveBoard]);
 
-  /**
-   * Handles optimistic updates for tweets
-   * @param {Object} tweet - The tweet to update or create
-   * @param {Function} optimisticUpdateFn - The function to apply the optimistic update (receives current tweets)
-   * @param {Function} serverUpdateFn - The async function to perform the server update
-   * @param {Function} rollbackFn - The rollback function (receives current tweets)
-   * @param {boolean} isNewTweet - Whether this is a new tweet creation
-   */
   const handleOptimisticUpdate = useCallback(
     async (tweet, optimisticUpdateFn, serverUpdateFn, rollbackFn, isNewTweet = false) => {
-      // For existing tweets, find the index; for new tweets, skip index check
-      const index = isNewTweet ? -1 : tweets.findIndex((t) => t.tweet_id === tweet.tweet_id);
-      if (!isNewTweet && index === -1) {
-        console.warn('Tweet not found for update:', tweet.tweet_id);
-        return;
-      }
-
-      // Store original tweets for rollback
-      const originalTweets = [...tweets];
-
-      // Apply optimistic update using setTweets
-      setTweets((prevTweets) => {
-        const newTweets = [...prevTweets];
-        optimisticUpdateFn(newTweets);
-        return newTweets;
-      });
-
+      const tweetId = tweet.tweet_id;
       try {
+        optimisticUpdateFn(tweetId, tweets);
         await serverUpdateFn();
         showNotification(isNewTweet ? 'Tweet created successfully!' : 'Tweet updated successfully!', 'success');
       } catch (err) {
-        // Rollback using setTweets
-        setTweets((prevTweets) => {
-          const newTweets = [...prevTweets];
-          rollbackFn(newTweets);
-          return newTweets;
-        });
+        rollbackFn(tweetId, tweets);
         showNotification(err.message || (isNewTweet ? 'Failed to create tweet' : 'Failed to update tweet'), 'error');
       }
     },
-    [tweets, setTweets, showNotification]
+    [tweets, showNotification]
   );
 
-  /**
-   * Handles tweet creation with optimistic updates
-   * @param {Object} content - Tweet content
-   * @param {number} x - X position
-   * @param {number} y - Y position
-   * @param {Date} scheduledAt - Scheduled time
-   * @param {Array} files - Attached files
-   * @param {Function} onProgress - Progress callback
-   */
   const handleTweetCreation = useCallback(
     async (content, x, y, scheduledAt, files, onProgress) => {
-      console.log('handleTweetCreation called with:', { content, x, y, scheduledAt, files });
-
       if (!permissions.canCreate) {
         showNotification('You do not have permission to create tweets', 'error');
-        console.log('Permission check failed: canCreate is false');
         return;
       }
       if (!content?.value?.trim() && (!files || files.length === 0)) {
         showNotification('Tweet must have either content or files', 'error');
-        console.log('Content validation failed: both content and files are empty');
         return;
       }
       if (content?.value?.length > MAX_TWEET_LENGTH) {
         showNotification(`Tweet exceeds ${MAX_TWEET_LENGTH} character limit`, 'error');
-        console.log('Content validation failed: exceeds max length');
         return;
       }
 
@@ -346,7 +307,7 @@ const Board = ({
           metadata: { files: files ? files.map((f) => ({ fileKey: f.name, url: URL.createObjectURL(f), contentType: f.type })) : [] },
         },
         position: { x, y },
-        parent_tweet_id: tweetState.replyTweet?.tweet_id || null,
+        parent_tweet_id: popupState.replyTweet?.tweet_id || null,
         status: 'approved',
         created_at: new Date().toISOString(),
         anonymous_id: currentUser.anonymous_id,
@@ -356,29 +317,17 @@ const Board = ({
         board_id: boardId,
       };
 
-      console.log('Attempting optimistic update for new tweet:', optimisticTweet);
-
       await handleOptimisticUpdate(
         optimisticTweet,
-        (tweets) => {
-          tweets.unshift(optimisticTweet);
+        (tweetId, tweets) => {
+          updateTweet(tweetId, optimisticTweet, true);
         },
         async () => {
-          console.log('Calling createNewTweet with:', {
-            content,
-            x,
-            y,
-            parentTweetId: tweetState.replyTweet?.tweet_id,
-            isPinned: false,
-            status: 'approved',
-            scheduledAt,
-            files,
-          });
           const newTweet = await createNewTweet(
             content,
             x,
             y,
-            tweetState.replyTweet?.tweet_id || null,
+            popupState.replyTweet?.tweet_id || null,
             false,
             'approved',
             scheduledAt || null,
@@ -386,33 +335,19 @@ const Board = ({
             files || [],
             onProgress
           );
-          console.log('createNewTweet response:', newTweet);
-          setTweets((prevTweets) => {
-            const idx = prevTweets.findIndex((t) => t.tweet_id === tempTweetId);
-            if (idx !== -1) {
-              const newTweets = [...prevTweets];
-              newTweets[idx] = newTweet;
-              return newTweets;
-            }
-            return prevTweets;
-          });
+          updateTweet(tempTweetId, newTweet);
         },
-        (tweets) => {
-          const idx = tweets.findIndex((t) => t.tweet_id === tempTweetId);
-          if (idx !== -1) tweets.splice(idx, 1);
+        (tweetId) => {
+          updateTweet(tweetId, null);
         },
-        true // isNewTweet flag
+        true
       );
 
-      dispatch({ type: 'CLOSE_POPUP' });
+      dispatchPopup({ type: 'CLOSE_POPUP' });
     },
-    [permissions.canCreate, createNewTweet, tweetState.replyTweet, showNotification, currentUser, boardId, setTweets, handleOptimisticUpdate]
+    [permissions.canCreate, createNewTweet, popupState.replyTweet, showNotification, currentUser, boardId, updateTweet, handleOptimisticUpdate]
   );
 
-  /**
-   * Handles replying to a tweet
-   * @param {Object} tweet - The tweet to reply to
-   */
   const handleReply = useCallback(
     (tweet) => {
       if (!permissions.canReply) {
@@ -421,12 +356,11 @@ const Board = ({
       }
       const clientX = tweet.position.x * scale + offset.x;
       const clientY = tweet.position.y * scale + offset.y;
-      dispatch({ type: 'OPEN_POPUP', x: tweet.position.x, y: tweet.position.y, clientX, clientY, replyTweet: tweet });
+      dispatchPopup({ type: 'OPEN_POPUP', x: tweet.position.x, y: tweet.position.y, clientX, clientY, replyTweet: tweet });
     },
     [permissions.canReply, scale, offset, showNotification]
   );
 
-  // Throttled popup trigger
   const throttlePopup = useMemo(
     () =>
       throttle((x, y, clientX, clientY) => {
@@ -434,7 +368,7 @@ const Board = ({
           showNotification('You do not have permission to create tweets', 'error');
           return;
         }
-        dispatch({ type: 'OPEN_POPUP', x, y, clientX, clientY });
+        dispatchPopup({ type: 'OPEN_POPUP', x, y, clientX, clientY });
       }, 300),
     [permissions.canCreate, showNotification]
   );
@@ -461,10 +395,6 @@ const Board = ({
     [handleTouchEnd, throttlePopup]
   );
 
-  /**
-   * Handles editing a tweet
-   * @param {Object} tweet - The tweet to edit
-   */
   const handleEditTweet = useCallback(
     (tweet) => {
       const tweetPermissions = tweetPermissionsMap.get(tweet.tweet_id);
@@ -472,15 +402,11 @@ const Board = ({
         showNotification('You do not have permission to edit this tweet', 'error');
         return;
       }
-      dispatch({ type: 'SET_EDIT_MODAL', payload: { ...tweet, availableBoards: boards } });
+      dispatchEditModal({ type: 'SET_EDIT_MODAL', payload: { ...tweet, availableBoards: boards } });
     },
     [tweetPermissionsMap, boards, showNotification]
   );
 
-  /**
-   * Handles pinning/unpinning a tweet
-   * @param {Object} tweet - The tweet to pin/unpin
-   */
   const handlePinToggle = useCallback(
     async (tweet) => {
       if (!permissions.canPin) {
@@ -489,97 +415,79 @@ const Board = ({
       }
       await handleOptimisticUpdate(
         tweet,
-        (tweets) => {
-          const idx = tweets.findIndex((t) => t.tweet_id === tweet.tweet_id);
-          if (idx !== -1) {
-            tweets[idx] = { ...tweets[idx], is_pinned: !tweet.is_pinned };
-          }
+        (tweetId, tweets) => {
+          updateTweet(tweetId, { ...tweets.find((t) => t.tweet_id === tweetId), is_pinned: !tweet.is_pinned });
         },
         async () => {
           const action = tweet.is_pinned ? unpinTweet : pinTweet;
           await action(tweet.tweet_id);
         },
-        (tweets) => {
-          const idx = tweets.findIndex((t) => t.tweet_id === tweet.tweet_id);
-          if (idx !== -1) {
-            tweets[idx] = { ...tweets[idx], is_pinned: tweet.is_pinned };
-          }
+        (tweetId, tweets) => {
+          updateTweet(tweetId, { ...tweets.find((t) => t.tweet_id === tweetId), is_pinned: tweet.is_pinned });
         },
         false
       );
       showNotification(`Tweet ${tweet.is_pinned ? 'unpinned' : 'pinned'} successfully!`, 'success');
     },
-    [permissions.canPin, pinTweet, unpinTweet, showNotification, handleOptimisticUpdate]
+    [permissions.canPin, pinTweet, unpinTweet, showNotification, updateTweet, handleOptimisticUpdate]
   );
 
-  /**
-   * Handles saving an edited tweet
-   */
   const handleSaveEditedTweet = useCallback(
     async () => {
-      if (!tweetState.editTweetModal) return;
-      const tweetPermissions = tweetPermissionsMap.get(tweetState.editTweetModal.tweet_id);
+      if (!editModalState.tweet) return;
+      const tweetPermissions = tweetPermissionsMap.get(editModalState.tweet.tweet_id);
       if (!tweetPermissions?.canEdit) {
         showNotification('You do not have permission to edit this tweet', 'error');
         return;
       }
-      if (!tweetState.editTweetModal.content?.value?.trim()) {
+      if (!editModalState.tweet.content?.value?.trim()) {
         showNotification('Tweet content cannot be empty', 'error');
         return;
       }
-      if (tweetState.editTweetModal.content.value.length > MAX_TWEET_LENGTH) {
+      if (editModalState.tweet.content.value.length > MAX_TWEET_LENGTH) {
         showNotification(`Tweet exceeds ${MAX_TWEET_LENGTH} character limit`, 'error');
         return;
       }
 
       setIsSaving(true);
       const updatedTweet = {
-        ...tweetState.editTweetModal,
+        ...editModalState.tweet,
         content: {
-          type: tweetState.editTweetModal.content?.type || 'text',
-          value: tweetState.editTweetModal.content?.value || '',
-          metadata: tweetState.editTweetModal.content?.metadata || {},
+          type: editModalState.tweet.content?.type || 'text',
+          value: editModalState.tweet.content?.value || '',
+          metadata: editModalState.tweet.content?.metadata || {},
         },
-        status: tweetPermissions.canChangeStatus ? tweetState.newStatus : tweetState.editTweetModal.status,
-        board_id: tweetPermissions.canMoveBoard ? tweetState.selectedBoardId : tweetState.editTweetModal.board_id,
+        status: tweetPermissions.canChangeStatus ? editModalState.newStatus : editModalState.tweet.status,
+        board_id: tweetPermissions.canMoveBoard ? editModalState.selectedBoardId : editModalState.tweet.board_id,
       };
 
       await handleOptimisticUpdate(
         updatedTweet,
-        (tweets) => {
-          const idx = tweets.findIndex((t) => t.tweet_id === updatedTweet.tweet_id);
-          if (idx !== -1) {
-            tweets[idx] = { ...tweets[idx], ...updatedTweet };
-          }
+        (tweetId, tweets) => {
+          updateTweet(tweetId, updatedTweet);
         },
         async () => {
-          await updateExistingTweet(tweetState.editTweetModal.tweet_id, {
+          await updateExistingTweet(editModalState.tweet.tweet_id, {
             content: updatedTweet.content,
-            status: tweetPermissions.canChangeStatus ? tweetState.newStatus : tweetState.editTweetModal.status,
-            position: tweetState.editTweetModal.position,
+            status: tweetPermissions.canChangeStatus ? editModalState.newStatus : editModalState.tweet.status,
+            position: editModalState.tweet.position,
           });
-          if (tweetPermissions.canMoveBoard && tweetState.editTweetModal.board_id !== tweetState.selectedBoardId) {
-            await moveTweet(tweetState.editTweetModal.tweet_id, tweetState.selectedBoardId);
+          if (tweetPermissions.canMoveBoard && editModalState.tweet.board_id !== editModalState.selectedBoardId) {
+            await moveTweet(editModalState.tweet.tweet_id, editModalState.selectedBoardId);
           }
         },
-        (tweets) => {
-          const idx = tweets.findIndex((t) => t.tweet_id === updatedTweet.tweet_id);
-          if (idx !== -1) {
-            tweets[idx] = { ...tweets[idx], ...tweetState.editTweetModal };
-          }
+        (tweetId, tweets) => {
+          updateTweet(tweetId, tweets.find((t) => t.tweet_id === tweetId));
         },
         false
       );
 
       setIsSaving(false);
-      dispatch({ type: 'CLEAR_EDIT_MODAL' });
+      dispatchEditModal({ type: 'CLEAR_EDIT_MODAL' });
     },
-    [tweetState, updateExistingTweet, moveTweet, showNotification, tweetPermissionsMap, handleOptimisticUpdate]
+    [editModalState, updateExistingTweet, moveTweet, showNotification, tweetPermissionsMap, updateTweet, handleOptimisticUpdate]
   );
 
-  /**
-   * Loads more tweets for pagination
-   */
   const handleLoadMore = useCallback(async () => {
     if (isFetching.current || tweets.length >= pagination.total) return;
     isFetching.current = true;
@@ -595,11 +503,6 @@ const Board = ({
     }
   }, [fetchTweets, page, tweets, pagination, showNotification]);
 
-  /**
-   * Gets related tweet IDs for highlighting
-   * @param {string} tweetId - The tweet ID
-   * @returns {string[]} Array of related tweet IDs
-   */
   const getRelatedTweetIds = useCallback(
     (tweetId) => {
       const relatedIds = new Set([tweetId]);
@@ -613,9 +516,6 @@ const Board = ({
     [tweets]
   );
 
-  /**
-   * Toggles between list and board views
-   */
   const handleViewToggle = useCallback(() => {
     setIsListView((prev) => {
       if (prev) centerBoard();
@@ -623,14 +523,9 @@ const Board = ({
     });
   }, [centerBoard]);
 
-  // Filter and sort valid tweets
   const validTweets = useMemo(() => {
-    if (!Array.isArray(deferredTweets)) {
-      console.warn('Tweets is not an array:', deferredTweets);
-      return [];
-    }
     const seenIds = new Set();
-    return deferredTweets
+    return tweets
       .filter((tweet) => {
         const isValid =
           tweet &&
@@ -648,14 +543,12 @@ const Board = ({
           tweet.content.type &&
           tweet.content.value !== undefined &&
           tweet.content.metadata;
-        if (!isValid) console.warn('Invalid tweet:', tweet);
         seenIds.add(tweet.tweet_id);
         return isValid;
       })
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  }, [deferredTweets]);
+  }, [tweets]);
 
-  // Memoized tweet props
   const tweetProps = useMemo(
     () => ({
       currentUser,
@@ -663,37 +556,33 @@ const Board = ({
       onLike: toggleLikeTweet,
       onDelete: deleteExistingTweet,
       onReply: handleReply,
-      onReplyHover: (tweetId) => dispatch({ type: 'SET_HIGHLIGHTED_TWEET', tweetId }),
+      onReplyHover: setHighlightedTweetId,
       onEdit: handleEditTweet,
       onPinToggle: handlePinToggle,
-      availableBoards: tweetState.editTweetModal?.availableBoards || boards,
+      availableBoards: editModalState.tweet?.availableBoards || boards,
       boardId,
       isListView,
     }),
     [
-      currentUser,
+      currentUser.anonymous_id,
+      currentUser.username,
       userRole,
       toggleLikeTweet,
       deleteExistingTweet,
       handleReply,
       handleEditTweet,
       handlePinToggle,
-      tweetState.editTweetModal,
-      boards,
+      editModalState.tweet?.availableBoards,
+      boards.length,
       boardId,
       isListView,
     ]
   );
 
-  /**
-   * Renders a single tweet
-   * @param {Object} tweet - The tweet to render
-   * @returns {JSX.Element} The rendered tweet component
-   */
   const renderTweet = useCallback(
     (tweet) => {
       const replyCount = tweet.child_tweet_ids?.length || 0;
-      const relatedTweetIds = tweetState.highlightedTweetId ? getRelatedTweetIds(tweetState.highlightedTweetId) : [];
+      const relatedTweetIds = highlightedTweetId ? getRelatedTweetIds(highlightedTweetId) : [];
       const tweetContent = (
         <TweetContent
           key={`content-${tweet.tweet_id}`}
@@ -740,27 +629,22 @@ const Board = ({
         </DraggableTweet>
       );
     },
-    [tweetState.highlightedTweetId, getRelatedTweetIds, tweets, tweetProps, updateExistingTweet, currentUser, userRole, isListView]
+    [highlightedTweetId, getRelatedTweetIds, tweets, tweetProps, updateExistingTweet, currentUser.anonymous_id, currentUser.username, userRole, isListView]
   );
 
-  // Memoized rendered tweets
   const renderedTweets = useMemo(() => {
     if (!validTweets.length) return null;
     return <AnimatePresence>{validTweets.map((tweet) => renderTweet(tweet))}</AnimatePresence>;
   }, [validTweets, renderTweet]);
 
-  /**
-   * Renders the error state
-   * @returns {JSX.Element} The error UI
-   */
   const renderError = useCallback(
     () => (
-      <Box sx={BoardStyles.boardErrorContainer}> 
-        <Typography sx={BoardStyles.boardErrorText}>{error || 'An error occurred'}</Typography> 
+      <Box sx={BoardStyles.boardErrorContainer}>
+        <Typography sx={BoardStyles.boardErrorText}>{error || 'An error occurred'}</Typography>
         <Button
           variant="contained"
           onClick={debouncedRefresh}
-          sx={BoardStyles.boardErrorButton} 
+          sx={BoardStyles.boardErrorButton}
           aria-label="Retry fetching tweets"
         >
           Retry
@@ -770,7 +654,6 @@ const Board = ({
     [error, debouncedRefresh]
   );
 
-  // Render loading state
   if (isLoading && page === 1) return <LoadingSpinner />;
 
   return (
@@ -780,7 +663,7 @@ const Board = ({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.4 }}
       style={{
-        ...BoardStyles.boardContainer, 
+        ...BoardStyles.boardContainer,
         overflow: 'hidden',
         height: '100vh',
         width: '100vw',
@@ -789,24 +672,22 @@ const Board = ({
       }}
     >
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-        {/* Back Button */}
-        <Box sx={BoardStyles.boardBackButtonContainer}> 
+        <Box sx={BoardStyles.boardBackButtonContainer}>
           <Tooltip title="Go back">
             <IconButton
               onClick={() => navigate(-1)}
               aria-label="Go back to previous page"
-              sx={BoardStyles.boardBackButton} 
+              sx={BoardStyles.boardBackButton}
             >
               <ArrowBack fontSize="inherit" />
             </IconButton>
           </Tooltip>
         </Box>
 
-        {/* Main Board Area */}
         <Box
           ref={boardMainRef}
           sx={{
-            ...BoardStyles.boardMain(isListView, dragging), 
+            ...BoardStyles.boardMain(isListView, dragging),
             touchAction: 'none',
             userSelect: 'none',
             height: '100%',
@@ -833,9 +714,9 @@ const Board = ({
             transition={{ duration: 0.3, ease: 'easeInOut' }}
           >
             {isListView ? (
-              <Box sx={BoardStyles.boardListViewContainer}> 
+              <Box sx={BoardStyles.boardListViewContainer}>
                 {validTweets.length === 0 ? (
-                  <Typography sx={BoardStyles.boardEmptyMessage}> 
+                  <Typography sx={BoardStyles.boardEmptyMessage}>
                     No tweets yet. Create one to get started!
                   </Typography>
                 ) : (
@@ -862,14 +743,14 @@ const Board = ({
                 )}
               </Box>
             ) : (
-              <Box sx={BoardStyles.boardCanvas(scale, offset)}> 
-                <Box sx={BoardStyles.boardTitleContainer(scale)}> 
-                  <Typography sx={BoardStyles.boardTitle(boardTitle.length)}> 
+              <Box sx={BoardStyles.boardCanvas(scale, offset)}>
+                <Box sx={BoardStyles.boardTitleContainer(scale)}>
+                  <Typography sx={BoardStyles.boardTitle(boardTitle.length)}>
                     {boardTitle}
                   </Typography>
                 </Box>
                 {validTweets.length === 0 ? (
-                  <Box sx={BoardStyles.boardEmptyMessage}> 
+                  <Box sx={BoardStyles.boardEmptyMessage}>
                     <Typography variant="body1" color="text.secondary">
                       No tweets yet. Tap or click anywhere to create one!
                     </Typography>
@@ -877,14 +758,14 @@ const Board = ({
                 ) : (
                   renderedTweets
                 )}
-                {tweetState.tweetPopup.visible && (
+                {popupState.visible && (
                   <TweetPopup
-                    x={tweetState.tweetPopup.x}
-                    y={tweetState.tweetPopup.y}
-                    clientX={tweetState.tweetPopup.clientX}
-                    clientY={tweetState.tweetPopup.clientY}
+                    x={popupState.x}
+                    y={popupState.y}
+                    clientX={popupState.clientX}
+                    clientY={popupState.clientY}
                     onSubmit={handleTweetCreation}
-                    onClose={() => dispatch({ type: 'CLOSE_POPUP' })}
+                    onClose={() => dispatchPopup({ type: 'CLOSE_POPUP' })}
                     scale={scale}
                     offset={offset}
                     zIndex={Z_INDEX.POPUP}
@@ -894,10 +775,9 @@ const Board = ({
             )}
           </motion.div>
 
-          {/* Controls */}
           <Box
             sx={{
-              ...BoardStyles.boardControlsContainer, 
+              ...BoardStyles.boardControlsContainer,
               position: 'fixed',
               bottom: { xs: 8, sm: 16 },
               right: { xs: 8, sm: 16 },
@@ -913,7 +793,7 @@ const Board = ({
                 onClick={handleViewToggle}
                 aria-label={isListView ? 'Show as board' : 'Show as list'}
                 sx={{
-                  ...BoardStyles.boardViewToggleButton, 
+                  ...BoardStyles.boardViewToggleButton,
                   fontSize: { xs: '0.75rem', sm: '0.875rem' },
                   padding: { xs: '4px 8px', sm: '6px 16px' },
                 }}
@@ -926,7 +806,7 @@ const Board = ({
                 onClick={debouncedRefresh}
                 size="small"
                 aria-label="Refresh board"
-                sx={BoardStyles.boardZoomButton} 
+                sx={BoardStyles.boardZoomButton}
                 disabled={isLoading}
               >
                 <Refresh fontSize="small" />
@@ -947,7 +827,7 @@ const Board = ({
                           onClick={() => handleZoomButton('reset')}
                           size="small"
                           aria-label="Reset board zoom to 100%"
-                          sx={BoardStyles.boardZoomButton} 
+                          sx={BoardStyles.boardZoomButton}
                         >
                           <RestartAlt fontSize="small" />
                         </IconButton>
@@ -960,14 +840,14 @@ const Board = ({
                     onClick={() => handleZoomButton('out')}
                     size="small"
                     aria-label="Zoom out board"
-                    sx={BoardStyles.boardZoomButton} 
+                    sx={BoardStyles.boardZoomButton}
                   >
                     <Remove fontSize="small" />
                   </IconButton>
                 </Tooltip>
                 <Typography
                   sx={{
-                    ...BoardStyles.boardZoomText, 
+                    ...BoardStyles.boardZoomText,
                     fontSize: { xs: '0.75rem', sm: '0.875rem' },
                   }}
                 >
@@ -978,7 +858,7 @@ const Board = ({
                     onClick={() => handleZoomButton('in')}
                     size="small"
                     aria-label="Zoom in board"
-                    sx={BoardStyles.boardZoomButton} 
+                    sx={BoardStyles.boardZoomButton}
                   >
                     <Add fontSize="small" />
                   </IconButton>
@@ -988,19 +868,18 @@ const Board = ({
           </Box>
         </Box>
 
-        {/* Edit Tweet Modal */}
-        {tweetState.editTweetModal && (
+        {editModalState.tweet && (
           <Dialog
             open
-            onClose={() => dispatch({ type: 'CLEAR_EDIT_MODAL' })}
+            onClose={() => dispatchEditModal({ type: 'CLEAR_EDIT_MODAL' })}
             maxWidth="sm"
             fullWidth
-            sx={{ ...BoardStyles.boardEditDialog, zIndex: Z_INDEX.MODAL }} 
-            onKeyDown={(e) => e.key === 'Escape' && dispatch({ type: 'CLEAR_EDIT_MODAL' })}
+            sx={{ ...BoardStyles.boardEditDialog, zIndex: Z_INDEX.MODAL }}
+            onKeyDown={(e) => e.key === 'Escape' && dispatchEditModal({ type: 'CLEAR_EDIT_MODAL' })}
             aria-describedby="edit-tweet-description"
           >
-            <DialogTitle sx={BoardStyles.boardEditDialogTitle}>Edit Tweet</DialogTitle> 
-            <DialogContent sx={BoardStyles.boardEditDialogContent}> 
+            <DialogTitle sx={BoardStyles.boardEditDialogTitle}>Edit Tweet</DialogTitle>
+            <DialogContent sx={BoardStyles.boardEditDialogContent}>
               <Typography id="edit-tweet-description" sx={{ display: 'none' }}>
                 Edit the content, status, or board of the tweet.
               </Typography>
@@ -1008,28 +887,28 @@ const Board = ({
                 multiline
                 fullWidth
                 label="Tweet Content"
-                value={tweetState.editTweetModal.content?.value || ''}
-                onChange={(e) => dispatch({ type: 'UPDATE_EDIT_CONTENT', value: e.target.value })}
+                value={editModalState.tweet.content?.value || ''}
+                onChange={(e) => dispatchEditModal({ type: 'UPDATE_EDIT_CONTENT', value: e.target.value })}
                 minRows={3}
                 inputProps={{ maxLength: MAX_TWEET_LENGTH }}
-                error={(tweetState.editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH}
+                error={(editModalState.tweet.content?.value?.length || 0) > MAX_TWEET_LENGTH}
                 helperText={
-                  (tweetState.editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH
+                  (editModalState.tweet.content?.value?.length || 0) > MAX_TWEET_LENGTH
                     ? `Tweet exceeds ${MAX_TWEET_LENGTH} characters`
-                    : `${tweetState.editTweetModal.content?.value?.length || 0}/${MAX_TWEET_LENGTH}`
+                    : `${editModalState.tweet.content?.value?.length || 0}/${MAX_TWEET_LENGTH}`
                 }
-                sx={BoardStyles.boardEditTextField} 
+                sx={BoardStyles.boardEditTextField}
                 aria-label="Tweet content"
                 autoFocus
               />
               {permissions.canChangeStatus && (
-                <FormControl fullWidth sx={BoardStyles.boardEditFormControl}> 
+                <FormControl fullWidth sx={BoardStyles.boardEditFormControl}>
                   <InputLabel id="status-label">Tweet Status</InputLabel>
                   <Select
                     labelId="status-label"
-                    value={tweetState.newStatus}
+                    value={editModalState.newStatus}
                     label="Tweet Status"
-                    onChange={(e) => dispatch({ type: 'SET_NEW_STATUS', status: e.target.value })}
+                    onChange={(e) => dispatchEditModal({ type: 'SET_NEW_STATUS', status: e.target.value })}
                     aria-label="Tweet status"
                   >
                     {['pending', 'approved', 'rejected', 'announcement', 'reminder', 'pinned', 'archived'].map(
@@ -1043,13 +922,13 @@ const Board = ({
                 </FormControl>
               )}
               {permissions.canMoveBoard && boards.length > 0 && (
-                <FormControl fullWidth sx={BoardStyles.boardEditFormControl}> 
+                <FormControl fullWidth sx={BoardStyles.boardEditFormControl}>
                   <InputLabel id="board-label">Move to Board</InputLabel>
                   <Select
                     labelId="board-label"
-                    value={tweetState.selectedBoardId}
+                    value={editModalState.selectedBoardId}
                     label="Move to Board"
-                    onChange={(e) => dispatch({ type: 'SET_SELECTED_BOARD', boardId: e.target.value })}
+                    onChange={(e) => dispatchEditModal({ type: 'SET_SELECTED_BOARD', boardId: e.target.value })}
                     aria-label="Move to board"
                   >
                     {boards.map((board) => (
@@ -1063,8 +942,8 @@ const Board = ({
             </DialogContent>
             <DialogActions sx={{ p: 2, gap: 1 }}>
               <Button
-                onClick={() => dispatch({ type: 'CLEAR_EDIT_MODAL' })}
-                sx={BoardStyles.boardEditCancelButton} 
+                onClick={() => dispatchEditModal({ type: 'CLEAR_EDIT_MODAL' })}
+                sx={BoardStyles.boardEditCancelButton}
                 aria-label="Cancel edit tweet"
                 disabled={isSaving}
               >
@@ -1075,8 +954,8 @@ const Board = ({
                 variant="contained"
                 disabled={
                   isSaving ||
-                  !tweetState.editTweetModal.content?.value?.trim() ||
-                  (tweetState.editTweetModal.content?.value?.length || 0) > MAX_TWEET_LENGTH
+                  !editModalState.tweet.content?.value?.trim() ||
+                  (editModalState.tweet.content?.value?.length || 0) > MAX_TWEET_LENGTH
                 }
                 sx={BoardStyles.boardEditSaveButton}
                 aria-label="Save edited tweet"
@@ -1115,7 +994,6 @@ Board.defaultProps = {
   availableBoards: [],
 };
 
-// Custom equality check for memoization
 const areEqual = (prevProps, nextProps) => {
   return (
     prevProps.boardId === nextProps.boardId &&
