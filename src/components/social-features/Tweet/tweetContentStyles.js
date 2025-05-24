@@ -31,8 +31,8 @@ const TweetContentStyles = {
     bgcolor: (theme) =>
       isPinned ? alpha(theme.palette.warning.light, 0.25) : theme.palette.background.paper,
     borderRadius: 3,
-    minWidth: { xs: '45vw', sm: '260px', md: '280px' },
-    maxWidth: isListView ? { xs: '95vw', sm: '640px' } : { xs: '95vw', sm: '260px' },
+    minWidth: { xs: '20vw', sm: '260px', md: '280px' },
+    maxWidth: isListView ? { xs: '90vw', sm: '480px' } : { xs: '50vw', sm: '300px' },
     boxShadow: BASE_SHADOW,
     position: 'relative',
     opacity: 0.97,
@@ -59,16 +59,16 @@ const TweetContentStyles = {
   },
   pinnedIconContainer: {
     position: 'absolute',
-    top: 10,
-    right: 10,
+    top: 20,
+    right: 20,
   },
   pinnedIcon: {
     fontSize: '1.1rem',
     color: '#FFD700',
     transition: 'all 0.2s ease',
     '&:hover': {
-      color: '#FFC107',
-      transform: 'scale(1.15)',
+      color: '#FFD700',
+      transform: 'scale(1.1)',
     },
   },
   replyToContainer: {
@@ -145,7 +145,7 @@ const TweetContentStyles = {
     color: 'primary.main',
     cursor: 'pointer',
     mt: 1.5,
-    fontSize: { xs: '0.8rem', sm: '0.85rem' },
+    fontSize: { xs: '0.8rem', sm: '0.8rem' },
     fontWeight: 600,
     textAlign: 'right',
     transition: 'all 0.2s ease',
@@ -210,7 +210,7 @@ const TweetContentStyles = {
     color: 'primary.main',
     cursor: 'pointer',
     mt: 1.5,
-    fontSize: { xs: '0.8rem', sm: '0.85rem' },
+    fontSize: { xs: '0.8rem', sm: '0.8rem' },
     fontWeight: 600,
     textAlign: 'right',
     transition: 'all 0.2s ease',
@@ -248,7 +248,8 @@ const TweetContentStyles = {
     '& .audioVisualizer': {
       position: 'absolute',
       top: 0,
-      left: 0,
+      left: '0 !important',
+      right: '0 !important',
       width: '100%',
       height: '100%',
       display: 'flex',
@@ -276,7 +277,7 @@ const TweetContentStyles = {
     color: 'primary.main',
     cursor: 'pointer',
     mt: 1.5,
-    fontSize: { xs: '0.8rem', sm: '0.85rem' },
+    fontSize: { xs: '0.8rem', sm: '0.8rem' },
     fontWeight: 600,
     textAlign: 'right',
     transition: 'all 0.2s ease',
@@ -285,11 +286,11 @@ const TweetContentStyles = {
       color: 'primary.dark',
     },
   },
-  otherFilesContainer: (hasText) => ({
+  otherFilesContainer: (hasText, isListView) => ({
     mb: hasText ? 2 : 0,
     mt: 1.5,
     width: '100%',
-    maxWidth: { xs: '100%', sm: '260px' },
+    maxWidth: { xs: '47.5vw', sm: '260px' },
   }),
   otherFileItem: (index) => ({
     display: 'flex',
@@ -306,7 +307,7 @@ const TweetContentStyles = {
   }),
   otherFileIcon: {
     color: 'text.secondary',
-    fontSize: '1.25rem',
+    fontSize: { xs: '1.25rem', sm: '1.25rem' },
   },
   otherFileLink: {
     color: 'primary.main',
@@ -322,7 +323,7 @@ const TweetContentStyles = {
     color: 'primary.main',
     cursor: 'pointer',
     mt: 1.5,
-    fontSize: { xs: '0.8rem', sm: '0.85rem' },
+    fontSize: { xs: '0.8rem', sm: '0.8rem' },
     fontWeight: 600,
     textAlign: 'right',
     transition: 'all 0.2s ease',
@@ -334,7 +335,7 @@ const TweetContentStyles = {
   readMoreButton: {
     color: 'primary.main',
     textTransform: 'none',
-    fontSize: { xs: '0.8rem', sm: '0.85rem' },
+    fontSize: { xs: '0.8rem', sm: '0.8rem' },
     transition: 'all 0.2s ease',
     '&:hover': {
       textDecoration: 'underline',
@@ -373,7 +374,7 @@ const TweetContentStyles = {
   }),
   likeCount: (isLiked, animate) => ({
     color: isLiked ? 'primary.main' : 'text.secondary',
-    fontSize: { xs: '0.8rem', sm: '0.85rem' },
+    fontSize: { xs: '0.8rem', sm: '0.8rem' },
     transform: animate ? 'scale(1.25)' : 'scale(1)',
     ml: 0.75,
     transition: 'transform 0.2s ease',
@@ -398,7 +399,7 @@ const TweetContentStyles = {
   },
   replyCount: {
     color: 'text.secondary',
-    fontSize: { xs: '0.8rem', sm: '0.85rem' },
+    fontSize: { xs: '0.8rem', sm: '0.8rem' },
     ml: 0.75,
   },
   statusContainer: {
@@ -427,11 +428,11 @@ const TweetContentStyles = {
   },
   tweetHighlight: (isHighlighted) => ({
     zIndex: isHighlighted ? TWEET_Z_INDEX + 1 : TWEET_Z_INDEX,
-    boxShadow: isHighlighted ? '0 8px 20px rgba(0,0,0,0.15)' : BASE_SHADOW,
+    boxShadow: isHighlighted ? '0 12px 36px rgba(0,0,1,1)' : BASE_SHADOW,
     background: isHighlighted
-      ? 'linear-gradient(145deg, #FFFFFF, #F5F8FA)'
+      ? 'linear-gradient(145deg, #FFFFFF, #F9FBFD)'
       : (theme) => theme.palette.background.paper,
-    transform: isHighlighted ? 'translateY(-4px)' : 'none',
+    transform: isHighlighted ? 'scale(1.1) translateY(-4px)' : 'none',
     transition: 'all 0.3s ease',
     borderColor: isHighlighted
       ? (theme) => theme.palette.primary.main
