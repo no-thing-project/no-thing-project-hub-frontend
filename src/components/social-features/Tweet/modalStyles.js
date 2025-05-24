@@ -1,10 +1,10 @@
 import { alpha } from '@mui/material';
 
-// Constants for reuse
-const MODAL_Z_INDEX = 120; // Above TweetPopup (z-index: 100) and TweetContent (z-index: 99)
-const BASE_SHADOW = '0 4px 16px rgba(0,0,0,0.12)';
-const HOVER_SHADOW = '0 8px 24px rgba(0,0,0,0.18)';
-const MEDIA_PREVIEW_SIZE = 250; // Unified size for circular previews, consistent with TweetContentStyles
+export const BASE_SHADOW = '0 4px 16px rgba(0,0,0,0.12)';
+export const HOVER_SHADOW = '0 8px 24px rgba(0,0,0,0.18)';
+export const MEDIA_PREVIEW_SIZE = 250;
+export const TWEET_Z_INDEX = 99;
+
 
 // Reusable style objects
 const baseTypographyStyles = {
@@ -19,56 +19,81 @@ const baseHoverEffect = {
     boxShadow: HOVER_SHADOW,
   },
   '&:focus': {
-    outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
+    outline: (theme) => `2px solid ${theme.palette.primary.main}`,
     outlineOffset: 2,
   },
 };
 
-const baseModalStyles = {
-  bgcolor: (theme) => alpha(theme.palette.background.paper, 0.95),
-  backdropFilter: 'blur(8px)',
+const baseDialogStyles = {
+  bgcolor: 'background.paper',
   boxShadow: BASE_SHADOW,
   borderRadius: 3,
   border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
-  outline: 'none',
   animation: 'fadeIn 0.3s ease-in-out',
-  '@keyframes fadeIn': {
-    from: { opacity: 0, transform: 'translate(-50%, -48%) scale(0.98)' },
-    to: { opacity: 1, transform: 'translate(-50%, -50%) scale(1)' },
-  },
   ...baseHoverEffect,
 };
 
 const ModalStyles = {
-  optionsModalContainer: {
-    ...baseModalStyles,
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: { xs: '90vw', sm: '340px' },
-    maxWidth: '95vw',
-    p: { xs: 2.5, sm: 3 },
+  mediaDialogContainer: {
+    ...baseDialogStyles,
+    maxWidth: { xs: '100%', sm: '90vw', md: '80vw' },
+    margin: { xs: 0, sm: 'auto' },
+    height: { xs: '100%', sm: 'auto' },
   },
-  optionsModalContent: {
-    p: { xs: 2.5, sm: 3 },
+  mediaDialogTitle: {
+    ...baseTypographyStyles,
+    fontSize: { xs: '1.25rem', sm: '1.5rem' },
+    fontWeight: 600,
+    padding: { xs: '12px 16px', sm: '16px 24px' },
+    borderBottom: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
+  },
+  mediaDialogContent: {
+    maxHeight: { xs: '70vh', sm: '60vh' },
+    overflowY: 'auto',
+    padding: { xs: '12px', sm: '16px' },
     display: 'flex',
     flexDirection: 'column',
-    gap: 1.5,
+    gap: { xs: 1.5, sm: 2 },
   },
-
-  optionsModalTitle: {
+  optionsDialogContainer: {
+    ...baseDialogStyles,
+    maxWidth: { xs: '80vw', sm: '400px' },
+  },
+  optionsDialogTitle: {
     ...baseTypographyStyles,
-    mb: 1.5,
+    fontSize: { xs: '1.1rem', sm: '1.25rem' },
     fontWeight: 600,
-    fontSize: { xs: '0.95rem', sm: '1rem', md: '1.1rem' },
+    padding: { xs: '12px 16px', sm: '16px 24px' },
+    borderBottom: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
   },
-  optionsModalHiddenTitle: {
-    display: 'none',
+  optionsDialogContent: {
+    padding: { xs: '8px 0', sm: '12px 0' },
+    overflowY: 'auto',
   },
-  optionsModalItem: {
-    borderRadius: 3,
-    p: { xs: 1.25, sm: 1.5 },
+  dialogActions: {
+    padding: { xs: '8px', sm: '12px' },
+    justifyContent: 'flex-end',
+  },
+  dialogCloseButton: {
+    width: { xs: 48, sm: 40 },
+    height: { xs: 48, sm: 40 },
+    color: 'text.secondary',
+    borderRadius: '50%',
+    transition: 'all 0.2s ease',
+    '&:hover': {
+      bgcolor: (theme) => alpha(theme.palette.grey[100], 0.8),
+      transform: 'scale(1.15)',
+    },
+    '&:active': {
+      transform: 'scale(0.95)',
+    },
+    '&:focus': {
+      outline: (theme) => `2px solid ${theme.palette.primary.main}`,
+      outlineOffset: 2,
+    },
+  },
+  optionsDialogItem: {
+    padding: { xs: '12px 16px', sm: '12px 24px' },
     minHeight: 48,
     transition: 'all 0.2s ease',
     '&:hover': {
@@ -79,173 +104,34 @@ const ModalStyles = {
     '&:active': {
       transform: 'scale(0.98)',
     },
-    '&:focus': {
-      outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
-      outlineOffset: 2,
-    },
-  },
-  optionsModalCloseButton: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    zIndex: 130,
-    p: { xs: 1, sm: 1.25 },
-    borderRadius: '50%',
-    transition: 'all 0.2s ease',
-    '&:hover': {
-      bgcolor: (theme) => alpha(theme.palette.grey[100], 0.8),
-      transform: 'scale(1.15)',
-    },
-    '&:active': {
-      transform: 'scale(0.95)', // Touch feedback
-    },
-    '&:focus': {
-      outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
-      outlineOffset: 2,
-    },
-  },
-
-  mediaModalBox: {
-    ...baseModalStyles,
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    p: { xs: 2.5, sm: 3.5 },
-    width: { xs: '95vw', sm: '90vw', md: '960px' },
-    maxWidth: '95vw',
-    maxHeight: '90vh',
-    overflowY: 'auto',
-    zIndex: MODAL_Z_INDEX,
-    touchAction: 'none', // Prevent touch events from passing through
-  },
-  mediaModalTitle: {
-    ...baseTypographyStyles,
-    mb: 2.5,
-    fontWeight: 600,
-    fontSize: { xs: '1.2rem', sm: '1.35rem' },
-  },
-  mediaModalContent: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 3,
-    p: { xs: 1.5, sm: 2 },
-  },
-  mediaModalContainer: {
-    ...baseModalStyles,
-    width: { xs: '95vw', sm: '85vw', md: '960px' },
-    maxWidth: '95vw',
-    p: { xs: 2.5, sm: 3 },
-    position: 'relative',
-    zIndex: MODAL_Z_INDEX,
-  },
-  mediaModalCloseButton: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    zIndex: MODAL_Z_INDEX + 1,
-    p: { xs: 1, sm: 1.25 },
-    borderRadius: '50%',
-    transition: 'all 0.2s ease',
-    '&:hover': {
-      bgcolor: (theme) => alpha(theme.palette.grey[100], 0.8),
-      transform: 'scale(1.15)',
-    },
-    '&:active': {
-      transform: 'scale(0.95)', // Touch feedback
-    },
-    '&:focus': {
-      outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
-      outlineOffset: 2,
-    },
   },
   modalImage: {
     width: '100%',
     maxHeight: { xs: '280px', sm: '360px' },
     objectFit: 'contain',
-    objectPosition: 'center',
-    borderRadius: '10px',
+    borderRadius: 3,
     border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
     transition: 'all 0.2s ease',
     '&:hover': {
       transform: 'scale(1.03)',
       boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
     },
-    '&:focus': {
-      outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
-      outlineOffset: 2,
-    },
   },
   modalImagePlaceholder: {
     bgcolor: (theme) => theme.palette.grey[200],
     width: '100%',
     height: { xs: '280px', sm: '360px' },
-    borderRadius: '10px',
+    borderRadius: 3,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     color: (theme) => theme.palette.grey[500],
-    fontSize: { xs: '0.85rem', sm: '0.9rem' },
-  },
-  modalVideo: {
-    width: '100%',
-    maxHeight: { xs: '280px', sm: '360px' },
-    borderRadius: '10px',
-    backgroundColor: 'black',
-    objectFit: 'contain',
-    objectPosition: 'center',
-    transition: 'all 0.2s ease',
-    '&:hover': {
-      transform: 'scale(1.03)',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-    },
-    '&:focus': {
-      outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
-      outlineOffset: 2,
-    },
-  },
-  modalAudioPlayer: {
-    width: '100%',
-    height: '48px',
-    bgcolor: (theme) => theme.palette.grey[100],
-    borderRadius: '12px',
-    p: 1.25,
-    position: 'relative',
-    overflow: 'hidden',
-    transition: 'all 0.2s ease',
-    '&:hover': {
-      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-    },
-    '& audio': {
-      width: '100%',
-      height: '100%',
-      '&::-webkit-media-controls-panel': {
-        backgroundColor: 'transparent',
-      },
-      '&:hover + .audioVisualizer, &.playing + .audioVisualizer': {
-        opacity: 1,
-      },
-    },
-    '& .audioVisualizer': {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '2px',
-      padding: '0 8px',
-      opacity: 0,
-      transition: 'opacity 0.2s ease',
-      pointerEvents: 'none',
-    },
   },
   modalOtherFile: {
     display: 'flex',
     alignItems: 'center',
     gap: 1.5,
-    p: 1.5,
+    padding: 1.5,
     borderRadius: 3,
     transition: 'all 0.2s ease',
     '&:hover': {
@@ -253,7 +139,7 @@ const ModalStyles = {
       boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
     },
     '&:active': {
-      transform: 'scale(0.98)', // Touch feedback
+      transform: 'scale(0.98)',
     },
   },
   modalOtherFileIcon: {
@@ -269,17 +155,13 @@ const ModalStyles = {
       textDecoration: 'underline',
       color: 'primary.dark',
     },
-    '&:focus': {
-      outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
-      outlineOffset: 2,
-    },
   },
   errorPaper: {
-    p: 2.5,
+    padding: 2.5,
     textAlign: 'center',
-    borderRadius: 3,
+    borderRadius: 8,
     boxShadow: BASE_SHADOW,
-    bgcolor: (theme) => theme.palette.background.paper,
+    bgcolor: 'background.paper',
     border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
   },
   errorTypography: {
