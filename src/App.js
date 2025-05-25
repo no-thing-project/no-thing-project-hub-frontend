@@ -93,10 +93,10 @@ const AppContent = () => {
           path="/friends"
           element={<PrivateRoute isAuthenticated={isAuthenticated} element={<FriendsPage />} />}
         />
-        <Route
+        {/* <Route
           path="/messages"
           element={<PrivateRoute isAuthenticated={isAuthenticated} element={<MessagesPage />} />}
-        />
+        /> */}
         <Route path="/not-found" element={<NotFoundPage />} />
         <Route path="*" element={<Navigate to="/not-found" replace />} />
       </Routes>

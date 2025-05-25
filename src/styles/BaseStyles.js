@@ -1,4 +1,64 @@
+import { alpha } from "@mui/material";
 import theme from "../Theme";
+
+// Constants for reuse
+export const BOARD_SIZE = 10000;
+export const BASE_Z_INDEX = 10; // Board
+export const BASE_SHADOW = "0 4px 16px rgba(0,0,0,0.12)";
+export const HOVER_SHADOW = "0 8px 24px rgba(0,0,0,0.18)";
+export const MODAL_Z_INDEX = 111; // Edit Tweet Modal, Options Modal, Media Modal
+export const MODAL_SHADOW = "0 8px 28px rgba(0,0,0,0.22)";
+export const MEDIA_PREVIEW_SIZE = 250;
+export const TWEET_Z_INDEX = 99;
+
+// Reusable style objects
+export const baseTypographyStyles = {
+  color: "text.primary",
+  fontWeight: 400,
+  lineHeight: 1.6,
+};
+
+export const baseHoverEffect = {
+  "&:hover": {
+    transform: "translateY(-2px)",
+    boxShadow: HOVER_SHADOW,
+  },
+  "&:focus": {
+    outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
+    outlineOffset: 2,
+  },
+};
+
+export const baseCardStyles = {
+  bgcolor: "background.paper",
+  borderRadius: theme.shape.borderRadiusMedium, // Align with theme.shape.borderRadiusMedium
+  boxShadow: BASE_SHADOW,
+  border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
+  transition: "all 0.3s ease",
+  ...baseHoverEffect,
+};
+
+export const baseButtonStyles = {
+  borderRadius: theme.shape.borderRadiusLarge, // Matches actionButtonStyles
+  textTransform: "none",
+  transition: "all 0.2s ease",
+  fontWeight: 600,
+  "&:hover": {
+    transform: "scale(1.02)",
+    backgroundColor: (theme) => theme.palette.primary.dark,
+  },
+  "&:active": {
+    transform: "scale(0.98)",
+  },
+  "&:focus": {
+    outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
+    outlineOffset: 2,
+  },
+  "&:disabled": {
+    backgroundColor: "action.disabled",
+    color: "action.disabledOpacity",
+  },
+};
 
 export const actionButtonStyles = {
   height: { xs: "40px", sm: "50px" },
@@ -154,4 +214,8 @@ export const selectStyles = {
   },
 };
 
-export const chipStyles = { fontSize: { xs: "0.75rem", md: "0.875rem" }, padding: 1, border: "none" };
+export const chipStyles = {
+  fontSize: { xs: "0.75rem", md: "0.875rem" },
+  padding: 1,
+  border: "none",
+};

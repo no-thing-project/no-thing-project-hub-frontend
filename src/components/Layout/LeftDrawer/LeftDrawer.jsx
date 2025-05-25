@@ -52,7 +52,7 @@ const LeftDrawer = ({ onLogout }) => {
       subroute: "/class/:class_id",
     },
     { to: "/friends", label: "Friends", icon: <PeopleRoundedIcon sx={{ fontSize: 30 }} /> },
-    { to: "/messages", label: "Messages", icon: <MessageRoundedIcon sx={{ fontSize: 30 }} /> },
+    // { to: "/messages", label: "Messages", icon: <MessageRoundedIcon sx={{ fontSize: 30 }} /> },
     {
       to: "#logout",
       label: "Logout",
