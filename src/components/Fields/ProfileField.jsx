@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, TextField, MenuItem, Typography } from "@mui/material";
-import { fieldStyles } from "../../styles/ProfileStyles";
+import { fieldStyles } from "../../styles/BaseStyles";
 
 const ProfileField = ({
   label,

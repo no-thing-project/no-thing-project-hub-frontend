@@ -1,31 +1,22 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import {
-  Box,
-  Button,
-  Chip,
-  Skeleton,
-  Typography,
-  Tooltip,
-  useTheme,
-} from "@mui/material";
-import { Add, Edit, Delete, Public, Lock, People, Forum, Star } from "@mui/icons-material";
+import { Box, Skeleton, useTheme } from "@mui/material";
+import { debounce } from "lodash";
+import PropTypes from "prop-types";
 import AppLayout from "../components/Layout/AppLayout";
+import ProfileHeader from "../components/Headers/ProfileHeader";
+import BoardsFilters from "../components/Boards/BoardsFilters";
+import BoardsGrid from "../components/Boards/BoardsGrid";
+import ClassFormDialog from "../components/Dialogs/ClassFormDialog";
+import BoardFormDialog from "../components/Dialogs/BoardFormDialog";
+import MemberFormDialog from "../components/Dialogs/MemberFormDialog";
+import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
 import { useClasses } from "../hooks/useClasses";
 import { useBoards } from "../hooks/useBoards";
 import { useGates } from "../hooks/useGates";
 import useAuth from "../hooks/useAuth";
 import { useNotification } from "../context/NotificationContext";
-import ProfileHeader from "../components/Headers/ProfileHeader";
-import { actionButtonStyles, deleteButtonStyle } from "../styles/BaseStyles";
-import ClassFormDialog from "../components/Dialogs/ClassFormDialog";
-import BoardFormDialog from "../components/Dialogs/BoardFormDialog";
-import MemberFormDialog from "../components/Dialogs/MemberFormDialog";
-import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
-import BoardsFilters from "../components/Boards/BoardsFilters";
-import BoardsGrid from "../components/Boards/BoardsGrid";
-import { debounce } from "lodash";
-import PropTypes from "prop-types";
+import { Add, Edit, Delete, Public, Lock, People, Forum, Star } from "@mui/icons-material";
 
 const ClassPage = () => {
   const navigate = useNavigate();
@@ -307,7 +298,7 @@ const ClassPage = () => {
       );
     } catch (err) {
       showNotification(
-        classData?.is_favorited
+        err.message || classData?.is_favorited
           ? "Failed to remove class from favorites"
           : "Failed to add class to favorites",
         "error"
@@ -362,7 +353,7 @@ const ClassPage = () => {
       try {
         const board = boards.find((b) => b.board_id === boardId);
         if (board?.members?.length >= board?.settings?.max_members) {
-          showNotification("Maximum member limit reached!", "error");
+          showNotification("Maximum members limit reached!", "error");
           return;
         }
         await addMemberToBoard(boardId, memberData);
@@ -398,13 +389,9 @@ const ClassPage = () => {
     [updateMemberRole, showNotification]
   );
 
-  const handleOpenMemberDialog = useCallback(() => {
-    setMemberDialogOpen(true);
-  }, []);
+  const handleOpenMemberDialog = useCallback(() => setMemberDialogOpen(true), []);
 
-  const handleCancelMemberDialog = useCallback(() => {
-    setMemberDialogOpen(false);
-  }, []);
+  const handleCancelMemberDialog = useCallback(() => setMemberDialogOpen(false), []);
 
   const handleOpenBoardMemberDialog = useCallback((boardId) => {
     setSelectedBoardId(boardId);
@@ -422,7 +409,106 @@ const ClassPage = () => {
   }, []);
 
   const userRole = members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || "none";
-  const canManage = ["owner", "admin"].includes(userRole);
+
+  const headerData = useMemo(
+    () => ({
+      type: "class",
+      title: classData?.name || "Untitled Class",
+      titleAriaLabel: `Class name: ${classData?.name || "Untitled Class"}`,
+      description: classData?.description,
+      descriptionAriaLabel: classData?.description ? `Class description: ${classData.description}` : undefined,
+      chips: [
+        {
+          label: classData?.access?.is_public ? "Public" : "Private",
+          icon: classData?.access?.is_public ? <Public /> : <Lock />,
+          color: classData?.access?.is_public ? "success" : "default",
+          ariaLabel: classData?.access?.is_public ? "Public class" : "Private class",
+        },
+        {
+          label: `Members: ${stats?.member_count || members?.length || 0}`,
+          icon: <People />,
+          color: "primary",
+          ariaLabel: `Members: ${stats?.member_count || members?.length || 0}`,
+        },
+        {
+          label: `Boards: ${filteredBoards?.length || 0}`,
+          icon: <Forum />,
+          color: "info",
+          ariaLabel: `Boards: ${filteredBoards?.length || 0}`,
+        },
+        {
+          label: `Favorites: ${stats?.favorite_count || 0}`,
+          icon: <Star />,
+          color: "warning",
+          ariaLabel: `Favorites: ${stats?.favorite_count || 0}`,
+        },
+        {
+          label: `Owner: ${classData?.creator?.username || "Unknown"}`,
+          ariaLabel: `Owner: ${classData?.creator?.username || "Unknown"}`,
+        },
+      ],
+      actions: [
+        {
+          label: "Create Board",
+          icon: <Add />,
+          onClick: handleOpenCreateBoard,
+          tooltip: "Create a new board within this class",
+          disabled: actionLoading,
+          ariaLabel: "Create a new board",
+          isMenuItem: false,
+        },
+        {
+          label: "Edit Class",
+          onClick: () =>
+            setEditingClass({
+              class_id: classData.class_id,
+              name: classData.name,
+              description: classData.description,
+              is_public: classData.access?.is_public,
+              visibility: classData.access?.is_public ? "public" : "private",
+              settings: classData.settings,
+              gate_id: classData.gate_id,
+            }),
+          tooltip: "Edit class details",
+          disabled: actionLoading || !["owner", "admin"].includes(userRole),
+          ariaLabel: "Edit class",
+          isMenuItem: true,
+        },
+        {
+          label: "Manage Members",
+          onClick: handleOpenMemberDialog,
+          tooltip: "Manage class members",
+          disabled: actionLoading || !["owner", "admin"].includes(userRole),
+          ariaLabel: "Manage members",
+          isMenuItem: true,
+        },
+        {
+          label: "Delete Class",
+          onClick: handleDeleteClass,
+          tooltip: "Permanently delete this class",
+          disabled: actionLoading || userRole !== "owner",
+          ariaLabel: "Delete class",
+          variant: "delete",
+          isMenuItem: true,
+        },
+      ],
+      isFavorited: classData?.is_favorited,
+      onFavoriteToggle: handleFavoriteToggle,
+      actionLoading,
+    }),
+    [
+      classData,
+      stats,
+      members,
+      filteredBoards,
+      userRole,
+      actionLoading,
+      handleOpenCreateBoard,
+      handleOpenMemberDialog,
+      handleDeleteClass,
+      handleFavoriteToggle,
+    ]
+  );
 
   if (authLoading || classesLoading || boardsLoading || gatesLoading || isLoading) {
     return (
@@ -460,172 +546,12 @@ const ClassPage = () => {
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box sx={{ maxWidth: 1500, mx: "auto", p: { xs: 2, md: 4 } }}>
-        <ProfileHeader user={authData} isOwnProfile={true}>
-          <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "center" }}>
-            <Tooltip title="Create a new board within this class">
-              <Button
-                onClick={handleOpenCreateBoard}
-                startIcon={<Add />}
-                sx={{
-                  ...actionButtonStyles,
-                  "&:hover": { bgcolor: theme.palette.primary.dark },
-                  [theme.breakpoints.down("sm")]: { minWidth: 120, fontSize: "0.875rem" },
-                }}
-                disabled={actionLoading}
-                aria-label="Create a new board"
-              >
-                Create Board
-              </Button>
-            </Tooltip>
-            {canManage && (
-              <>
-                <Tooltip title="Edit class details and settings">
-                  <Button
-                    onClick={() =>
-                      setEditingClass({
-                        class_id: classData.class_id,
-                        name: classData.name,
-                        description: classData.description,
-                        is_public: classData.access?.is_public,
-                        visibility: classData.access?.is_public ? "public" : "private",
-                        settings: classData.settings,
-                        gate_id: classData.gate_id,
-                      })
-                    }
-                    startIcon={<Edit />}
-                    sx={{
-                      ...actionButtonStyles,
-                      "&:hover": { bgcolor: theme.palette.primary.dark },
-                      [theme.breakpoints.down("sm")]: { minWidth: 120, fontSize: "0.875rem" },
-                    }}
-                    disabled={actionLoading}
-                    aria-label="Edit class"
-                  >
-                    Edit Class
-                  </Button>
-                </Tooltip>
-                <Tooltip title="Manage class members">
-                  <Button
-                    onClick={handleOpenMemberDialog}
-                    startIcon={<People />}
-                    sx={{
-                      ...actionButtonStyles,
-                      "&:hover": { bgcolor: theme.palette.primary.dark },
-                      [theme.breakpoints.down("sm")]: { minWidth: 120, fontSize: "0.875rem" },
-                    }}
-                    disabled={actionLoading}
-                    aria-label="Manage members"
-                  >
-                    Members
-                  </Button>
-                </Tooltip>
-                {userRole === "owner" && (
-                  <Tooltip title="Permanently delete this class">
-                    <Button
-                      onClick={handleDeleteClass}
-                      startIcon={<Delete />}
-                      sx={{
-                        ...deleteButtonStyle,
-                        "&:hover": { bgcolor: theme.palette.error.dark },
-                        [theme.breakpoints.down("sm")]: { minWidth: 120, fontSize: "0.875rem" },
-                      }}
-                      disabled={actionLoading}
-                      aria-label="Delete class"
-                    >
-                      Delete Class
-                    </Button>
-                  </Tooltip>
-                )}
-              </>
-            )}
-            <Tooltip
-              title={classData.is_favorited ? "Remove class from favorites" : "Add class to favorites"}
-            >
-              <Button
-                onClick={handleFavoriteToggle}
-                startIcon={classData.is_favorited ? <Star color="warning" /> : <Star />}
-                sx={{
-                  ...actionButtonStyles,
-                  "&:hover": { bgcolor: theme.palette.primary.dark },
-                  [theme.breakpoints.down("sm")]: { minWidth: 120, fontSize: "0.875rem" },
-                }}
-                disabled={actionLoading}
-                aria-label={classData.is_favorited ? "Remove from favorites" : "Add to favorites"}
-              >
-                {classData.is_favorited ? "Unfavorite" : "Favorite"}
-              </Button>
-            </Tooltip>
-          </Box>
-        </ProfileHeader>
-        <Box sx={{ my: 4, bgcolor: theme.palette.background.paper, p: 3, borderRadius: 2, boxShadow: 1 }}>
-          <Typography
-            variant="h4"
-            sx={{
-              fontWeight: 700,
-              mb: 2,
-              fontSize: { xs: "1.5rem", sm: "2rem", md: "2.25rem" },
-              color: theme.palette.text.primary,
-            }}
-            aria-label={`Class name: ${classData.name || "Untitled Class"}`}
-          >
-            {classData.name || "Untitled Class"}
-          </Typography>
-          {classData.description && (
-            <Typography
-              variant="body1"
-              color="text.secondary"
-              sx={{ mb: 3, fontSize: { xs: "0.875rem", md: "1rem" }, lineHeight: 1.6 }}
-              aria-label={`Class description: ${classData.description}`}
-            >
-              {classData.description}
-            </Typography>
-          )}
-          <Box sx={{ display: "flex", gap: 1.5, mb: 3, flexWrap: "wrap" }}>
-            <Chip
-              label={classData.access?.is_public ? "Public" : "Private"}
-              icon={classData.access?.is_public ? <Public /> : <Lock />}
-              size="medium"
-              variant="outlined"
-              color={classData.access?.is_public ? "success" : "default"}
-              sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, px: 1 }}
-              aria-label={classData.access?.is_public ? "Public class" : "Private class"}
-            />
-            <Chip
-              label={`Members: ${stats?.member_count || members.length}`}
-              icon={<People />}
-              size="medium"
-              variant="outlined"
-              color="primary"
-              sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, px: 1 }}
-              aria-label={`Members: ${stats?.member_count || members.length}`}
-            />
-            <Chip
-              label={`Boards: ${filteredBoards.length}`}
-              icon={<Forum />}
-              size="medium"
-              variant="outlined"
-              color="info"
-              sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, px: 1 }}
-              aria-label={`Boards: ${filteredBoards.length}`}
-            />
-            <Chip
-              label={`Favorites: ${stats?.favorite_count || 0}`}
-              icon={<Star />}
-              size="medium"
-              variant="outlined"
-              color="warning"
-              sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, px: 1 }}
-              aria-label={`Favorites: ${stats?.favorite_count || 0}`}
-            />
-            <Chip
-              label={`Owner: ${classData.creator?.username || "Unknown"}`}
-              size="medium"
-              variant="outlined"
-              sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, px: 1 }}
-              aria-label={`Owner: ${classData.creator?.username || "Unknown"}`}
-            />
-          </Box>
-        </Box>
+        <ProfileHeader
+          user={authData}
+          isOwnProfile={true}
+          headerData={headerData}
+          userRole={userRole}
+        />
         <BoardsFilters
           quickFilter={quickFilter}
           setQuickFilter={setQuickFilter}
@@ -645,30 +571,13 @@ const ClassPage = () => {
           currentUser={authData}
           token={token}
         />
-      </Box>
-      <BoardFormDialog
-        open={createBoardDialogOpen}
-        title="Create New Board"
-        board={popupBoard}
-        setBoard={setPopupBoard}
-        onSave={handleCreateBoard}
-        onCancel={handleCancelCreateBoard}
-        disabled={actionLoading || boardsLoading || classesLoading || gatesLoading}
-        gates={gates}
-        classes={classes}
-        currentClass={classData}
-        initialClassId={class_id}
-        fixedClassId={class_id}
-        fixedGateId={classData?.gate_id || null}
-      />
-      {editingBoard && (
         <BoardFormDialog
-          open={true}
-          title="Edit Board"
-          board={editingBoard}
-          setBoard={setEditingBoard}
-          onSave={handleUpdateBoard}
-          onCancel={() => setEditingBoard(null)}
+          open={createBoardDialogOpen}
+          title="Create New Board"
+          board={popupBoard}
+          setBoard={setPopupBoard}
+          onSave={handleCreateBoard}
+          onCancel={handleCancelCreateBoard}
           disabled={actionLoading || boardsLoading || classesLoading || gatesLoading}
           gates={gates}
           classes={classes}
@@ -677,59 +586,74 @@ const ClassPage = () => {
           fixedClassId={class_id}
           fixedGateId={classData?.gate_id || null}
         />
-      )}
-      {editingClass && (
-        <ClassFormDialog
-          open={true}
-          title="Edit Class"
-          classItem={editingClass}
-          setClass={setEditingClass}
-          onSave={handleUpdateClass}
-          onCancel={() => setEditingClass(null)}
-          disabled={actionLoading || classesLoading}
-          gates={gates}
+        {editingBoard && (
+          <BoardFormDialog
+            open={true}
+            title="Edit Board"
+            board={editingBoard}
+            setBoard={setEditingBoard}
+            onSave={handleUpdateBoard}
+            onCancel={() => setEditingBoard(null)}
+            disabled={actionLoading || boardsLoading || classesLoading || gatesLoading}
+            gates={gates}
+            classes={classes}
+            currentClass={classData}
+            initialClassId={class_id}
+            fixedClassId={class_id}
+            fixedGateId={classData?.gate_id || null}
+          />
+        )}
+        {editingClass && (
+          <ClassFormDialog
+            open={true}
+            title="Edit Class"
+            classItem={editingClass}
+            setClass={setEditingClass}
+            onSave={handleUpdateClass}
+            onCancel={() => setEditingClass(null)}
+            disabled={actionLoading || classesLoading}
+            gates={gates}
+          />
+        )}
+        <MemberFormDialog
+          open={memberDialogOpen}
+          title="Manage Class Members"
+          classId={class_id}
+          token={token}
+          onSave={handleCancelMemberDialog}
+          onCancel={handleCancelMemberDialog}
+          disabled={actionLoading || classesLoading || boardsLoading}
+          members={members}
+          addMember={handleAddClassMember}
+          removeMember={handleRemoveClassMember}
+          updateMemberRole={handleUpdateClassMemberRole}
         />
-      )}
-      <MemberFormDialog
-        open={memberDialogOpen}
-        title="Manage Class Members"
-        classId={class_id}
-        token={token}
-        onSave={() => handleCancelMemberDialog()}
-        onCancel={handleCancelMemberDialog}
-        disabled={actionLoading || classesLoading || boardsLoading}
-        members={members}
-        addMember={handleAddClassMember}
-        removeMember={handleRemoveClassMember}
-        updateMemberRole={handleUpdateClassMemberRole}
-      />
-      <MemberFormDialog
-        open={boardMemberDialogOpen}
-        title="Manage Board Members"
-        boardId={selectedBoardId}
-        token={token}
-        onSave={() => handleCancelBoardMemberDialog()}
-        onCancel={handleCancelBoardMemberDialog}
-        disabled={actionLoading || boardsLoading}
-        members={boards.find((b) => b.board_id === selectedBoardId)?.members || []}
-        addMember={handleAddBoardMember}
-        removeMember={handleRemoveBoardMember}
-        updateMemberRole={handleUpdateBoardMemberRole}
-      />
-      <DeleteConfirmationDialog
-        open={deleteDialogOpen}
-        onClose={() => setDeleteDialogOpen(false)}
-        onConfirm={handleDeleteBoard}
-        message="Are you sure you want to delete this board? This action cannot be undone."
-        disabled={actionLoading || boardsLoading}
-      />
+        <MemberFormDialog
+          open={boardMemberDialogOpen}
+          title="Manage Board Members"
+          boardId={selectedBoardId}
+          token={token}
+          onSave={handleCancelBoardMemberDialog}
+          onCancel={handleCancelBoardMemberDialog}
+          disabled={actionLoading || boardsLoading}
+          members={boards.find((b) => b.board_id === selectedBoardId)?.members || []}
+          addMember={handleAddBoardMember}
+          removeMember={handleRemoveBoardMember}
+          updateMemberRole={handleUpdateBoardMemberRole}
+        />
+        <DeleteConfirmationDialog
+          open={deleteDialogOpen}
+          onClose={() => setDeleteDialogOpen(false)}
+          onConfirm={handleDeleteBoard}
+          message="Are you sure you want to delete this board? This action cannot be undone."
+          disabled={actionLoading || boardsLoading}
+        />
+      </Box>
     </AppLayout>
   );
 };
 
 ClassPage.propTypes = {
-  navigate: PropTypes.func,
-  location: PropTypes.object,
   class_id: PropTypes.string,
   token: PropTypes.string,
   authData: PropTypes.shape({

@@ -1,6 +1,6 @@
 import React from "react";
 import { Card, CardContent, Grid, Typography } from "@mui/material";
-import { sectionStyles } from "../../styles/ProfileStyles";
+import { sectionStyles } from "../../styles/BaseStyles";
 
 const ProfileSection = ({ title, children }) => (
   <Card sx={sectionStyles.card}>

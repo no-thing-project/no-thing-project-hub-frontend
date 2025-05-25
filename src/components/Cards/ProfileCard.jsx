@@ -3,7 +3,7 @@ import { Box, List, ListItem, ListItemText, Grid2 } from '@mui/material';
 import ProfileSection from '../../sections/ProfileSection/ProfileSection';
 import ProfileField from '../Fields/ProfileField';
 import NotificationToggle from '../Toggles/NotificationToggle';
-import { containerStyles } from '../../styles/ProfileStyles';
+import { containerStyles } from '../../styles/BaseStyles';
 
 const ProfileCard = ({
   profileData,
