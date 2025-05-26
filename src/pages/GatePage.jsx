@@ -416,12 +416,6 @@ const GatePage = () => {
           ariaLabel: gateData?.access?.is_public ? "Public gate" : "Private gate",
         },
         {
-          label: `Members: ${stats?.member_count || members?.length || 0}`,
-          icon: <People />,
-          color: "primary",
-          ariaLabel: `Members: ${stats?.member_count || members?.length || 0}`,
-        },
-        {
           label: `Classes: ${filteredClasses?.length || 0}`,
           icon: <Forum />,
           color: "info",
@@ -433,6 +427,13 @@ const GatePage = () => {
           color: "warning",
           ariaLabel: `Favorites: ${stats?.favorite_count || 0}`,
         },
+        {
+          label: `Members: ${stats?.member_count || members?.length || 0}`,
+          icon: <People />,
+          color: "primary",
+          ariaLabel: `Members: ${stats?.member_count || members?.length || 0}`,
+        },
+
         {
           label: `Owner: ${gateData?.creator?.username || "Unknown"}`,
           ariaLabel: `Owner: ${gateData?.creator?.username || "Unknown"}`,

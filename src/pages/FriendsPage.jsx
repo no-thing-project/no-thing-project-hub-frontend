@@ -124,6 +124,15 @@ const FriendsPage = () => {
     setSuccess('');
   }, []);
 
+  const headerData = {
+    type: "page",
+    title: "Friends",
+    titleAriaLabel: "Friends page",
+    shortDescription: "Your Connections",
+    tooltipDescription:
+      "Friends are your network of connections for sharing ideas and collaborating. Add friends to stay connected, join their gates, classes, or boards, and build a community around shared interests.",
+  };
+
   if (authLoading || socialLoading) return <LoadingSpinner />;
   if (!isAuthenticated) {
     navigate('/login');
@@ -133,7 +142,7 @@ const FriendsPage = () => {
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box sx={{ maxWidth: 1500, mx: 'auto', p: { xs: 1, md: 2 } }}>
-        <ProfileHeader user={authData} isOwnProfile>
+        <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData}>
           <Button
             variant="contained"
             onClick={handleOpenAddFriend}

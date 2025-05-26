@@ -271,6 +271,15 @@ const ClassesPage = () => {
     setSearchQuery("");
   }, []);
 
+  const headerData = {
+    type: "page",
+    title: "Classes",
+    titleAriaLabel: "Classes page",
+    shortDescription: "Your Spaces for Focused Learning",
+    tooltipDescription:
+      "Classes are dedicated spaces within gates for learning and collaboration. Create a class to share knowledge, work on projects, or dive into specific topics with your community.",
+  };
+
   if (authLoading || classesLoading || gatesLoading || isLoading) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
@@ -301,7 +310,7 @@ const ClassesPage = () => {
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box sx={{ maxWidth: 1500, mx: "auto", p: { xs: 2, md: 3 } }}>
-        <ProfileHeader user={authData} isOwnProfile={true}>
+        <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData}>
           <Button
             onClick={handleOpenCreateClass}
             startIcon={<Add />}

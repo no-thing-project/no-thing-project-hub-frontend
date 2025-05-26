@@ -13,8 +13,9 @@ import {
   Tooltip,
   Chip,
   useTheme,
+  Icon,
 } from "@mui/material";
-import { MoreVert, Star, StarBorder } from "@mui/icons-material";
+import { MoreVert, Star, StarBorder, HelpOutline } from "@mui/icons-material";
 import { headerStyles, actionButtonStyles } from "../../styles/BaseStyles";
 import StatusBadge from "../Badges/StatusBadge";
 
@@ -98,7 +99,7 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
     );
   }
 
-  // Dynamic mode for class/gate/user with headerData
+  // Dynamic mode for class/gate/user/page with headerData
   const isManageable = ["owner", "admin"].includes(userRole);
   const menuActions = headerData.actions?.filter((action) => action.isMenuItem) || [];
   const buttonActions = headerData.actions?.filter((action) => !action.isMenuItem) || [];
@@ -145,8 +146,46 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
               >
                 Level: <StatusBadge level={user.access_level} />
               </Typography>
+            ) : headerData.type === "page" ? (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    ...headerStyles.level,
+                    fontSize: { xs: "0.875rem", sm: "1rem" },
+                  }}
+                  aria-label={`Page description: ${headerData.shortDescription}`}
+                >
+                  {headerData.shortDescription}
+                </Typography>
+                {headerData.tooltipDescription && (
+                  <Tooltip
+                    title={headerData.tooltipDescription}
+                    placement="top"
+                    arrow
+                    PopperProps={{
+                      modifiers: [
+                        {
+                          name: "offset",
+                          options: {
+                            offset: [0, -8],
+                          },
+                        },
+                      ],
+                    }}
+                  >
+                    <IconButton
+                      size="small"
+                      aria-label="More information about this page"
+                      sx={{ p: 0.5 }}
+                    >
+                      <HelpOutline fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
             ) : (
-              <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+              <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", mt: 1 }}>
                 {headerData.chips?.map((chip, index) => (
                   <Chip
                     key={index}
@@ -195,7 +234,7 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
                   </Button>
                 </Tooltip>
               ))}
-              {headerData.type !== "user" && (
+              {headerData.type !== "user" && headerData.type !== "page" && (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   {headerData.onFavoriteToggle && (
                     <Tooltip
@@ -244,6 +283,7 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
                   )}
                 </Box>
               )}
+              {headerData.type === "page" && children}
             </Box>
           )}
         </Box>
@@ -259,11 +299,13 @@ ProfileHeader.propTypes = {
   }),
   isOwnProfile: PropTypes.bool,
   headerData: PropTypes.shape({
-    type: PropTypes.oneOf(["user", "class", "gate"]).isRequired,
+    type: PropTypes.oneOf(["user", "class", "gate", "page"]).isRequired,
     title: PropTypes.string,
     titleAriaLabel: PropTypes.string,
     description: PropTypes.string,
     descriptionAriaLabel: PropTypes.string,
+    shortDescription: PropTypes.string,
+    tooltipDescription: PropTypes.string,
     chips: PropTypes.arrayOf(
       PropTypes.shape({
         label: PropTypes.string.isRequired,

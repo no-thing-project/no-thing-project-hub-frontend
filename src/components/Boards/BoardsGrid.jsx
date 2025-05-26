@@ -79,35 +79,6 @@ const BoardsGrid = ({
               color: "text.primary",
             }}
           >
-            <motion.div
-              variants={leftColumnVariants}
-              initial="hidden"
-              animate="visible"
-              sx={{ gridColumn: { xs: "span 1", sm: "1 / 2" } }}
-            >
-              <Typography
-                variant="h3"
-                sx={{ fontWeight: 700, mb: 2, fontSize: { xs: "1.5rem", md: "2.5rem" } }}
-              >
-                Boards
-              </Typography>
-              <Typography
-                variant="h5"
-                sx={{
-                  color: "text.secondary",
-                  mb: 4,
-                  fontSize: { xs: "1.25rem", md: "1.75rem" },
-                }}
-              >
-                Your Spaces for Discussion
-              </Typography>
-              <Typography
-                variant="body1"
-                sx={{ lineHeight: 1.7, fontSize: { xs: "0.875rem", md: "1rem" } }}
-              >
-                Boards are dedicated spaces for sharing ideas, collaborating, and engaging in discussions. Create a board to connect with your community or explore specific topics.
-              </Typography>
-            </motion.div>
             {filteredBoards.map((board) => (
               <BoardCard
                 key={board.board_id}

@@ -283,6 +283,15 @@ const BoardsPage = () => {
     setSearchQuery("");
   }, []);
 
+  const headerData = {
+    type: "page",
+    title: "Boards",
+    titleAriaLabel: "Boards page",
+    shortDescription: "Your Spaces for Discussion",
+    tooltipDescription:
+      "Boards are dedicated spaces for sharing ideas, collaborating, and engaging in discussions. Create a board to connect with your community or explore specific topics.",
+  };
+
   if (authLoading || boardsLoading || gatesLoading || classesLoading || isLoading) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
@@ -313,7 +322,7 @@ const BoardsPage = () => {
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box sx={{ maxWidth: 1500, mx: "auto", p: { xs: 2, md: 3 } }}>
-        <ProfileHeader user={authData} isOwnProfile={true}>
+        <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData}>
           <Button
             onClick={handleOpenCreateBoard}
             startIcon={<Add />}

@@ -238,6 +238,15 @@ const GatesPage = () => {
     setSearchQuery("");
   }, []);
 
+  const headerData = {
+    type: "page",
+    title: "Gates",
+    titleAriaLabel: "Gates page",
+    shortDescription: "Your Space for Big Ideas",
+    tooltipDescription:
+      "Gates are like forum topics, starting points for broad discussions. Create a Gate to spark a conversation or join one to explore shared interests. It’s where communities form and ideas take root.",
+  };
+
   if (authLoading || gatesLoading || isLoading) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
@@ -268,7 +277,7 @@ const GatesPage = () => {
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box sx={{ maxWidth: 1500, mx: "auto", p: { xs: 2, md: 3 } }}>
-        <ProfileHeader user={authData} isOwnProfile={true}>
+        <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData}>
           <Button
             onClick={handleOpenCreateGate}
             startIcon={<Add />}

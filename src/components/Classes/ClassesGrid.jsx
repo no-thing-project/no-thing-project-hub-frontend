@@ -79,35 +79,6 @@ const ClassesGrid = ({
               color: "text.primary",
             }}
           >
-            <motion.div
-              variants={leftColumnVariants}
-              initial="hidden"
-              animate="visible"
-              sx={{ gridColumn: { xs: "span 1", sm: "1 / 2" } }}
-            >
-              <Typography
-                variant="h3"
-                sx={{ fontWeight: 700, mb: 2, fontSize: { xs: "1.5rem", md: "2.5rem" } }}
-              >
-                Classes
-              </Typography>
-              <Typography
-                variant="h5"
-                sx={{
-                  color: "text.secondary",
-                  mb: 4,
-                  fontSize: { xs: "1.25rem", md: "1.75rem" },
-                }}
-              >
-                Your Spaces for Focused Learning
-              </Typography>
-              <Typography
-                variant="body1"
-                sx={{ lineHeight: 1.7, fontSize: { xs: "0.875rem", md: "1rem" } }}
-              >
-                Classes are dedicated spaces within gates for learning and collaboration. Create a class to share knowledge, work on projects, or dive into specific topics with your community.
-              </Typography>
-            </motion.div>
             {filteredClasses.map((classItem) => (
               <ClassCard
                 key={classItem.class_id}

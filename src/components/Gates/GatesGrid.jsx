@@ -79,37 +79,6 @@ const GatesGrid = ({
               color: "text.primary",
             }}
           >
-            <motion.div
-              variants={leftColumnVariants}
-              initial="hidden"
-              animate="visible"
-              sx={{ gridColumn: { xs: "span 1", sm: "1 / 2" } }}
-            >
-              <Typography
-                variant="h3"
-                sx={{ fontWeight: 700, mb: 2, fontSize: { xs: "1.5rem", md: "2.5rem" } }}
-              >
-                Gates
-              </Typography>
-              <Typography
-                variant="h5"
-                sx={{
-                  color: "text.secondary",
-                  mb: 4,
-                  fontSize: { xs: "1.25rem", md: "1.75rem" },
-                }}
-              >
-                Your Space for Big Ideas
-              </Typography>
-              <Typography
-                variant="body1"
-                sx={{ lineHeight: 1.7, fontSize: { xs: "0.875rem", md: "1rem" } }}
-              >
-                Gates are like forum topics, starting points for broad discussions. Create a
-                Gate to spark a conversation or join one to explore shared interests. It’s
-                where communities form and ideas take root.
-              </Typography>
-            </motion.div>
             {filteredGates.map((gate) => (
               <GateCard
                 key={gate.gate_id}

@@ -16,7 +16,7 @@ import { useBoards } from "../hooks/useBoards";
 import { useGates } from "../hooks/useGates";
 import useAuth from "../hooks/useAuth";
 import { useNotification } from "../context/NotificationContext";
-import { Add, Edit, Delete, Public, Lock, People, Forum, Star } from "@mui/icons-material";
+import { Add, Edit, Delete, Public, Lock, People, Forum, Star, Home } from "@mui/icons-material";
 
 const ClassPage = () => {
   const navigate = useNavigate();
@@ -410,6 +410,8 @@ const ClassPage = () => {
 
   const userRole = members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || "none";
 
+  const gate = gates.find((g) => g.gate_id === classData?.gate_id);
+
   const headerData = useMemo(
     () => ({
       type: "class",
@@ -419,10 +421,22 @@ const ClassPage = () => {
       descriptionAriaLabel: classData?.description ? `Class description: ${classData.description}` : undefined,
       chips: [
         {
+          label: `${gate?.name || "No Gate"}`,
+          icon: <Home />,
+          color: "secondary",
+          ariaLabel: `${gate?.name || "No Gate"}`,
+        },
+        {
           label: classData?.access?.is_public ? "Public" : "Private",
           icon: classData?.access?.is_public ? <Public /> : <Lock />,
           color: classData?.access?.is_public ? "success" : "default",
           ariaLabel: classData?.access?.is_public ? "Public class" : "Private class",
+        },
+        {
+          label: `Favorites: ${stats?.favorite_count || 0}`,
+          icon: <Star />,
+          color: "warning",
+          ariaLabel: `Favorites: ${stats?.favorite_count || 0}`,
         },
         {
           label: `Members: ${stats?.member_count || members?.length || 0}`,
@@ -435,12 +449,6 @@ const ClassPage = () => {
           icon: <Forum />,
           color: "info",
           ariaLabel: `Boards: ${filteredBoards?.length || 0}`,
-        },
-        {
-          label: `Favorites: ${stats?.favorite_count || 0}`,
-          icon: <Star />,
-          color: "warning",
-          ariaLabel: `Favorites: ${stats?.favorite_count || 0}`,
         },
         {
           label: `Owner: ${classData?.creator?.username || "Unknown"}`,
@@ -511,6 +519,7 @@ const ClassPage = () => {
       handleOpenMemberDialog,
       handleDeleteClass,
       handleFavoriteToggle,
+      gate, // Added gate to dependencies
     ]
   );
 
