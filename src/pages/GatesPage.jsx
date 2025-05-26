@@ -1,13 +1,13 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Button, Skeleton, useTheme } from "@mui/material";
+import { Box, Button, Skeleton } from "@mui/material";
 import { Add } from "@mui/icons-material";
 import AppLayout from "../components/Layout/AppLayout";
 import { useGates } from "../hooks/useGates";
 import useAuth from "../hooks/useAuth";
 import { useNotification } from "../context/NotificationContext";
 import ProfileHeader from "../components/Headers/ProfileHeader";
-import { actionButtonStyles } from "../styles/BaseStyles";
+import { actionButtonStyles, gridStyles, skeletonStyles, containerStyles } from "../styles/BaseStyles";
 import GateFormDialog from "../components/Dialogs/GateFormDialog";
 import MemberFormDialog from "../components/Dialogs/MemberFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
@@ -18,7 +18,6 @@ import PropTypes from "prop-types";
 
 const GatesPage = () => {
   const navigate = useNavigate();
-  const theme = useTheme();
   const { showNotification } = useNotification();
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth();
   const {
@@ -250,18 +249,12 @@ const GatesPage = () => {
   if (authLoading || gatesLoading || isLoading) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-        <Box sx={{ maxWidth: 1500, mx: "auto", p: { xs: 2, md: 3 } }}>
-          <Skeleton variant="rectangular" height={100} sx={{ mb: 2 }} />
-          <Skeleton variant="rectangular" height={50} sx={{ mb: 2 }} />
-          <Box
-            sx={{
-              display: "grid",
-              gap: 2,
-              gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fill, minmax(300px, 1fr))" },
-            }}
-          >
+        <Box sx={{ ...containerStyles }}>
+          <Skeleton variant="rectangular" sx={{ ...skeletonStyles.header }} />
+          <Skeleton variant="rectangular" sx={{ ...skeletonStyles.filter }} />
+          <Box sx={{ ...gridStyles.container }}>
             {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} variant="rectangular" height={200} />
+              <Skeleton key={i} variant="rectangular" sx={{ ...skeletonStyles.card }} />
             ))}
           </Box>
         </Box>
@@ -276,15 +269,12 @@ const GatesPage = () => {
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-      <Box sx={{ maxWidth: 1500, mx: "auto", p: { xs: 2, md: 3 } }}>
+      <Box sx={{ ...containerStyles }}>
         <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData}>
           <Button
             onClick={handleOpenCreateGate}
             startIcon={<Add />}
-            sx={{
-              ...actionButtonStyles,
-              [theme.breakpoints.down("sm")]: { minWidth: 120, fontSize: "0.875rem" },
-            }}
+            sx={{ ...actionButtonStyles }}
             aria-label="Create a new gate"
           >
             Create Gate

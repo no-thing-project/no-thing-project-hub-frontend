@@ -1,6 +1,21 @@
 import { alpha } from "@mui/material";
 import theme from "../Theme";
 
+// Override theme breakpoints to include sm at 770px
+const customTheme = {
+  ...theme,
+  breakpoints: {
+    ...theme.breakpoints,
+    values: {
+      xs: 0,
+      sm: 770,
+      md: 900,
+      lg: 1200,
+      xl: 1536,
+    },
+  },
+};
+
 export const BOARD_SIZE = 10000;
 export const BASE_Z_INDEX = 10;
 export const BASE_SHADOW = "0 4px 16px rgba(0,0,0,0.12)";
@@ -23,7 +38,7 @@ export const baseHoverEffect = {
 
 export const baseCardStyles = {
   bgcolor: "background.paper",
-  borderRadius: theme.shape.borderRadiusMedium,
+  borderRadius: customTheme.shape.borderRadiusMedium,
   boxShadow: BASE_SHADOW,
   border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
   transition: "all 0.3s ease",
@@ -31,7 +46,7 @@ export const baseCardStyles = {
 };
 
 export const baseButtonStyles = {
-  borderRadius: theme.shape.borderRadiusLarge,
+  borderRadius: customTheme.shape.borderRadiusLarge,
   textTransform: "none",
   transition: "all 0.2s ease",
   fontWeight: 600,
@@ -44,7 +59,7 @@ export const baseButtonStyles = {
 export const actionButtonStyles = {
   height: { xs: "40px", sm: "50px" },
   minWidth: { xs: "120px", sm: "150px" },
-  borderRadius: theme.shape.borderRadiusLarge,
+  borderRadius: customTheme.shape.borderRadiusLarge,
   padding: { xs: "0 15px", sm: "0 25px" },
   backgroundColor: "primary.main",
   color: "primary.contrastText",
@@ -59,7 +74,7 @@ export const actionButtonStyles = {
 export const cancelButtonStyle = {
   height: { xs: "40px", sm: "50px" },
   minWidth: { xs: "120px", sm: "150px" },
-  borderRadius: theme.shape.borderRadiusLarge,
+  borderRadius: customTheme.shape.borderRadiusLarge,
   padding: { xs: "0 15px", sm: "0 25px" },
   backgroundColor: "background.default",
   color: "text.primary",
@@ -74,7 +89,7 @@ export const cancelButtonStyle = {
 export const deleteButtonStyle = {
   height: { xs: "40px", sm: "50px" },
   minWidth: { xs: "120px", sm: "150px" },
-  borderRadius: theme.shape.borderRadiusLarge,
+  borderRadius: customTheme.shape.borderRadiusLarge,
   padding: { xs: "0 15px", sm: "0 25px" },
   backgroundColor: "error.main",
   color: "error.contrastText",
@@ -87,13 +102,13 @@ export const deleteButtonStyle = {
 };
 
 export const inputStyles = {
-  mt: theme.spacing(1),
+  mt: customTheme.spacing(1),
   backgroundColor: "background.default",
-  borderRadius: theme.shape.borderRadiusSmall,
+  borderRadius: customTheme.shape.borderRadiusSmall,
   "& .MuiInputLabel-root": { color: "text.secondary", fontSize: { xs: "0.875rem", sm: "1rem" } },
   "& .MuiInputLabel-root.Mui-focused": { color: "primary.main" },
   "& .MuiOutlinedInput-root": {
-    borderRadius: theme.shape.borderRadiusSmall,
+    borderRadius: customTheme.shape.borderRadiusSmall,
     "& .MuiOutlinedInput-notchedOutline": { border: "none" },
     "&:hover .MuiOutlinedInput-notchedOutline": { border: "none" },
     "&.Mui-focused .MuiOutlinedInput-notchedOutline": { border: "none" },
@@ -103,13 +118,13 @@ export const inputStyles = {
 };
 
 export const inputStylesWhite = {
-  mt: theme.spacing(1),
+  mt: customTheme.spacing(1),
   backgroundColor: "background.paper",
-  borderRadius: theme.shape.borderRadiusSmall,
+  borderRadius: customTheme.shape.borderRadiusSmall,
   "& .MuiInputLabel-root": { color: "text.secondary", fontSize: { xs: "0.875rem", sm: "1rem" } },
   "& .MuiInputLabel-root.Mui-focused": { color: "primary.main" },
   "& .MuiOutlinedInput-root": {
-    borderRadius: theme.shape.borderRadiusSmall,
+    borderRadius: customTheme.shape.borderRadiusSmall,
     "& .MuiOutlinedInput-notchedOutline": { border: "none" },
     "&:hover .MuiOutlinedInput-notchedOutline": { border: "none" },
     "&.Mui-focused .MuiOutlinedInput-notchedOutline": { border: "none" },
@@ -119,11 +134,11 @@ export const inputStylesWhite = {
 };
 
 export const selectStyles = {
-  mt: theme.spacing(1),
+  mt: customTheme.spacing(1),
   backgroundColor: "background.default",
-  borderRadius: theme.shape.borderRadiusSmall,
+  borderRadius: customTheme.shape.borderRadiusSmall,
   "& .MuiOutlinedInput-root": {
-    borderRadius: theme.shape.borderRadiusSmall,
+    borderRadius: customTheme.shape.borderRadiusSmall,
     "& fieldset": { border: "none" },
     "&:hover fieldset": { border: "none" },
     "&.Mui-focused fieldset": { border: "none" },
@@ -202,18 +217,18 @@ export const headerStyles = {
     "&::-webkit-scrollbar": { display: "none" },
     msOverflowStyle: "none",
     scrollbarWidth: "none",
-    sm: {
-      display: "flex",
-      flexWrap: "wrap",
-    },
+    // sm: {
+    //   display: "flex",
+    //   flexWrap: "wrap",
+    // },
   },
   chip: {
-    fontSize: { xs: "0.65rem", sm: "0.875rem" },
+    fontSize: { xs: "0.65rem", sm: "0.75rem" },
     padding: { xs: "0.2rem", sm: "0.3rem 0.6rem" },
-    height: { xs: "32px", sm: "auto" },
-    transition: theme.transitions.create(["width", "padding"], {
-      duration: theme.transitions.duration.short,
-      easing: theme.transitions.easing.easeInOut,
+    height: { xs: "32px", sm: "28px" },
+    transition: customTheme.transitions.create(["width", "padding"], {
+      duration: customTheme.transitions.duration.short,
+      easing: customTheme.transitions.easing.easeInOut,
     }),
     cursor: "pointer",
     "& .MuiChip-label": { padding: { xs: 0, sm: "0 6px" }, display: { xs: "none", sm: "inline" } },
@@ -221,6 +236,7 @@ export const headerStyles = {
   },
   chipExpanded: {
     width: { xs: "auto", sm: "auto" },
+    // widthMax: {xs: "auto", sm: "3s"}
     padding: { xs: "0.2rem 0.6rem", sm: "0.5rem 1rem" },
     "& .MuiChip-label": {
       display: "inline",
@@ -236,7 +252,11 @@ export const headerStyles = {
 export const fieldStyles = {
   container: { mb: 2 },
   label: { fontWeight: 400, mb: 0.5 },
-  input: { "& .MuiOutlinedInput-notchedOutline": { border: "none" }, backgroundColor: "background.default", borderRadius: theme.shape.borderRadiusSmall },
+  input: {
+    "& .MuiOutlinedInput-notchedOutline": { border: "none" },
+    backgroundColor: "background.default",
+    borderRadius: customTheme.shape.borderRadiusSmall,
+  },
   value: { color: "text.secondary" },
 };
 
@@ -263,14 +283,14 @@ export const toggleStyles = {
       width: 20,
       height: 20,
       borderRadius: 10,
-      transition: theme.transitions.create(["width"], { duration: 200 }),
+      transition: customTheme.transitions.create(["width"], { duration: 200 }),
       backgroundColor: "background.default",
     },
     "& .MuiSwitch-track": {
       borderRadius: 12,
       backgroundColor: "grey.400",
       opacity: 1,
-      transition: theme.transitions.create(["background-color"], { duration: 200 }),
+      transition: customTheme.transitions.create(["background-color"], { duration: 200 }),
       "&.Mui-disabled": { backgroundColor: "action.disabledBackground", opacity: 0.7 },
     },
   },
@@ -280,4 +300,82 @@ export const containerStyles = {
   maxWidth: 1500,
   margin: "0 auto",
   padding: { xs: 1, sm: 2 },
+};
+
+export const gridStyles = {
+  container: {
+    display: "grid",
+    gap: 2,
+    gridTemplateColumns: {
+      xs: "1fr",
+      sm: "repeat(auto-fill, minmax(300px, 1fr))",
+    },
+  },
+};
+
+export const skeletonStyles = {
+  container: {
+    borderRadius: customTheme.shape.borderRadiusMedium,
+    bgcolor: "grey.200",
+  },
+  header: {
+    height: { xs: 80, sm: 100 },
+    mb: 2,
+  },
+  filter: {
+    height: { xs: 40, sm: 50 },
+    mb: 2,
+  },
+  card: {
+    height: { xs: 180, sm: 200 },
+  },
+};
+
+export const dialogStyles = {
+  paper: {
+    borderRadius: customTheme.shape.borderRadiusMedium,
+    boxShadow: MODAL_SHADOW,
+    bgcolor: "background.paper",
+    width: { xs: "90%", sm: "500px" },
+    maxWidth: "100%",
+    p: { xs: 2, sm: 3 },
+  },
+  title: {
+    ...baseTypographyStyles,
+    fontSize: { xs: "1.25rem", sm: "1.5rem" },
+    fontWeight: 500,
+    mb: 2,
+  },
+  content: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+  },
+  actions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 1,
+    mt: 2,
+  },
+};
+
+export const filterStyles = {
+  container: {
+    display: "flex",
+    flexDirection: { xs: "column", sm: "row" },
+    gap: { xs: 1, sm: 2 },
+    mb: 3,
+    alignItems: { xs: "stretch", sm: "center" },
+  },
+  search: {
+    flex: 1,
+    maxWidth: { xs: "100%", sm: "400px" },
+  },
+  select: {
+    minWidth: { xs: "100%", sm: "150px" },
+  },
+  resetButton: {
+    height: { xs: "40px", sm: "50px" },
+    minWidth: { xs: "100%", sm: "120px" },
+  },
 };

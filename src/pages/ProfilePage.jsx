@@ -9,7 +9,7 @@ import ProfileCard from '../components/Cards/ProfileCard';
 import ProfileHeader from '../components/Headers/ProfileHeader';
 import useAuth from '../hooks/useAuth';
 import useProfile from '../hooks/useProfile';
-import { actionButtonStyles, cancelButtonStyle } from '../styles/BaseStyles';
+import { actionButtonStyles, cancelButtonStyle, headerStyles, containerStyles } from '../styles/BaseStyles';
 import { normalizeUserData } from '../utils/profileUtils';
 import { useNotification } from '../context/NotificationContext';
 import { useUserExtras } from '../hooks/useUserExtras';
@@ -162,17 +162,18 @@ const ProfilePage = () => {
 
   return (
     <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token}>
-      <Box sx={{ maxWidth: 1500, margin: '0 auto', p: { xs: 1, sm: 2 } }}>
+      <Box sx={{ ...containerStyles }}>
         <ProfileHeader user={userData} isOwnProfile={isOwnProfile}>
           {isOwnProfile && (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            <Box sx={{ ...headerStyles.buttonGroup }}>
               {!isEditing ? (
                 <>
                   <Button
                     variant="contained"
                     onClick={handleEditProfile}
                     startIcon={<Edit />}
-                    sx={{ ...actionButtonStyles, minWidth: { xs: '100px', sm: '120px' } }}
+                    sx={{ ...actionButtonStyles }}
+                    aria-label="Edit profile"
                   >
                     Edit Profile
                   </Button>
@@ -180,7 +181,8 @@ const ProfilePage = () => {
                     variant="contained"
                     onClick={handleUpdatePrediction}
                     startIcon={<Refresh />}
-                    sx={{ ...actionButtonStyles, minWidth: { xs: '100px', sm: '120px' } }}
+                    sx={{ ...actionButtonStyles }}
+                    aria-label="Update prediction"
                   >
                     Update Prediction
                   </Button>
@@ -190,14 +192,16 @@ const ProfilePage = () => {
                   <Button
                     variant="contained"
                     onClick={handleSaveProfile}
-                    sx={{ ...actionButtonStyles, minWidth: { xs: '100px', sm: '120px' } }}
+                    sx={{ ...actionButtonStyles }}
+                    aria-label="Save profile"
                   >
                     Save
                   </Button>
                   <Button
                     variant="contained"
                     onClick={handleCancelEdit}
-                    sx={{ ...cancelButtonStyle, minWidth: { xs: '100px', sm: '120px' } }}
+                    sx={{ ...cancelButtonStyle }}
+                    aria-label="Cancel editing"
                   >
                     Cancel
                   </Button>

@@ -155,12 +155,12 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
                 Level: <StatusBadge level={user.access_level} />
               </Typography>
             ) : headerData.type === "page" ? (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1, justifyContent: { xs: "center", customSm: "flex-start" } }}>
+              <Box sx={{ display: "flex", alignItems: "left", gap: 1, justifyContent: { xs: "center", sm: "flex-start" } }}>
                 <Typography
                   variant="body2"
                   sx={{
                     ...headerStyles.level,
-                    fontSize: { xs: "0.875rem", customSm: "1rem" },
+                    fontSize: { xs: "0.875rem", sm: "1rem" },
                   }}
                   aria-label={`Page description: ${headerData.shortDescription}`}
                 >
