@@ -4,7 +4,7 @@ import { alpha } from '@mui/material';
 const TWEET_Z_INDEX = 99; // TweetContent
 const BASE_SHADOW = '0 4px 16px rgba(0,0,0,0.12)';
 const HOVER_SHADOW = '0 8px 24px rgba(0,0,0,0.18)';
-const MEDIA_PREVIEW_SIZE = 250; // Unified size for all circular previews (video, audio, recording)
+const MEDIA_PREVIEW_SIZE = 220; // Unified size for all circular previews (video, audio, recording)
 
 // Reusable style objects
 const baseTypographyStyles = {

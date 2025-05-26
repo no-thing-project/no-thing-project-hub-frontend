@@ -301,7 +301,7 @@ const Board = ({
       try {
         optimisticUpdateFn(tweetId, tweets);
         await serverUpdateFn();
-        showNotification(isNewTweet ? 'Tweet created successfully!' : 'Tweet updated successfully!', 'success');
+        // showNotification(isNewTweet ? 'Tweet created successfully!' : 'Tweet updated successfully!', 'success');
       } catch (err) {
         rollbackFn(tweetId, tweets);
         showNotification(err.message || (isNewTweet ? 'Failed to create tweet' : 'Failed to update tweet'), 'error');

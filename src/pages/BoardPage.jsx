@@ -16,6 +16,7 @@ import {
   Button,
   Badge,
   Skeleton,
+  useMediaQuery,
 } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -33,6 +34,7 @@ import {
   Toll,
 } from '@mui/icons-material';
 import PropTypes from 'prop-types';
+import { formatDistanceToNow, format, isValid, parseISO } from 'date-fns';
 import LoadingSpinner from '../components/Layout/LoadingSpinner';
 import Board from '../components/social-features/Board/Board';
 import useAuth from '../hooks/useAuth';
@@ -60,6 +62,7 @@ const BoardPage = memo(() => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm')); // Detect mobile (<600px)
   const { board_id } = useParams();
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth(navigate);
   const pointsRef = useRef(null);
@@ -72,6 +75,7 @@ const BoardPage = memo(() => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [inviteLink, setInviteLink] = useState('');
   const [pointsSpent, setPointsSpent] = useState(0);
+  const [boardTimestamp, setBoardTimestamp] = useState('');
   const isMounted = useRef(true);
 
   // Hooks
@@ -107,6 +111,65 @@ const BoardPage = memo(() => {
     loading: classesLoading,
     fetchClassesList,
   } = useClasses(token, handleLogout, navigate);
+
+  // Prevent body scroll on mobile when page is mounted
+  useEffect(() => {
+    if (isMobile) {
+      // Store original body styles
+      const originalStyle = {
+        overflow: document.body.style.overflow,
+        position: document.body.style.position,
+        width: document.body.style.width,
+        height: document.body.style.height,
+      };
+
+      // Disable body scrolling
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.height = '100vh';
+
+      // Cleanup on unmount
+      return () => {
+        document.body.style.overflow = originalStyle.overflow;
+        document.body.style.position = originalStyle.position;
+        document.body.style.width = originalStyle.width;
+        document.body.style.height = originalStyle.height;
+      };
+    }
+  }, [isMobile]);
+
+  // Board timestamp update
+  useEffect(() => {
+    if (!boardData?.created_at) return;
+
+    const createdAt = parseISO(boardData.created_at);
+    if (!isValid(createdAt)) return;
+
+    const updateTimestamp = () => {
+      const now = new Date();
+      const diffInSeconds = (now - createdAt) / 1000;
+
+      if (diffInSeconds < 7 * 24 * 60 * 60) { // Less than 7 days
+        setBoardTimestamp(formatDistanceToNow(createdAt, { addSuffix: true }));
+      } else {
+        setBoardTimestamp(format(createdAt, 'MMM d'));
+      }
+
+    updateTimestamp(); // Initial update
+
+    // Update every 60 seconds for boards less than 30 minutes old
+    if (diffInSeconds < 30 * 60) {
+      const interval = setInterval(updateTimestamp, 60 * 1000);
+      return () => clearInterval(interval);
+    };
+  }}, [boardData?.created_at]);
+
+  const fullBoardDate = useMemo(() => {
+    if (!boardData?.created_at) return '';
+    const createdAt = parseISO(boardData.created_at);
+    return isValid(createdAt) ? format(createdAt, 'PPPPpp') : ''; // e.g., "Monday, May 26, 2025 at 8:04 PM"
+  }, [boardData?.created_at]);
 
   // Memoized derived state
   const userRole = useMemo(
@@ -404,7 +467,16 @@ const BoardPage = memo(() => {
   }
 
   return (
-    <Box sx={{ position: 'relative', width: '100%', height: '100vh' }}>
+    <Box
+      sx={{
+        position: 'relative',
+        width: '100%',
+        height: '100vh',
+        // Disable scrolling on mobile
+        overflow: { xs: 'hidden', sm: 'auto' },
+        touchAction: { xs: 'none', sm: 'auto' },
+      }}
+    >
       <Box
         sx={{
           position: 'absolute',
@@ -420,9 +492,7 @@ const BoardPage = memo(() => {
       >
         <AnimatePresence>
           {boardLoading ? (
-            <>
-              <Skeleton variant="circular" width={40} height={40} />
-            </>
+            <Skeleton variant="circular" width={40} height={40} />
           ) : (
             <>
               <motion.div variants={buttonVariants} initial="initial" animate="animate" exit="exit">
@@ -535,33 +605,46 @@ const BoardPage = memo(() => {
         }}
       >
         <AnimatePresence>
-            <motion.div
-              key="points"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Tooltip title="Available points">
-                <IconButton size="small" aria-label={`Available points: ${pointsData?.total_points || 0}`}>
-                  <Toll />
-                </IconButton>
-              </Tooltip>
-              <AnimatedPoints points={pointsData?.total_points || 0} />
-              {pointsSpent > 0 && <PointsDeductionAnimation pointsSpent={pointsSpent} />}
-            </motion.div>
+          <motion.div
+            key="points"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Tooltip title="Available points">
+              <IconButton size="small" aria-label={`Available points: ${pointsData?.total_points || 0}`}>
+                <Toll />
+              </IconButton>
+            </Tooltip>
+            <AnimatedPoints points={pointsData?.total_points || 0} />
+            {pointsSpent > 0 && <PointsDeductionAnimation pointsSpent={pointsSpent} />}
+          </motion.div>
         </AnimatePresence>
       </Box>
 
-      <Board
-        boardId={board_id}
-        boardTitle={boardData?.name || ''}
-        token={token}
-        currentUser={authData}
-        userRole={userRole}
-        onLogout={handleLogout}
-        availableBoards={[]}
-      />
+      <Box
+        sx={{
+          width: '100%',
+          height: '100%',
+          overflow: { xs: 'auto', sm: 'visible' },
+          touchAction: { xs: 'auto', sm: 'auto' },
+        }}
+      >
+        <Board
+          boardId={board_id}
+          boardTitle={boardData?.name || ''}
+          boardCreatedAt={boardData?.created_at}
+          boardTimestamp={boardTimestamp}
+          fullBoardDate={fullBoardDate}
+          token={token}
+          currentUser={authData}
+          userRole={userRole}
+          points={pointsData}
+          onLogout={handleLogout}
+          availableBoards={[]}
+        />
+      </Box>
 
       {editingBoard && (
         <BoardFormDialog
@@ -590,7 +673,7 @@ const BoardPage = memo(() => {
             setMembersDialogOpen(false);
           }}
           onCancel={() => setMembersDialogOpen(false)}
-          disabled={userRole !== 'owner' && userRole !== 'admin'}
+          disabled={boardLoading}
           members={members || []}
           addMember={addMemberToBoard}
           removeMember={removeMemberFromBoard}

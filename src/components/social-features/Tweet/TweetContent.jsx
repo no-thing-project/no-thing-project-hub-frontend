@@ -28,6 +28,7 @@ import { motion } from 'framer-motion';
 import PropTypes from 'prop-types';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import Emoji from 'react-emoji-render';
+import { formatDistanceToNow, format, isValid, parseISO } from 'date-fns';
 import TweetContentStyles from './TweetContentStyles';
 import ModalStyles from './ModalStyles';
 
@@ -183,12 +184,40 @@ const TweetContent = ({
   const [openOptionsDialog, setOpenOptionsDialog] = useState(false);
   const [openMediaDialog, setOpenMediaDialog] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [timestamp, setTimestamp] = useState('');
 
   // Notify Board.js of modal state changes
   useEffect(() => {
     onModalStateChange?.(tweet.tweet_id, openOptionsDialog || openMediaDialog);
     return () => onModalStateChange?.(tweet.tweet_id, false);
   }, [openOptionsDialog, openMediaDialog, tweet.tweet_id, onModalStateChange]);
+
+  // Timestamp update logic
+  useEffect(() => {
+    if (!tweet.created_at) return;
+
+    const createdAt = parseISO(tweet.created_at);
+    if (!isValid(createdAt)) return;
+
+    const updateTimestamp = () => {
+      const now = new Date();
+      const diffInSeconds = (now - createdAt) / 1000;
+
+      if (diffInSeconds < 7 * 24 * 60 * 60) { // Less than 7 days
+        setTimestamp(formatDistanceToNow(createdAt, { addSuffix: true }));
+      } else {
+        setTimestamp(format(createdAt, 'MMM d'));
+      }
+    };
+
+    updateTimestamp(); // Initial update
+
+    // Update every minute for tweets less than 1 hour old
+    if ((new Date() - createdAt) / 1000 < 60 * 60) {
+      const interval = setInterval(updateTimestamp, 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [tweet.created_at]);
 
   const tweetAuthor = tweet.username || tweet.user?.username || 'Anonymous';
   const isLiked = tweet.liked_by?.some((u) => u.anonymous_id === currentUser?.anonymous_id) ?? false;
@@ -284,6 +313,12 @@ const TweetContent = ({
       remainderText: text.slice(lastSpace),
     };
   }, [tweet.content?.value]);
+
+  const fullDate = useMemo(() => {
+    if (!tweet.created_at) return '';
+    const createdAt = parseISO(tweet.created_at);
+    return isValid(createdAt) ? format(createdAt, 'PPPPpp') : ''; // e.g., "Monday, May 26, 2025 at 8:04 PM"
+  }, [tweet.created_at]);
 
   const renderImages = useMemo(() => {
     const imageFiles = tweet.content?.metadata?.files?.filter((f) => f.contentType?.startsWith('image')) || [];
@@ -599,7 +634,7 @@ const TweetContent = ({
           </motion.div>
         )}
         {renderContent}
-        <Box sx={{ ...TweetContentStyles.statusContainer, justifyContent: 'space-between' }}>
+        <Box sx={{ ...TweetContentStyles.statusContainer, justifyContent: 'space-between', alignItems: 'center' }}>
           <motion.div whileHover={{ scale: 1.05 }}>
             <Chip
               label={chipLabel}
@@ -608,9 +643,22 @@ const TweetContent = ({
               aria-label={`Tweet status: ${chipLabel}`}
             />
           </motion.div>
-          <Typography variant="caption" sx={TweetContentStyles.tweetAuthorTypography}>
-            Author: {tweetAuthor}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {timestamp && (
+              <Typography
+                variant="caption"
+                component="time"
+                dateTime={tweet.created_at}
+                sx={{ color: 'text.secondary' }}
+                aria-label={`Posted on ${fullDate}`}
+              >
+                {timestamp}
+              </Typography>
+            )}
+            <Typography variant="caption" sx={TweetContentStyles.tweetAuthorTypography}>
+              Author: {tweetAuthor}
+            </Typography>
+          </Box>
         </Box>
         <Box sx={{ ...TweetContentStyles.actionsContainer, justifyContent: 'space-between' }}>
           <Box sx={TweetContentStyles.actionButtons}>
@@ -696,7 +744,6 @@ const TweetContent = ({
             View all media files attached to the tweet.
           </Typography>
           {mediaDialogContent}
-Michael McDonald
         </DialogContent>
         <DialogActions sx={ModalStyles.dialogActions}>
           <IconButton
@@ -760,6 +807,7 @@ const arePropsEqual = (prevProps, nextProps) => {
     prevProps.tweet.status === nextProps.tweet.status &&
     prevProps.tweet.liked_by?.length === nextProps.tweet.liked_by?.length &&
     prevProps.tweet.content?.metadata?.files?.length === nextProps.tweet.content?.metadata?.files?.length &&
+    prevProps.tweet.created_at === nextProps.tweet.created_at &&
     prevProps.currentUser.anonymous_id === nextProps.currentUser.anonymous_id &&
     prevProps.currentUser.username === nextProps.currentUser.username &&
     prevProps.userRole === nextProps.userRole &&
