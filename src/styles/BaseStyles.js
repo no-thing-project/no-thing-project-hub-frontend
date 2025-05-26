@@ -1,17 +1,15 @@
 import { alpha } from "@mui/material";
 import theme from "../Theme";
 
-// Constants for reuse
 export const BOARD_SIZE = 10000;
-export const BASE_Z_INDEX = 10; // Board
+export const BASE_Z_INDEX = 10;
 export const BASE_SHADOW = "0 4px 16px rgba(0,0,0,0.12)";
 export const HOVER_SHADOW = "0 8px 24px rgba(0,0,0,0.18)";
-export const MODAL_Z_INDEX = 111; // Edit Tweet Modal, Options Modal, Media Modal
+export const MODAL_Z_INDEX = 111;
 export const MODAL_SHADOW = "0 8px 28px rgba(0,0,0,0.22)";
 export const MEDIA_PREVIEW_SIZE = 250;
 export const TWEET_Z_INDEX = 99;
 
-// Reusable style objects
 export const baseTypographyStyles = {
   color: "text.primary",
   fontWeight: 400,
@@ -19,19 +17,13 @@ export const baseTypographyStyles = {
 };
 
 export const baseHoverEffect = {
-  "&:hover": {
-    transform: "translateY(-2px)",
-    boxShadow: HOVER_SHADOW,
-  },
-  "&:focus": {
-    outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
-    outlineOffset: 2,
-  },
+  "&:hover": { transform: "translateY(-2px)", boxShadow: HOVER_SHADOW },
+  "&:focus": { outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.5)}`, outlineOffset: 2 },
 };
 
 export const baseCardStyles = {
   bgcolor: "background.paper",
-  borderRadius: theme.shape.borderRadiusMedium, // Align with theme.shape.borderRadiusMedium
+  borderRadius: theme.shape.borderRadiusMedium,
   boxShadow: BASE_SHADOW,
   border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
   transition: "all 0.3s ease",
@@ -39,25 +31,14 @@ export const baseCardStyles = {
 };
 
 export const baseButtonStyles = {
-  borderRadius: theme.shape.borderRadiusLarge, // Matches actionButtonStyles
+  borderRadius: theme.shape.borderRadiusLarge,
   textTransform: "none",
   transition: "all 0.2s ease",
   fontWeight: 600,
-  "&:hover": {
-    transform: "scale(1.02)",
-    backgroundColor: (theme) => theme.palette.primary.dark,
-  },
-  "&:active": {
-    transform: "scale(0.98)",
-  },
-  "&:focus": {
-    outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
-    outlineOffset: 2,
-  },
-  "&:disabled": {
-    backgroundColor: "action.disabled",
-    color: "action.disabledOpacity",
-  },
+  "&:hover": { transform: "scale(1.02)", backgroundColor: (theme) => theme.palette.primary.dark },
+  "&:active": { transform: "scale(0.98)" },
+  "&:focus": { outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.5)}`, outlineOffset: 2 },
+  "&:disabled": { backgroundColor: "action.disabled", color: "action.disabledOpacity" },
 };
 
 export const actionButtonStyles = {
@@ -71,14 +52,8 @@ export const actionButtonStyles = {
   fontSize: { xs: "0.875rem", sm: "1rem" },
   fontWeight: 600,
   transition: "all 0.3s ease-in-out",
-  "&:hover": {
-    backgroundColor: "primary.dark",
-    boxShadow: "none",
-  },
-  "&:disabled": {
-    backgroundColor: "action.disabled",
-    color: "action.disabledOpacity",
-  },
+  "&:hover": { backgroundColor: "primary.dark", boxShadow: "none" },
+  "&:disabled": { backgroundColor: "action.disabled", color: "action.disabledOpacity" },
 };
 
 export const cancelButtonStyle = {
@@ -92,14 +67,8 @@ export const cancelButtonStyle = {
   fontSize: { xs: "0.875rem", sm: "1rem" },
   fontWeight: 600,
   transition: "all 0.3s ease-in-out",
-  "&:hover": {
-    backgroundColor: "background.hover",
-    boxShadow: "none",
-  },
-  "&:disabled": {
-    backgroundColor: "action.disabled",
-    color: "action.disabledOpacity",
-  },
+  "&:hover": { backgroundColor: "background.hover", boxShadow: "none" },
+  "&:disabled": { backgroundColor: "action.disabled", color: "action.disabledOpacity" },
 };
 
 export const deleteButtonStyle = {
@@ -113,78 +82,40 @@ export const deleteButtonStyle = {
   fontSize: { xs: "0.875rem", sm: "1rem" },
   fontWeight: 600,
   transition: "all 0.3s ease-in-out",
-  "&:hover": {
-    backgroundColor: "error.dark",
-    boxShadow: "none",
-  },
-  "&:disabled": {
-    backgroundColor: "action.disabled",
-    color: "action.disabledOpacity",
-  },
+  "&:hover": { backgroundColor: "error.dark", boxShadow: "none" },
+  "&:disabled": { backgroundColor: "action.disabled", color: "action.disabledOpacity" },
 };
 
 export const inputStyles = {
   mt: theme.spacing(1),
   backgroundColor: "background.default",
   borderRadius: theme.shape.borderRadiusSmall,
-  "& .MuiInputLabel-root": {
-    color: "text.secondary",
-    fontSize: { xs: "0.875rem", sm: "1rem" },
-  },
-  "& .MuiInputLabel-root.Mui-focused": {
-    color: "primary.main",
-  },
-  "& .MuiOutlinedInputRoot": {
+  "& .MuiInputLabel-root": { color: "text.secondary", fontSize: { xs: "0.875rem", sm: "1rem" } },
+  "& .MuiInputLabel-root.Mui-focused": { color: "primary.main" },
+  "& .MuiOutlinedInput-root": {
     borderRadius: theme.shape.borderRadiusSmall,
-    "& .MuiOutlinedInputNotchedOutline": {
-      border: "none",
-    },
-    "&:hover .MuiOutlinedInputNotchedOutline": {
-      border: "none",
-    },
-    "&MuiOutlinedInputNotchedOutline": {
-      border: "none",
-    },
+    "& .MuiOutlinedInput-notchedOutline": { border: "none" },
+    "&:hover .MuiOutlinedInput-notchedOutline": { border: "none" },
+    "&.Mui-focused .MuiOutlinedInput-notchedOutline": { border: "none" },
   },
-  "& .MuiInputBase-input": {
-    fontSize: { xs: "0.875rem", sm: "1rem" },
-  },
-  "& .MuiInputBase-input::placeholder": {
-    color: "text.secondary",
-    opacity: 1,
-  },
+  "& .MuiInputBase-input": { fontSize: { xs: "0.875rem", sm: "1rem" } },
+  "& .MuiInputBase-input::placeholder": { color: "text.secondary", opacity: 1 },
 };
 
 export const inputStylesWhite = {
   mt: theme.spacing(1),
   backgroundColor: "background.paper",
   borderRadius: theme.shape.borderRadiusSmall,
-  "& .MuiInputLabel-root": {
-    color: "text.secondary",
-    fontSize: { xs: "0.875rem", sm: "1rem" },
-  },
-  "& .MuiInputLabel-root.Mui-focused": {
-    color: "primary.main",
-  },
+  "& .MuiInputLabel-root": { color: "text.secondary", fontSize: { xs: "0.875rem", sm: "1rem" } },
+  "& .MuiInputLabel-root.Mui-focused": { color: "primary.main" },
   "& .MuiOutlinedInput-root": {
     borderRadius: theme.shape.borderRadiusSmall,
-    "& .MuiOutlinedInputNotchedOutline": {
-      border: "none",
-    },
-    "&:hover .MuiOutlinedInputNotchedOutline": {
-      border: "none",
-    },
-    "&.MuiOutlinedInputNotchedOutline": {
-      border: "none",
-    },
+    "& .MuiOutlinedInput-notchedOutline": { border: "none" },
+    "&:hover .MuiOutlinedInput-notchedOutline": { border: "none" },
+    "&.Mui-focused .MuiOutlinedInput-notchedOutline": { border: "none" },
   },
-  "& .MuiInputBase-input": {
-    fontSize: { xs: "0.875rem", sm: "1rem" },
-  },
-  "& .MuiInputBase-input::placeholder": {
-    color: "text.secondary",
-    opacity: 1,
-  },
+  "& .MuiInputBase-input": { fontSize: { xs: "0.875rem", sm: "1rem" } },
+  "& .MuiInputBase-input::placeholder": { color: "text.secondary", opacity: 1 },
 };
 
 export const selectStyles = {
@@ -193,30 +124,18 @@ export const selectStyles = {
   borderRadius: theme.shape.borderRadiusSmall,
   "& .MuiOutlinedInput-root": {
     borderRadius: theme.shape.borderRadiusSmall,
-    "& fieldset": {
-      border: "none",
-    },
-    "&:hover fieldset": {
-      border: "none",
-    },
-    "&.Mui-focused fieldset": {
-      border: "none",
-    },
+    "& fieldset": { border: "none" },
+    "&:hover fieldset": { border: "none" },
+    "&.Mui-focused fieldset": { border: "none" },
   },
-  "& .MuiSelect-select": {
-    fontSize: { xs: "0.875rem", sm: "1rem" },
-  },
-  "& .MuiSelect-icon": {
-    color: "text.primary",
-  },
-  "& .MuiInputLabel-root": {
-    fontSize: { xs: "0.875rem", sm: "1rem" },
-  },
+  "& .MuiSelect-select": { fontSize: { xs: "0.875rem", sm: "1rem" } },
+  "& .MuiSelect-icon": { color: "text.primary" },
+  "& .MuiInputLabel-root": { fontSize: { xs: "0.875rem", sm: "1rem" } },
 };
 
 export const chipStyles = {
   fontSize: { xs: "0.75rem", md: "0.875rem" },
-  padding: 1,
+  padding: { xs: "0.3rem 0.5rem", md: "0.5rem 1rem" },
   border: "none",
 };
 
@@ -229,52 +148,106 @@ export const headerStyles = {
   },
   content: {
     display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: { xs: "column", sm: "row" },
+    alignItems: { xs: "center", sm: "stretch" },
+    justifyContent: { xs: "center", sm: "space-between" },
     mt: 1,
     mb: 1,
     mx: { xs: 2, sm: 3 },
+    gap: { xs: 2, sm: 3 },
+    textAlign: { xs: "center", sm: "left" },
   },
-  title: {
-    fontWeight: 400,
-    color: "text.primary",
+  leftSection: {
+    display: "flex",
+    flexDirection: "column",
+    width: { xs: "100%", sm: "50%" },
+    gap: 1,
   },
-  level: {
-    color: "text.secondary",
+  rightSection: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    width: { xs: "100%", sm: "30%" },
   },
+  title: { fontWeight: 400, color: "text.primary" },
+  level: { color: "text.secondary" },
   buttonGroup: {
     display: "flex",
+    flexDirection: { xs: "column", sm: "column" },
+    alignItems: "center",
+    justifyContent: "center",
     gap: { xs: 1, sm: 2 },
+    width: { xs: "100%", sm: "auto" },
+    "& > *": { width: { xs: "100%", sm: "auto" }, maxWidth: { xs: "100%", sm: "200px" } },
+  },
+  splitButtonGroup: {
+    display: "flex",
+    flexDirection: { xs: "row", sm: "column" },
+    alignItems: "center",
+    justifyContent: "center",
+    width: { xs: "100%", sm: "auto" },
+    gap: { xs: 1, sm: 2 },
+    flexWrap: { xs: "wrap", sm: "nowrap" },
+  },
+  chipContainer: {
+    display: "flex",
+    flexDirection: "row",
+    flexWrap: { xs: "nowrap", sm: "wrap" },
+    gap: { xs: 0.5, sm: 1 },
+    mt: 1,
+    width: { xs: "100%", sm: "auto" },
+    justifyContent: { xs: "center", sm: "start" },
+    overflowX: { xs: "auto", sm: "visible" },
+    "&::-webkit-scrollbar": { display: "none" },
+    msOverflowStyle: "none",
+    scrollbarWidth: "none",
+    sm: {
+      display: "flex",
+      flexWrap: "wrap",
+    },
+  },
+  chip: {
+    fontSize: { xs: "0.65rem", sm: "0.875rem" },
+    padding: { xs: "0.2rem", sm: "0.3rem 0.6rem" },
+    height: { xs: "32px", sm: "auto" },
+    transition: theme.transitions.create(["width", "padding"], {
+      duration: theme.transitions.duration.short,
+      easing: theme.transitions.easing.easeInOut,
+    }),
+    cursor: "pointer",
+    "& .MuiChip-label": { padding: { xs: 0, sm: "0 6px" }, display: { xs: "none", sm: "inline" } },
+    "& .MuiChip-icon": { margin: { xs: "0", sm: "0 0 0 -4px" }, fontSize: { xs: "1rem", sm: "0.875rem" } },
+  },
+  chipExpanded: {
+    width: { xs: "auto", sm: "auto" },
+    padding: { xs: "0.2rem 0.6rem", sm: "0.5rem 1rem" },
+    "& .MuiChip-label": {
+      display: "inline",
+    },
+  },
+  chipCollapsed: {
+    width: { xs: "32px", sm: "auto" },
+    padding: { xs: "0.2rem", sm: "0.3rem 0.6rem" },
+    "& .MuiChip-label": { display: { xs: "none", sm: "inline" } },
   },
 };
 
 export const fieldStyles = {
   container: { mb: 2 },
   label: { fontWeight: 400, mb: 0.5 },
-  input: {
-    "& .MuiOutlinedInputNotchedOutline": { border: "none" },
-    backgroundColor: "background.default",
-    borderRadius: 0.8,
-  },
+  input: { "& .MuiOutlinedInput-notchedOutline": { border: "none" }, backgroundColor: "background.default", borderRadius: theme.shape.borderRadiusSmall },
   value: { color: "text.secondary" },
 };
 
 export const sectionStyles = {
-  card: {
-    borderRadius: { xs: 1, sm: 1.5 },
-    backgroundColor: "background.paper",
-    boxShadow: "none",
-    mb: 3,
-  },
+  card: { borderRadius: { xs: 1, sm: 1.5 }, backgroundColor: "background.paper", boxShadow: "none", mb: 3 },
   content: { mx: { xs: 2, sm: 3 }, my: 3 },
   title: { fontWeight: 500, mb: 5 },
 };
 
 export const toggleStyles = {
-  formControl: {
-    gap: 2,
-    "& .MuiFormControlLabel-label": { minWidth: "120px", fontWeight: 400 },
-  },
+  formControl: { gap: 2, "& .MuiFormControlLabel-label": { minWidth: "120px", fontWeight: 400 } },
   switch: {
     width: 42,
     height: 24,
@@ -282,31 +255,23 @@ export const toggleStyles = {
     "&:active .MuiSwitch-thumb": { width: 15 },
     "& .MuiSwitch-switchBase": {
       padding: 0.25,
-      "&.Mui-checked": {
-        transform: "translateX(18px)",
-        color: "#fff",
-        "& + .MuiSwitch-track": { backgroundColor: "background.button", opacity: 1 },
-      },
-      "&.Mui-disabled": {
-        color: "#9e9e9e",
-        "& + .MuiSwitch-track": { backgroundColor: "background.toggleDisabled", opacity: 1 },
-      },
+      "&.Mui-checked": { transform: "translateX(18px)", color: "#fff", "& + .MuiSwitch-track": { backgroundColor: "primary.main", opacity: 1 } },
+      "&.Mui-disabled": { color: "grey.400", "& + .MuiSwitch-track": { backgroundColor: "action.disabledBackground", opacity: 1 } },
     },
     "& .MuiSwitch-thumb": {
       boxShadow: "0 2px 4px rgba(0,0,0,0.3)",
       width: 20,
       height: 20,
       borderRadius: 10,
-      transition: "all 0.2s ease",
+      transition: theme.transitions.create(["width"], { duration: 200 }),
       backgroundColor: "background.default",
-      "&.Mui-disabled": { backgroundColor: "background.default", boxShadow: "none" },
     },
     "& .MuiSwitch-track": {
       borderRadius: 12,
-      backgroundColor: "background.toggleOff",
+      backgroundColor: "grey.400",
       opacity: 1,
-      transition: "all 0.2s ease",
-      "&.Mui-disabled": { backgroundColor: "background.toggleDisabled", opacity: 0.7 },
+      transition: theme.transitions.create(["background-color"], { duration: 200 }),
+      "&.Mui-disabled": { backgroundColor: "action.disabledBackground", opacity: 0.7 },
     },
   },
 };
@@ -314,5 +279,5 @@ export const toggleStyles = {
 export const containerStyles = {
   maxWidth: 1500,
   margin: "0 auto",
-  p: 0,
+  padding: { xs: 1, sm: 2 },
 };

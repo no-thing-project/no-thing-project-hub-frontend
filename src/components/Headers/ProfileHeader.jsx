@@ -13,7 +13,6 @@ import {
   Tooltip,
   Chip,
   useTheme,
-  Icon,
 } from "@mui/material";
 import { MoreVert, Star, StarBorder, HelpOutline } from "@mui/icons-material";
 import { headerStyles, actionButtonStyles } from "../../styles/BaseStyles";
@@ -22,6 +21,7 @@ import StatusBadge from "../Badges/StatusBadge";
 const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) => {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
+  const [activeChipIndex, setActiveChipIndex] = useState(null);
   const open = Boolean(anchorEl);
 
   const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
@@ -32,9 +32,13 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
     handleMenuClose();
   };
 
+  const handleChipClick = (index) => {
+    setActiveChipIndex((prev) => (prev === index ? null : index));
+  };
+
   if (!user) {
     return (
-      <Card sx={headerStyles.card}>
+      <Card sx={{ ...headerStyles.card, width: { xs: "100%", customSm: "auto" } }}>
         <CardContent>
           <Box sx={headerStyles.content}>
             <Box>
@@ -47,25 +51,17 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
     );
   }
 
-  // Simplified user profile mode (no headerData)
   if (!headerData) {
     return (
-      <Card sx={headerStyles.card}>
+      <Card sx={{ ...headerStyles.card, width: { xs: "100%", customSm: "auto" } }}>
         <CardContent>
-          <Box
-            sx={{
-              ...headerStyles.content,
-              flexDirection: { xs: "column", sm: "row" },
-              alignItems: { xs: "flex-start", sm: "center" },
-              gap: { xs: 2, sm: 0 },
-            }}
-          >
-            <Box>
+          <Box sx={headerStyles.content}>
+            <Box sx={{ flex: 1 }}>
               <Typography
                 variant="h4"
                 sx={{
                   ...headerStyles.title,
-                  fontSize: { xs: "1.5rem", sm: "2rem", md: "2.5rem" },
+                  fontSize: { xs: "1.5rem", customSm: "2rem", md: "2.5rem" },
                 }}
                 aria-label={`Username: ${user.username}`}
               >
@@ -75,21 +71,14 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
                 variant="body2"
                 sx={{
                   ...headerStyles.level,
-                  fontSize: { xs: "0.875rem", sm: "1rem" },
+                  fontSize: { xs: "0.875rem", customSm: "1rem" },
                 }}
               >
                 Level: <StatusBadge level={user.access_level} />
               </Typography>
             </Box>
             {isOwnProfile && children && (
-              <Box
-                sx={{
-                  ...headerStyles.buttonGroup,
-                  flexWrap: "wrap",
-                  justifyContent: { xs: "flex-start", sm: "flex-end" },
-                  width: { xs: "100%", sm: "auto" },
-                }}
-              >
+              <Box sx={headerStyles.buttonGroup}>
                 {children}
               </Box>
             )}
@@ -99,28 +88,47 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
     );
   }
 
-  // Dynamic mode for class/gate/user/page with headerData
   const isManageable = ["owner", "admin"].includes(userRole);
   const menuActions = headerData.actions?.filter((action) => action.isMenuItem) || [];
   const buttonActions = headerData.actions?.filter((action) => !action.isMenuItem) || [];
+  const hasFavoriteToggle = headerData.type !== "user" && headerData.type !== "page" && headerData.onFavoriteToggle;
+  const hasMenuActions = headerData.type !== "user" && headerData.type !== "page" && isManageable && menuActions.length > 0;
+  const secondaryButtonsCount = (hasFavoriteToggle ? 1 : 0) + (hasMenuActions ? 1 : 0);
+  const hasMainButton = (headerData.type === "page" && children) || buttonActions.length > 0;
+  const useSplitButtonLayout = secondaryButtonsCount === 2 && hasMainButton;
 
   return (
-    <Card sx={headerStyles.card}>
+    <Card sx={{ ...headerStyles.card, width: { xs: "100%", customSm: "auto" }, position: "relative" }}>
       <CardContent>
-        <Box
-          sx={{
-            ...headerStyles.content,
-            flexDirection: { xs: "column", sm: "row" },
-            alignItems: { xs: "flex-start", sm: "center" },
-            gap: { xs: 2, sm: 0 },
-          }}
-        >
-          <Box sx={{ flex: 1 }}>
+        {hasFavoriteToggle && (
+          <Box
+            sx={{
+              display: { xs: "block", customSm: "none" },
+              position: "absolute",
+              top: 8,
+              right: 8,
+            }}
+          >
+            <Tooltip
+              title={headerData.isFavorited ? `Remove ${headerData.type} from favorites` : `Add ${headerData.type} to favorites`}
+            >
+              <IconButton
+                onClick={headerData.onFavoriteToggle}
+                disabled={headerData.actionLoading}
+                aria-label={headerData.isFavorited ? "Remove from favorites" : "Add to favorites"}
+              >
+                {headerData.isFavorited ? <Star color="warning" /> : <StarBorder />}
+              </IconButton>
+            </Tooltip>
+          </Box>
+        )}
+        <Box sx={headerStyles.content}>
+          <Box sx={headerStyles.leftSection}>
             <Typography
               variant="h4"
               sx={{
                 ...headerStyles.title,
-                fontSize: { xs: "1.5rem", sm: "2rem", md: "2.5rem" },
+                fontSize: { xs: "1.5rem", customSm: "2rem", md: "2.5rem" },
               }}
               aria-label={headerData.titleAriaLabel || `Title: ${headerData.title || user.username}`}
             >
@@ -141,18 +149,18 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
                 variant="body2"
                 sx={{
                   ...headerStyles.level,
-                  fontSize: { xs: "0.875rem", sm: "1rem" },
+                  fontSize: { xs: "0.875rem", customSm: "1rem" },
                 }}
               >
                 Level: <StatusBadge level={user.access_level} />
               </Typography>
             ) : headerData.type === "page" ? (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, justifyContent: { xs: "center", customSm: "flex-start" } }}>
                 <Typography
                   variant="body2"
                   sx={{
                     ...headerStyles.level,
-                    fontSize: { xs: "0.875rem", sm: "1rem" },
+                    fontSize: { xs: "0.875rem", customSm: "1rem" },
                   }}
                   aria-label={`Page description: ${headerData.shortDescription}`}
                 >
@@ -164,126 +172,231 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
                     placement="top"
                     arrow
                     PopperProps={{
-                      modifiers: [
-                        {
-                          name: "offset",
-                          options: {
-                            offset: [0, -8],
-                          },
-                        },
-                      ],
+                      modifiers: [{ name: "offset", options: { offset: [0, -8] } }],
                     }}
                   >
-                    <IconButton
-                      size="small"
-                      aria-label="More information about this page"
-                      sx={{ p: 0.5 }}
-                    >
+                    <IconButton size="small" aria-label="More information about this page" sx={{ p: 0.5 }}>
                       <HelpOutline fontSize="small" />
                     </IconButton>
                   </Tooltip>
                 )}
               </Box>
             ) : (
-              <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", mt: 1 }}>
+              <Box sx={headerStyles.chipContainer}>
                 {headerData.chips?.map((chip, index) => (
-                  <Chip
-                    key={index}
-                    label={chip.label}
-                    icon={chip.icon}
-                    size="medium"
-                    variant="outlined"
-                    color={chip.color || "default"}
-                    sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" }, px: 1 }}
-                    aria-label={chip.ariaLabel}
-                  />
+                  <Box key={index} sx={{ position: "relative" }}>
+                    <Chip
+                      label={chip.label}
+                      icon={chip.icon}
+                      size="medium"
+                      variant="outlined"
+                      color={chip.color || "default"}
+                      onClick={() => handleChipClick(index)}
+                      sx={{
+                        ...headerStyles.chip,
+                        ...(activeChipIndex === index ? headerStyles.chipExpanded : headerStyles.chipCollapsed),
+                      }}
+                      aria-label={chip.ariaLabel}
+                      aria-expanded={activeChipIndex === index}
+                    />
+                  </Box>
                 ))}
               </Box>
             )}
           </Box>
           {isOwnProfile && (
-            <Box
-              sx={{
-                ...headerStyles.buttonGroup,
-                flexWrap: "wrap",
-                justifyContent: { xs: "flex-start", sm: "flex-end" },
-                width: { xs: "100%", sm: "auto" },
-                alignItems: "center",
-                gap: 1,
-              }}
-            >
-              {buttonActions.map((action, index) => (
-                <Tooltip key={index} title={action.tooltip}>
-                  <Button
-                    onClick={action.onClick}
-                    startIcon={action.icon}
-                    sx={{
-                      ...actionButtonStyles,
-                      ...(action.variant === "delete" && {
-                        bgcolor: theme.palette.error.main,
-                        color: theme.palette.common.white,
-                        "&:hover": { bgcolor: theme.palette.error.dark },
-                      }),
-                      "&:hover": { bgcolor: theme.palette.primary.dark },
-                      [theme.breakpoints.down("sm")]: { minWidth: 120, fontSize: "0.875rem" },
-                    }}
-                    disabled={action.disabled}
-                    aria-label={action.ariaLabel}
-                  >
-                    {action.label}
-                  </Button>
-                </Tooltip>
-              ))}
-              {headerData.type !== "user" && headerData.type !== "page" && (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  {headerData.onFavoriteToggle && (
-                    <Tooltip
-                      title={headerData.isFavorited ? `Remove ${headerData.type} from favorites` : `Add ${headerData.type} to favorites`}
-                    >
-                      <IconButton
-                        onClick={headerData.onFavoriteToggle}
-                        disabled={headerData.actionLoading}
-                        aria-label={headerData.isFavorited ? "Remove from favorites" : "Add to favorites"}
-                      >
-                        {headerData.isFavorited ? <Star color="warning" /> : <StarBorder />}
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                  {isManageable && menuActions.length > 0 && (
-                    <>
-                      <IconButton
-                        onClick={handleMenuOpen}
-                        disabled={headerData.actionLoading}
-                        aria-label="More actions"
-                      >
-                        <MoreVert />
-                      </IconButton>
-                      <Menu
-                        anchorEl={anchorEl}
-                        open={open}
-                        onClose={handleMenuClose}
-                        PaperProps={{
-                          sx: {
-                            mt: 1,
-                            boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-                          },
-                        }}
-                      >
-                        {menuActions.map((action, index) => (
-                          <MenuItem
-                            key={index}
-                            onClick={() => handleMenuAction(action.onClick)}
-                            sx={action.variant === "delete" ? { color: theme.palette.error.main } : {}}
+            <Box sx={headerStyles.rightSection}>
+              <Box sx={useSplitButtonLayout ? headerStyles.splitButtonGroup : headerStyles.buttonGroup}>
+                {useSplitButtonLayout ? (
+                  <>
+                    <Box sx={{ display: { xs: "flex", customSm: "none" }, alignItems: "center", gap: 1, justifyContent: "center" }}>
+                      {headerData.type === "page" ? (
+                        children
+                      ) : (
+                        buttonActions.map((action, index) => (
+                          <Tooltip key={index} title={action.tooltip}>
+                            <Button
+                              onClick={action.onClick}
+                              startIcon={action.icon}
+                              sx={{
+                                ...actionButtonStyles,
+                                ...(action.variant === "delete" && {
+                                  bgcolor: theme.palette.error.main,
+                                  color: theme.palette.common.white,
+                                  "&:hover": { bgcolor: theme.palette.error.dark },
+                                }),
+                              }}
+                              disabled={action.disabled}
+                              aria-label={action.ariaLabel}
+                            >
+                              {action.label}
+                            </Button>
+                          </Tooltip>
+                        ))
+                      )}
+                      {hasMenuActions && (
+                        <>
+                          <IconButton
+                            onClick={handleMenuOpen}
+                            disabled={headerData.actionLoading}
+                            aria-label="More actions"
+                          >
+                            <MoreVert />
+                          </IconButton>
+                          <Menu
+                            anchorEl={anchorEl}
+                            open={open}
+                            onClose={handleMenuClose}
+                            PaperProps={{ sx: { mt: 1, boxShadow: "0 4px 16px rgba(0,0,0,0.12)" } }}
+                          >
+                            {menuActions.map((action, index) => (
+                              <MenuItem
+                                key={index}
+                                onClick={() => handleMenuAction(action.onClick)}
+                                sx={action.variant === "delete" ? { color: theme.palette.error.main } : {}}
+                              >
+                                {action.label}
+                              </MenuItem>
+                            ))}
+                          </Menu>
+                        </>
+                      )}
+                    </Box>
+                    <Box sx={{ display: { xs: "none", customSm: "flex" }, alignItems: "center", gap: 1 }}>
+                      {headerData.type === "page" && children}
+                      {buttonActions.map((action, index) => (
+                        <Tooltip key={index} title={action.tooltip}>
+                          <Button
+                            onClick={action.onClick}
+                            startIcon={action.icon}
+                            sx={{
+                              ...actionButtonStyles,
+                              ...(action.variant === "delete" && {
+                                bgcolor: theme.palette.error.main,
+                                color: theme.palette.common.white,
+                                "&:hover": { bgcolor: theme.palette.error.dark },
+                              }),
+                            }}
+                            disabled={action.disabled}
+                            aria-label={action.ariaLabel}
                           >
                             {action.label}
-                          </MenuItem>
-                        ))}
-                      </Menu>
-                    </>
-                  )}
-                </Box>
-              )}
-              {headerData.type === "page" && children}
+                          </Button>
+                        </Tooltip>
+                      ))}
+                      {hasFavoriteToggle && (
+                        <Tooltip
+                          title={headerData.isFavorited ? `Remove ${headerData.type} from favorites` : `Add ${headerData.type} to favorites`}
+                        >
+                          <IconButton
+                            onClick={headerData.onFavoriteToggle}
+                            disabled={headerData.actionLoading}
+                            aria-label={headerData.isFavorited ? "Remove from favorites" : "Add to favorites"}
+                          >
+                            {headerData.isFavorited ? <Star color="warning" /> : <StarBorder />}
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      {hasMenuActions && (
+                        <>
+                          <IconButton
+                            onClick={handleMenuOpen}
+                            disabled={headerData.actionLoading}
+                            aria-label="More actions"
+                          >
+                            <MoreVert />
+                          </IconButton>
+                          <Menu
+                            anchorEl={anchorEl}
+                            open={open}
+                            onClose={handleMenuClose}
+                            PaperProps={{ sx: { mt: 1, boxShadow: "0 4px 16px rgba(0,0,0,0.12)" } }}
+                          >
+                            {menuActions.map((action, index) => (
+                              <MenuItem
+                                key={index}
+                                onClick={() => handleMenuAction(action.onClick)}
+                                sx={action.variant === "delete" ? { color: theme.palette.error.main } : {}}
+                              >
+                                {action.label}
+                              </MenuItem>
+                            ))}
+                          </Menu>
+                        </>
+                      )}
+                    </Box>
+                  </>
+                ) : (
+                  <>
+                    {headerData.type === "page" && children}
+                    {buttonActions.map((action, index) => (
+                      <Tooltip key={index} title={action.tooltip}>
+                        <Button
+                          onClick={action.onClick}
+                          startIcon={action.icon}
+                          sx={{
+                            ...actionButtonStyles,
+                            ...(action.variant === "delete" && {
+                              bgcolor: theme.palette.error.main,
+                              color: theme.palette.common.white,
+                              "&:hover": { bgcolor: theme.palette.error.dark },
+                            }),
+                          }}
+                          disabled={action.disabled}
+                          aria-label={action.ariaLabel}
+                        >
+                          {action.label}
+                        </Button>
+                      </Tooltip>
+                    ))}
+                    {headerData.type !== "user" && headerData.type !== "page" && (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, justifyContent: { xs: "center", customSm: "center" } }}>
+                        {hasFavoriteToggle && (
+                          <Tooltip
+                            title={headerData.isFavorited ? `Remove ${headerData.type} from favorites` : `Add ${headerData.type} to favorites`}
+                          >
+                            <IconButton
+                              onClick={headerData.onFavoriteToggle}
+                              disabled={headerData.actionLoading}
+                              aria-label={headerData.isFavorited ? "Remove from favorites" : "Add to favorites"}
+                              sx={{ display: { xs: "none", customSm: "inline-flex" } }}
+                            >
+                              {headerData.isFavorited ? <Star color="warning" /> : <StarBorder />}
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {hasMenuActions && (
+                          <>
+                            <IconButton
+                              onClick={handleMenuOpen}
+                              disabled={headerData.actionLoading}
+                              aria-label="More actions"
+                            >
+                              <MoreVert />
+                            </IconButton>
+                            <Menu
+                              anchorEl={anchorEl}
+                              open={open}
+                              onClose={handleMenuClose}
+                              PaperProps={{ sx: { mt: 1, boxShadow: "0 4px 16px rgba(0,0,0,0.12)" } }}
+                            >
+                              {menuActions.map((action, index) => (
+                                <MenuItem
+                                  key={index}
+                                  onClick={() => handleMenuAction(action.onClick)}
+                                  sx={action.variant === "delete" ? { color: theme.palette.error.main } : {}}
+                                >
+                                  {action.label}
+                                </MenuItem>
+                              ))}
+                            </Menu>
+                          </>
+                        )}
+                      </Box>
+                    )}
+                  </>
+                )}
+              </Box>
             </Box>
           )}
         </Box>
