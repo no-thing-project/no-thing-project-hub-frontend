@@ -491,7 +491,11 @@ const ClassPage = () => {
           variant: "delete",
           isMenuItem: true,
         },
-      ],
+      ].filter((action) => 
+        action.label !== "Create Board" || 
+        classData?.access?.is_public || 
+        userRole !== "viewer"
+      ),
       isFavorited: classData?.is_favorited,
       onFavoriteToggle: handleFavoriteToggle,
       actionLoading,
