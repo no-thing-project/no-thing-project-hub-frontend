@@ -36,6 +36,7 @@ const Header = ({ currentUser, token, title }) => {
   };
 
   const headerText = `Передбачення для ${userName}. ${randomPrediction}`;
+  const headerMobileText = `Gate`;
 
   return (
     <AppBar
@@ -56,7 +57,10 @@ const Header = ({ currentUser, token, title }) => {
             className="welcome-text"
             sx={{ color: "text.primary" }}
           >
-            {title ? title : headerText}
+            {isMobile ?
+              title ? title : headerMobileText :
+              title ? title : headerText
+            }
           </Typography>
           <Typography
             variant={isMobile ? "caption" : "body1"}
@@ -68,13 +72,19 @@ const Header = ({ currentUser, token, title }) => {
         </Box>
         <Box
           className="top-bar-right"
-          sx={{ display: "flex", alignItems: "center" }}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: isMobile ? 1.5 : 1,
+          }}
         >
           <Typography
             variant={isMobile ? "caption" : "body1"}
             color="text.secondary"
             className="points-text"
-            sx={{ mr: 2 }}
+            sx={{
+              mr: { xs: 0, sm: 1, md: 2 },
+            }}
           >
             Points: {formatPoints(userPoints)}
           </Typography>

@@ -201,11 +201,9 @@ html,
  * Бокове меню
  ********************************/
 .left-drawer {
-  width: 72px;
   flex-shrink: 0;
 }
 .left-drawer .MuiDrawer-paper {
-  width: 72px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;

@@ -1,6 +1,7 @@
 import { styled } from "@mui/material/styles";
 import Badge from "@mui/material/Badge";
 import { Avatar } from "@mui/material";
+import useMediaQuery from "@mui/material/useMediaQuery";
 
 export const getInitials = (name) => {
   if (!name) return "";
@@ -53,12 +54,13 @@ export const StyledBadge = styled(Badge, {
 
   return {
     "& .MuiBadge-badge": {
-      width: badgeSize,
-      height: badgeSize,
+      width: Number(badgeSize),
+      height: Number(badgeSize),
       backgroundColor: color,
       color: color,
       boxShadow: `0 0 0 2px ${theme.palette.background.paper}`,
-      fontSize: badgeSize / 2,
+      fontSize: Number(badgeSize) <= 8 ? Number(badgeSize) / 2.5 : Number(badgeSize) / 2,
+      borderRadius: "50%",
       "&::after": {
         position: "absolute",
         top: -1,
@@ -86,14 +88,21 @@ export const StyledBadge = styled(Badge, {
 
 // Об'єднаний компонент аватара з бейджем
 export const ProfileAvatar = ({ user, badgeSize = 10, status = "online", onClicEvent }) => {
-  if (!user) return null; // 🔐 Захист від null
+  const isMobile = useMediaQuery((theme) => theme.breakpoints.down("sm"));
+  if (!user) return null;
+
+  const adaptiveBadgeSize = isMobile ? 10 : badgeSize;
+  const adaptiveFontSize = isMobile ? "1rem" : "1.2rem";
 
   return (
     <StyledBadge
       overlap="circular"
-      anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      anchorOrigin={{
+        vertical: "bottom",
+        horizontal: "right"
+      }}
       variant="dot"
-      badgeSize={badgeSize}
+      badgeSize={adaptiveBadgeSize}
       status={status}
     >
       <Avatar
@@ -106,7 +115,7 @@ export const ProfileAvatar = ({ user, badgeSize = 10, status = "online", onClicE
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: "1.3rem",
+          fontSize: adaptiveFontSize,
           lineHeight: 1,
           cursor: "pointer"
         }}

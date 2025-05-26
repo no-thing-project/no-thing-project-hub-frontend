@@ -17,6 +17,18 @@ export const theme = createTheme({
       secondary: "#747687",
       light: "#A8AABC"
     },
+    primary: {
+      main: "#3050B0",
+      light: "#7A73D1",
+      dark: "#E7EBF2",
+      contrastText: "#FFF"
+    },
+    secondary: {
+      main: "#3E435D",
+      light: "#C4D9FF",
+      dark: "#A6CFD5",
+      contrastText: "#FFF"
+    }
   },
   typography: {
     fontFamily: "Poppins, sans-serif",

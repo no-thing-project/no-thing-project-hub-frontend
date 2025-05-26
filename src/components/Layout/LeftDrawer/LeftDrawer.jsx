@@ -19,7 +19,6 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import StyleRoundedIcon from "@mui/icons-material/StyleRounded";
 import ClassRoundedIcon from "@mui/icons-material/ClassRounded";
 import PeopleRoundedIcon from "@mui/icons-material/PeopleRounded";
-import MessageRoundedIcon from "@mui/icons-material/MessageRounded";
 import ExitToAppRoundedIcon from "@mui/icons-material/ExitToAppRounded";
 
 const isActiveRoute = (route, subroute, currentPath) => {
@@ -117,10 +116,8 @@ const LeftDrawer = ({ onLogout }) => {
     <Drawer
       variant="permanent"
       sx={{
-        width: 72,
         flexShrink: 0,
         '& .MuiDrawer-paper': {
-          width: 72,
           boxSizing: 'border-box',
           borderRight: "none",
           position: 'fixed',

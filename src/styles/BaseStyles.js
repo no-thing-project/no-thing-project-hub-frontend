@@ -43,6 +43,8 @@ export const baseCardStyles = {
   border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
   transition: "all 0.3s ease",
   ...baseHoverEffect,
+  width: { xs: "100%", sm: "auto" }, // Ensure card takes full width of its container on mobile
+  boxSizing: "border-box", // Include padding and border in the element's total width and height
 };
 
 export const baseButtonStyles = {
@@ -160,12 +162,14 @@ export const headerStyles = {
     mb: 3,
     backgroundColor: "background.paper",
     boxShadow: "none",
+    width: { xs: "100%", sm: "auto" }, // Ensure header card takes full width on mobile
+    boxSizing: "border-box", // Include padding and border
   },
   content: {
     display: "flex",
-    flexDirection: { xs: "column", sm: "row" },
-    alignItems: { xs: "center", sm: "stretch" },
-    justifyContent: { xs: "center", sm: "space-between" },
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     mt: 1,
     mb: 1,
     mx: { xs: 2, sm: 3 },
@@ -175,26 +179,23 @@ export const headerStyles = {
   leftSection: {
     display: "flex",
     flexDirection: "column",
-    width: { xs: "100%", sm: "50%" },
     gap: 1,
   },
   rightSection: {
     display: "flex",
-    flexDirection: "column",
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    width: { xs: "100%", sm: "30%" },
+    justifyContent: "center"
   },
   title: { fontWeight: 400, color: "text.primary" },
   level: { color: "text.secondary" },
   buttonGroup: {
     display: "flex",
-    flexDirection: { xs: "column", sm: "column" },
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: { xs: 1, sm: 2 },
     width: { xs: "100%", sm: "auto" },
-    "& > *": { width: { xs: "100%", sm: "auto" }, maxWidth: { xs: "100%", sm: "200px" } },
   },
   splitButtonGroup: {
     display: "flex",
@@ -261,7 +262,14 @@ export const fieldStyles = {
 };
 
 export const sectionStyles = {
-  card: { borderRadius: { xs: 1, sm: 1.5 }, backgroundColor: "background.paper", boxShadow: "none", mb: 3 },
+  card: {
+    borderRadius: { xs: 1, sm: 1.5 },
+    backgroundColor: "background.paper",
+    boxShadow: "none",
+    mb: 3,
+    width: { xs: "100%", sm: "auto" }, // Ensure section card takes full width on mobile
+    boxSizing: "border-box", // Include padding and border
+  },
   content: { mx: { xs: 2, sm: 3 }, my: 3 },
   title: { fontWeight: 500, mb: 5 },
 };
@@ -297,9 +305,11 @@ export const toggleStyles = {
 };
 
 export const containerStyles = {
-  maxWidth: 1500,
-  margin: "0 auto",
-  padding: { xs: 1, sm: 2 },
+  width: { xs: "100%", sm: "auto" },
+  maxWidth: { xs: "100%", sm: "1500px" },
+  margin: { xs: 0, sm: "0 auto" },
+  padding: { xs: 0, sm: 2 }, // Remove padding on mobile (xs), keep for sm and up
+  boxSizing: "border-box", // Added for proper width calculation with padding
 };
 
 export const gridStyles = {

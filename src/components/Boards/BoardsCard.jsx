@@ -5,8 +5,8 @@ import {
   IconButton,
   Tooltip,
   Chip,
-  Divider,
   useTheme,
+  alpha,
 } from "@mui/material";
 import {
   Edit,
@@ -18,10 +18,8 @@ import {
   People,
   Forum,
   Group,
-  Visibility,
 } from "@mui/icons-material";
 import PropTypes from "prop-types";
-import { chipStyles } from "../../styles/BaseStyles";
 
 const BoardCard = ({
   board,
@@ -34,16 +32,14 @@ const BoardCard = ({
   currentUser,
 }) => {
   const theme = useTheme();
-  const totalLength = (board.name?.length || 0) + (board.description?.length || 0);
-  let span = 1;
-  if (totalLength > 100) span = 3;
-  else if (totalLength > 40) span = 2;
+  const span = 1;
 
   const isFavorited = board.is_favorited || false;
   const userRole = board.members?.find((m) => m.anonymous_id === currentUser?.anonymous_id)?.role || "none";
   const isOwner = board.creator_id === currentUser?.anonymous_id;
   const canEdit = isOwner || userRole === "admin";
   const canDelete = isOwner;
+
   const isPublic = board.is_public || board.visibility === "public";
   const owner = board.members?.find((m) => m.role === "owner");
   const ownerUsername = owner?.username || "Unknown";
@@ -64,10 +60,44 @@ const BoardCard = ({
 
   const getVisibilityIcon = () => {
     return isPublic ? (
-      <Public fontSize="small" color="success" />
+      <Public sx={{ mb: 0.1 }}fontSize="inherit" />
     ) : (
-      <Lock fontSize="small" color="error" />
+      <Lock sx={{ color: theme.palette.error.main, mb: 0.5 }}fontSize="inherit" />
     );
+  };
+
+  const actionIconButtonSx = {
+    padding: "6px",
+    '&:hover': {
+      backgroundColor: theme.palette.action.hover,
+      borderRadius: '50%',
+    },
+  };
+
+  const deleteIconButtonSx = {
+    ...actionIconButtonSx,
+    color: theme.palette.error.main,
+    '&:hover': {
+      ...actionIconButtonSx['&:hover'],
+      backgroundColor: alpha(theme.palette.error.main, 0.08),
+    },
+  };
+
+  const tagText = board.tags?.length > 0 ? `# ${board.tags[0]}` : typeLabel;
+  const iconSize = "small";
+
+  const getTagColors = () => {
+    const isDark = theme.palette.mode === 'dark';
+    if (typeLabel === "Group") {
+      return {
+        backgroundColor: isDark ? theme.palette.secondary.dark : theme.palette.secondary.light,
+        color: isDark ? theme.palette.secondary.contrastText : theme.palette.secondary.contrastText,
+      };
+    }
+    return {
+      backgroundColor: isDark ? theme.palette.primary.dark : theme.palette.primary.light,
+      color: isDark ? theme.palette.primary.contrastText : theme.palette.primary.contrastText,
+    };
   };
 
   return (
@@ -76,12 +106,15 @@ const BoardCard = ({
         gridColumn: { xs: "span 1", md: `span ${span}` },
         backgroundColor: "background.paper",
         borderRadius: theme.shape.borderRadiusMedium,
-        p: { xs: 1.5, md: 2 },
+        p: { xs: 2, md: 2.5 },
         cursor: "pointer",
         display: "flex",
         flexDirection: "column",
-        minHeight: { xs: 200, md: 250 },
+        minHeight: { xs: 190, sm: 210, md: 210 },
         transition: "all 0.3s ease-in-out",
+        width: { xs: "100%", sm: "auto" },
+        boxSizing: "border-box",
+        position: "relative",
         "&:hover": {
           backgroundColor: "background.hover",
           transform: "scale(1.02)",
@@ -93,14 +126,22 @@ const BoardCard = ({
       role="button"
       aria-label={`View board ${board.name || "Untitled Board"}`}
     >
-      <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
-        <Typography
-          variant="subtitle2"
-          sx={{ fontWeight: 600, fontSize: { xs: "0.875rem", md: "1rem" } }}
-        >
-          {board.slug || board.name || "Untitled Board"}
-        </Typography>
-        <Box sx={{ display: "flex", gap: { xs: 0.5, md: 1 } }}>
+      {/* Top Section: Tag and Action Icons */}
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 1.5 }}>
+        <Chip
+          size="small"
+          label={tagText}
+          sx={{
+            ...getTagColors(),
+            fontWeight: 500,
+            fontSize: '0.75rem',
+            borderRadius: '8px',
+            height: '26px',
+            lineHeight: '18px',
+            padding: '0 8px',
+          }}
+        />
+        <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.1, md: 0.25 } }}>
           {canEdit && (
             <Tooltip title="Edit Board">
               <IconButton
@@ -129,10 +170,11 @@ const BoardCard = ({
                     },
                   });
                 }}
-                size="small"
+                size={iconSize}
                 aria-label="Edit board"
+                sx={actionIconButtonSx}
               >
-                <Edit fontSize="small" />
+                <Edit fontSize={iconSize} />
               </IconButton>
             </Tooltip>
           )}
@@ -142,10 +184,14 @@ const BoardCard = ({
                 e.stopPropagation();
                 handleFavorite(board.board_id, isFavorited);
               }}
-              size="small"
+              size={iconSize}
               aria-label={isFavorited ? "Remove from favorites" : "Add to favorites"}
+              sx={actionIconButtonSx}
             >
-              {isFavorited ? <Star color="warning" /> : <StarBorder />}
+              {isFavorited ? 
+                <Star fontSize={iconSize} sx={{ color: theme.palette.primary.main }} /> : 
+                <StarBorder fontSize={iconSize} sx={{ color: theme.palette.text.secondary }} />
+              }
             </IconButton>
           </Tooltip>
           {canEdit && (
@@ -155,10 +201,11 @@ const BoardCard = ({
                   e.stopPropagation();
                   openMemberDialog(board.board_id);
                 }}
-                size="small"
+                size={iconSize}
                 aria-label="Manage board members"
+                sx={actionIconButtonSx}
               >
-                <Group fontSize="small" />
+                <Group fontSize={iconSize} />
               </IconButton>
             </Tooltip>
           )}
@@ -170,166 +217,112 @@ const BoardCard = ({
                   setBoardToDelete(board.board_id);
                   setDeleteDialogOpen(true);
                 }}
-                size="small"
+                size={iconSize}
                 aria-label="Delete board"
+                sx={deleteIconButtonSx}
               >
-                <Delete fontSize="small" color="error" />
+                <Delete fontSize={iconSize} />
               </IconButton>
             </Tooltip>
           )}
         </Box>
       </Box>
 
-      <Box sx={{ flexGrow: 1 }}>
+      {/* Centered Title */}
+      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', px:1 }}>
         <Typography
-          variant="h6"
-          sx={{ mb: 1, fontSize: { xs: "1.25rem", md: "1.5rem" } }}
+          variant="h5"
+          sx={{
+            fontWeight: "bold",
+            my: 0.5,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: '-webkit-box',
+            '-webkit-line-clamp': '2',
+            '-webkit-box-orient': 'vertical',
+            color: theme.palette.text.primary,
+            width: '100%',
+          }}
         >
           {board.name || "Untitled Board"}
         </Typography>
+
+        {/* Description (centered) */}
         {board.description && (
-          <Typography
-            variant="body2"
-            sx={{
-              mb: 1,
-              color: "text.secondary",
-              fontSize: { xs: "0.75rem", md: "0.875rem" },
-            }}
-          >
-            {board.description}
-          </Typography>
+          <Tooltip title={board.description} placement="bottom" enterDelay={300}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mt: 0.5,
+                mb: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: '-webkit-box',
+                '-webkit-line-clamp': '2',
+                '-webkit-box-orient': 'vertical',
+                width: '100%',
+              }}
+            >
+              {board.description}
+            </Typography>
+          </Tooltip>
         )}
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 1 }}>
-          <Chip
-            label={typeLabel}
-            icon={<People />}
-            size="small"
-            variant="outlined"
-            sx={ chipStyles }
-            aria-label={`Board type: ${typeLabel}`}
-          />
-          {isPublic ? (
-            <Chip
-              label={`Views: ${board.stats?.view_count || 0}`}
-              icon={<Visibility />}
-              size="small"
-              variant="outlined"
-              sx={ chipStyles }
-              aria-label={`Views: ${board.stats?.view_count || 0}`}
-            />
-          ) : (
-            <Chip
-              label={`Members: ${board.members?.length || 0}`}
-              icon={<People />}
-              size="small"
-              variant="outlined"
-              sx={ chipStyles }
-              aria-label={`Members: ${board.members?.length || 0}`}
-            />
-          )}
-          <Chip
-            label={`Tweets: ${board.stats?.tweet_count || 0}`}
-            icon={<Forum />}
-            size="small"
-            variant="outlined"
-            sx={ chipStyles }
-            aria-label={`Tweets: ${board.stats?.tweet_count || 0}`}
-          />
-        </Box>
-
-        <Divider sx={{ my: 1 }} />
-
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-          {board.gateName && board.gateName !== "No Gate" && (
-            <Chip
-              label={`Gate: ${board.gateName}`}
-              size="small"
-              variant="outlined"
-              sx={ chipStyles }
-              aria-label={`Gate: ${board.gateName}`}
-            />
-          )}
-          {board.className && board.className !== "No Class" && (
-            <Chip
-              label={`Class: ${board.className}`}
-              size="small"
-              variant="outlined"
-              sx={ chipStyles }
-              aria-label={`Class: ${board.className}`}
-            />
-          )}
-          <Chip
-            label={`Owner: ${ownerUsername}`}
-            size="small"
-            variant="outlined"
-            sx={ chipStyles }
-            aria-label={`Owner: ${ownerUsername}`}
-          />
-          {(board.stats?.favorite_count || 0) > 0 && (
-            <Chip
-              label={`Favorites: ${board.stats.favorite_count}`}
-              icon={<Star />}
-              size="small"
-              variant="outlined"
-              sx={ chipStyles }
-              aria-label={`Favorites: ${board.stats.favorite_count}`}
-            />
-          )}
-          {board.tags?.length > 0 && (
-            <Chip
-              label={`Tags: ${board.tags.join(", ")}`}
-              size="small"
-              variant="outlined"
-              sx={ chipStyles }
-              aria-label={`Tags: ${board.tags.join(", ")}`}
-            />
-          )}
-          {board.parent_board_id && (
-            <Chip
-              label="Has Parent"
-              size="small"
-              variant="outlined"
-              sx={ chipStyles }
-              aria-label="Board has parent"
-            />
-          )}
-          {board.child_board_ids?.length > 0 && (
-            <Chip
-              label={`Children: ${board.child_board_ids.length}`}
-              size="small"
-              variant="outlined"
-              sx={ chipStyles }
-              aria-label={`Children: ${board.child_board_ids.length}`}
-            />
-          )}
-        </Box>
       </Box>
-
+      
+      {/* Footer: Author, Counters, and Visibility - Pushed to bottom */}
       <Box
         sx={{
-          mt: 2,
+          mt: 'auto',
+          pt: 1.5,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          fontSize: '0.875rem',
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          {getVisibilityIcon()}
-          <Typography
-            variant="caption"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" }, color: isPublic ? "success.main" : "error.main" }}
-          >
-            {isPublic ? "Public" : "Private"}
-          </Typography>
-        </Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Forum fontSize="small" />
-          <Typography
-            variant="caption"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" }}}
-          >
-            {board.stats?.tweet_count || 0}
-          </Typography>
+        <Typography 
+          variant="caption" 
+          sx={{
+            color: theme.palette.text.secondary, 
+            fontSize: 'inherit' 
+          }}
+        >
+          Author: {ownerUsername}
+        </Typography>
+        
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}> {/* Increased gap */}
+          <Tooltip title={`Members: ${board.members?.length || 0}`}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.3, color: theme.palette.text.secondary }}>
+              <People fontSize="inherit" />
+              <Typography variant="caption" sx={{fontSize: 'inherit'}}>
+                {board.members?.length || 0}
+              </Typography>
+            </Box>
+          </Tooltip>
+
+          <Tooltip title={`Tweets: ${board.stats?.tweet_count || 0}`}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.3, color: theme.palette.text.secondary }}>
+              <Forum fontSize="inherit" />
+              <Typography variant="caption" sx={{fontSize: 'inherit'}}>
+                {board.stats?.tweet_count || 0}
+              </Typography>
+            </Box>
+          </Tooltip>
+
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.3}}>
+            {getVisibilityIcon()}
+            <Typography
+              variant="caption"
+              sx={{ 
+                color: isPublic ? theme.palette.text.primary : theme.palette.error.main,
+                fontWeight: 500, 
+                fontSize: 'inherit' 
+              }}
+            >
+              {isPublic ? "Public" : "Private"}
+            </Typography>
+          </Box>
         </Box>
       </Box>
     </Box>

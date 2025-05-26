@@ -10,16 +10,18 @@ import {
   IconButton,
   Menu,
   MenuItem,
-  Tooltip,
   Chip,
   useTheme,
 } from "@mui/material";
 import { MoreVert, Star, StarBorder, HelpOutline } from "@mui/icons-material";
 import { headerStyles, actionButtonStyles } from "../../styles/BaseStyles";
 import StatusBadge from "../Badges/StatusBadge";
+import Tooltip, { tooltipClasses } from '@mui/material/Tooltip';
+import useMediaQuery from '@mui/material/useMediaQuery';
 
 const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) => {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [anchorEl, setAnchorEl] = useState(null);
   const [activeChipIndex, setActiveChipIndex] = useState(null);
   const open = Boolean(anchorEl);
@@ -166,16 +168,30 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
                 >
                   {headerData.shortDescription}
                 </Typography>
-                {headerData.tooltipDescription && (
+                {headerData.tooltipDescription && !isMobile && (
                   <Tooltip
                     title={headerData.tooltipDescription}
                     placement="top"
                     arrow
-                    PopperProps={{
-                      modifiers: [{ name: "offset", options: { offset: [0, -8] } }],
+                    slotProps={{
+                      popper: {
+                        sx: {
+                            [`& .${tooltipClasses.tooltip}`]: {
+                              padding: 2
+                            }
+                        },
+                        modifiers: [
+                          {
+                            name: "offset",
+                            options: {
+                              offset: [0, -10],
+                            },
+                          }
+                        ]
+                      }
                     }}
                   >
-                    <IconButton size="small" aria-label="More information about this page" sx={{ p: 0.5 }}>
+                    <IconButton size="small" aria-label="More information about this page" sx={{ p: 0 }}>
                       <HelpOutline fontSize="small" />
                     </IconButton>
                   </Tooltip>

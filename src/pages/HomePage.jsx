@@ -29,7 +29,7 @@ const baseButtonStyles = {
   borderRadius: "24px",
   textTransform: "none",
   transition: "all 0.2s ease",
-  "&:hover": { transform: "scale(1.02)", bgcolor: "primary.dark" },
+  "&:hover": { transform: "scale(1.02)", bgcolor: "primary.dark", color: "white" },
   "&:active": { transform: "scale(0.98)" },
   "&:focus": {
     outline: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.4)}`,
@@ -89,7 +89,7 @@ const DashboardPage = () => {
   if (authLoading || boardsLoading) {
     return (
       <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token}>
-        <Box sx={{ maxWidth: 1500, mx: "auto", p: { xs: 2, md: 3 } }}>
+        <Box sx={{ maxWidth: { xs: "100%", md: "1500px" }, mx: "auto", p: { xs: 2, md: 3 } }}>
           <Typography sx={baseTypographyStyles}>Завантаження...</Typography>
         </Box>
       </AppLayout>
@@ -100,18 +100,39 @@ const DashboardPage = () => {
 
   return (
     <AppLayout currentUser={currentUser} onLogout={handleLogout} token={token}>
-      <Box sx={{ maxWidth: 1500, mx: "auto", p: { xs: 2, md: 3 } }}>
+      <Box sx={{
+          maxWidth: { xs: "100%", md: "1500px" },
+          mx: "auto",
+          p: { xs: 0, md: 3 },
+          mb: { xs: 10, md: 5 }
+        }}>
         {/* Welcome Section */}
-        <Box sx={{ textAlign: "center", py: 4, mb: 4 }}>
+        <Box sx={{
+            textAlign: "center",
+            py: { xs: 4, md: 6 },
+            mb: { xs: 4, md: 6 },
+          }}>
           <Typography
             variant="h4"
-            sx={{ ...baseTypographyStyles, fontWeight: 700, mb: 2 }}
+            sx={{
+              ...baseTypographyStyles,
+              fontWeight: 700,
+              mb: 2,
+              fontSize: { xs: "1.5rem", md: "2rem" }
+            }}
           >
             Вітаємо, {currentUser.username}!
           </Typography>
           <Typography
             variant="h6"
-            sx={{ ...baseTypographyStyles, color: "text.secondary", mb: 3, maxWidth: 700, mx: "auto" }}
+            sx={{
+              ...baseTypographyStyles,
+              color: "text.secondary",
+              mb: 3,
+              maxWidth: { xs: "100%", md: "600px" },
+              fontSize: { xs: "1rem", md: "1.1rem" },
+              mx: "auto"
+            }}
           >
             Приєднуйтесь до однодумців, діліться ідеями та обговорюйте деталі на дошках.
           </Typography>
@@ -122,11 +143,10 @@ const DashboardPage = () => {
               onClick={handleCreateBoard}
               sx={{
                 ...baseButtonStyles,
-                px: 4,
-                py: 1.2,
-                fontSize: "1rem",
+                px: { xs: 3, md: 4 },
+                py: { xs: 1, md: 1.2 },
+                fontSize: { xs: "0.95rem", md: "1.1rem" },
                 fontWeight: 600,
-                [theme.breakpoints.down("sm")]: { fontSize: "0.9rem", px: 3 },
               }}
               aria-label="Створити приватну дошку"
             >
@@ -139,7 +159,12 @@ const DashboardPage = () => {
         <Box sx={{ mb: 6 }}>
           <Typography
             variant="h5"
-            sx={{ ...baseTypographyStyles, fontWeight: 600, mb: 3 }}
+            sx={{
+              ...baseTypographyStyles,
+              fontWeight: 600,
+              mb: 3,
+              fontSize: { xs: "1.2rem", md: "1.5rem" }
+            }}
           >
             Досліджуйте платформу
           </Typography>
@@ -148,6 +173,9 @@ const DashboardPage = () => {
             <Grid item xs={12} sm={6} md={4}>
               <Card
                 sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
                   height: "100%",
                   bgcolor: "background.paper",
                   borderRadius: 3,
@@ -155,32 +183,42 @@ const DashboardPage = () => {
                   border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
                   transition: "all 0.3s ease",
                   ...baseHoverEffect,
+                  p: { xs: 1, md: 0 }
                 }}
               >
-                <CardContent>
+                <CardContent sx = {{ padding: { xs: 2, md: 4 } }}>
                   <GroupIcon
-                    sx={{ fontSize: 40, color: theme.palette.primary.main, mb: 2 }}
+                    sx={{ fontSize: { xs: 32, md: 40 }, color: theme.palette.primary.main, mb: 2 }}
                   />
                   <Typography
                     variant="h6"
-                    sx={{ ...baseTypographyStyles, fontWeight: 600, mb: 1 }}
+                    sx={{
+                      ...baseTypographyStyles,
+                      fontWeight: 600,
+                      mb: 1,
+                      fontSize: { xs: "1.1rem", md: "1.3rem" }
+                    }}
                   >
                     Gates — спільноти однодумців
                   </Typography>
-                  <Typography sx={{ ...baseTypographyStyles, color: "text.secondary" }}>
+                  <Typography sx={{
+                      ...baseTypographyStyles,
+                      color: "text.secondary",
+                      fontSize: { xs: "0.95rem", md: "1.1rem" }
+                    }}>
                     Gates — це головні теми, де ви знаходите людей зі схожими інтересами. Приєднуйтесь, спілкуйтесь і створюйте події!
                   </Typography>
                 </CardContent>
-                <CardActions sx={{ justifyContent: "center", p: 2 }}>
+                <CardActions sx={{ justifyContent: "center", p: { xs: 1, md: 2 } }}>
                   <Button
                     variant="outlined"
                     onClick={() => navigate("/gates")}
                     sx={{
                       ...baseButtonStyles,
-                      px: 3,
-                      py: 0.8,
-                      fontSize: "0.9rem",
-                      borderColor: theme.palette.grey[300],
+                      px: { xs: 2, md: 3 },
+                      py: { xs: 0.6, md: 0.8 },
+                      fontSize: { xs: "0.95rem", md: "1rem" },
+                      border: "none"
                     }}
                     aria-label="Переглянути Gates"
                   >
@@ -194,6 +232,9 @@ const DashboardPage = () => {
             <Grid item xs={12} sm={6} md={4}>
               <Card
                 sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
                   height: "100%",
                   bgcolor: "background.paper",
                   borderRadius: 3,
@@ -201,32 +242,42 @@ const DashboardPage = () => {
                   border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
                   transition: "all 0.3s ease",
                   ...baseHoverEffect,
+                  p: { xs: 1, md: 0 }
                 }}
               >
-                <CardContent>
+                <CardContent sx = {{ padding: { xs: 2, md: 4 } }}>
                   <TopicIcon
-                    sx={{ fontSize: 40, color: theme.palette.primary.main, mb: 2 }}
+                    sx={{ fontSize: { xs: 32, md: 40 }, color: theme.palette.primary.main, mb: 2 }}
                   />
                   <Typography
                     variant="h6"
-                    sx={{ ...baseTypographyStyles, fontWeight: 600, mb: 1 }}
+                    sx={{
+                      ...baseTypographyStyles,
+                      fontWeight: 600,
+                      mb: 1,
+                      fontSize: { xs: "1.1rem", md: "1.3rem" }
+                    }}
                   >
                     Classes — поглиблені дискусії
                   </Typography>
-                  <Typography sx={{ ...baseTypographyStyles, color: "text.secondary" }}>
+                  <Typography sx={{
+                    ...baseTypographyStyles,
+                    color: "text.secondary",
+                    fontSize: { xs: "0.95rem", md: "1.1rem" }
+                    }}>
                     Classes — це підтеми в Gates для детального обговорення конкретних ідей чи питань із вашою спільнотою.
                   </Typography>
                 </CardContent>
-                <CardActions sx={{ justifyContent: "center", p: 2 }}>
+                <CardActions sx={{ justifyContent: "center", p: { xs: 1, md: 2 } }}>
                   <Button
                     variant="outlined"
                     onClick={() => navigate("/classes")}
                     sx={{
                       ...baseButtonStyles,
-                      px: 3,
-                      py: 0.8,
-                      fontSize: "0.9rem",
-                      borderColor: theme.palette.grey[300],
+                      px: { xs: 2, md: 3 },
+                      py: { xs: 0.6, md: 0.8 },
+                      fontSize: { xs: "0.95rem", md: "1rem" },
+                      border: "none"
                     }}
                     aria-label="Переглянути Classes"
                   >
@@ -240,6 +291,9 @@ const DashboardPage = () => {
             <Grid item xs={12} sm={6} md={4}>
               <Card
                 sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
                   height: "100%",
                   bgcolor: "background.paper",
                   borderRadius: 3,
@@ -247,32 +301,42 @@ const DashboardPage = () => {
                   border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
                   transition: "all 0.3s ease",
                   ...baseHoverEffect,
+                  p: { xs: 1, md: 0 }
                 }}
               >
-                <CardContent>
+                <CardContent sx = {{ padding: { xs: 2, md: 4 } }}>
                   <ForumIcon
-                    sx={{ fontSize: 40, color: theme.palette.primary.main, mb: 2 }}
+                    sx={{ fontSize: { xs: 32, md: 40 }, color: theme.palette.primary.main, mb: 2 }}
                   />
                   <Typography
                     variant="h6"
-                    sx={{ ...baseTypographyStyles, fontWeight: 600, mb: 1 }}
+                    sx={{
+                      ...baseTypographyStyles,
+                      fontWeight: 600,
+                      mb: 1,
+                      fontSize: { xs: "1.1rem", md: "1.3rem" }
+                    }}
                   >
                     Boards — місце для спілкування
                   </Typography>
-                  <Typography sx={{ ...baseTypographyStyles, color: "text.secondary" }}>
-                    Boards — це основні місця для дискусій. Пишіть твіти, коментуйте та ділітесь ідеями з іншими!
+                  <Typography sx={{
+                    ...baseTypographyStyles,
+                    color: "text.secondary",
+                    fontSize: { xs: "0.95rem", md: "1.1rem" }
+                    }}>
+                    Boards — це основні місця для дискусій. Пишіть твіти, коментуйте та діліться ідеями з іншими!
                   </Typography>
                 </CardContent>
-                <CardActions sx={{ justifyContent: "center", p: 2 }}>
+                <CardActions sx={{ justifyContent: "center", p: { xs: 1, md: 2 } }}>
                   <Button
                     variant="outlined"
                     onClick={() => navigate("/boards")}
                     sx={{
                       ...baseButtonStyles,
-                      px: 3,
-                      py: 0.8,
-                      fontSize: "0.9rem",
-                      borderColor: theme.palette.grey[300],
+                      px: { xs: 2, md: 3 },
+                      py: { xs: 0.6, md: 0.8 },
+                      fontSize: { xs: "0.95rem", md: "1rem" },
+                      border: "none"
                     }}
                     aria-label="Переглянути Boards"
                   >
@@ -285,10 +349,17 @@ const DashboardPage = () => {
         </Box>
 
         {/* Points Explanation */}
-        <Box sx={{ mb: 6 }}>
+        <Box sx={{
+           mb: 6
+          }}>
           <Typography
             variant="h5"
-            sx={{ ...baseTypographyStyles, fontWeight: 600, mb: 3 }}
+            sx={{
+              ...baseTypographyStyles,
+              fontWeight: 600,
+              mb: 3,
+              fontSize: { xs: "1.2rem", md: "1.5rem" }
+            }}
           >
             Як працюють поінти?
           </Typography>
@@ -296,7 +367,10 @@ const DashboardPage = () => {
             <Grid item xs={12}>
               <Card
                 sx={{
-                  p: 3,
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  p: { xs: 0, md: 3 },
                   bgcolor: "background.paper",
                   borderRadius: 3,
                   boxShadow: BASE_SHADOW,
@@ -305,18 +379,29 @@ const DashboardPage = () => {
                   ...baseHoverEffect,
                 }}
               >
-                <CardContent>
+                <CardContent sx={{ padding: { xs: 2, md: 4 } }}>
                   <StarIcon
-                    sx={{ fontSize: 40, color: theme.palette.warning.main, mb: 2 }}
+                    sx={{ fontSize: { xs: 32, md: 40 }, color: theme.palette.warning.main, mb: 2 }}
                   />
                   <Typography
-                    sx={{ ...baseTypographyStyles, color: "text.secondary", mb: 2, fontSize: "1.1rem" }}
+                    sx={{
+                      ...baseTypographyStyles,
+                      color: "text.secondary",
+                      mb: 2,
+                      fontSize: { xs: "0.95rem", md: "1.1rem" }
+                    }}
                   >
                     Поінти — це валюта платформи, яка мотивує вас активно спілкуватися:
                   </Typography>
                   <Typography
                     component="ul"
-                    sx={{ ...baseTypographyStyles, color: "text.secondary", mb: 2, fontSize: "1.1rem", pl: 3 }}
+                    sx={{
+                      ...baseTypographyStyles,
+                      color: "text.secondary",
+                      mb: 2,
+                      fontSize: { xs: "0.95rem", md: "1.1rem" },
+                      pl: 3
+                    }}
                   >
                     <li>
                       <strong>Створюйте контент</strong>: Створення Gates, Classes, Boards чи твітів коштує поінти (наприклад, дошка — 100-150 поінтів, твіт — 10 поінтів).
@@ -332,7 +417,11 @@ const DashboardPage = () => {
                     </li>
                   </Typography>
                   <Typography
-                    sx={{ ...baseTypographyStyles, color: "text.secondary", fontSize: "1.1rem" }}
+                    sx={{
+                      ...baseTypographyStyles,
+                      color: "text.secondary",
+                      fontSize: { xs: "0.95rem", md: "1.1rem" }
+                    }}
                   >
                     Поінти роблять спілкування цікавим і винагороджують вашу активність. Почніть із створення дошки чи твіту!
                   </Typography>
@@ -345,8 +434,8 @@ const DashboardPage = () => {
                       ...baseButtonStyles,
                       px: 3,
                       py: 0.8,
-                      fontSize: "0.9rem",
-                      borderColor: theme.palette.grey[300],
+                      fontSize: "1rem",
+                      border: "none"
                     }}
                     aria-label="Створити твіт"
                   >
@@ -361,7 +450,7 @@ const DashboardPage = () => {
         {/* Gate Explanation */}
         <Box
           sx={{
-            p: 4,
+            p: { xs: 1, md: 3 },
             bgcolor: "background.paper",
             borderRadius: 3,
             boxShadow: BASE_SHADOW,
@@ -370,26 +459,49 @@ const DashboardPage = () => {
             ...baseHoverEffect,
           }}
         >
-          <Typography
-            variant="h5"
-            sx={{ ...baseTypographyStyles, fontWeight: 600, mb: 2 }}
-          >
+          <CardContent sx = {{ padding: { xs: 2, md: 4 } }}>
+            <Typography
+              variant="h5"
+              sx={{
+                ...baseTypographyStyles,
+                fontWeight: 600,
+                mb: 2,
+                fontSize: { xs: "1.2rem", md: "1.5rem" }
+              }}
+            >
             Чому варто приєднатися до Gate?
           </Typography>
           <Typography
             variant="h6"
-            sx={{ ...baseTypographyStyles, color: "text.secondary", mb: 2, fontWeight: 500 }}
+            sx={{
+              ...baseTypographyStyles,
+              color: "text.secondary",
+              mb: 2,
+              fontWeight: 500,
+              fontSize: { xs: "1rem", md: "1.1rem" }
+            }}
           >
             Це соціальна мережа для ідей і спілкування
           </Typography>
           <Typography
-            sx={{ ...baseTypographyStyles, color: "text.secondary", mb: 3, fontSize: "1.1rem" }}
+            sx={{
+              ...baseTypographyStyles,
+              color: "text.secondary",
+              mb: 3,
+              fontSize: { xs: "1rem", md: "1.1rem" }
+            }}
           >
             Gate — це місце, де ви знаходите однодумців і разом створюєте щось унікальне. Поєднання Twitter, Reddit, Telegram та Instagram, Gate дозволяє вам спілкуватися, ділитися ідеями та будувати спільноти. У Gate ви можете:
           </Typography>
           <Typography
             component="ul"
-            sx={{ ...baseTypographyStyles, color: "text.secondary", mb: 3, fontSize: "1.1rem", pl: 3 }}
+            sx={{
+              ...baseTypographyStyles,
+              color: "text.secondary",
+              mb: 3,
+              fontSize: { xs: "1rem", md: "1.1rem" },
+              pl: 3
+            }}
           >
             <li>Знаходити людей, які поділяють ваші інтереси.</li>
             <li>Створювати дошки для обговорень і ділитися думками.</li>
@@ -398,7 +510,12 @@ const DashboardPage = () => {
             <li>Організовувати події чи працювати над проєктами.</li>
           </Typography>
           <Typography
-            sx={{ ...baseTypographyStyles, color: "text.secondary", mb: 3, fontSize: "1.1rem" }}
+            sx={{
+              ...baseTypographyStyles,
+              color: "text.secondary",
+              mb: 3,
+              fontSize: { xs: "1rem", md: "1.1rem" }
+            }}
           >
             Gates бувають публічними чи приватними — ви вирішуєте, з ким ділитися. Почніть із дошки чи приєднання до Gate!
           </Typography>
@@ -419,6 +536,7 @@ const DashboardPage = () => {
               Знайти свою спільноту
             </Button>
           </Box>
+          </CardContent>
         </Box>
       </Box>
     </AppLayout>

@@ -28,10 +28,10 @@ const GatesPage = () => {
     createNewGate,
     updateExistingGate,
     deleteExistingGate,
-    addMemberToGate,
-    removeMemberFromGate,
+    addMemberToGate, // Ensured this is destructured
+    removeMemberFromGate, // Ensured this is destructured
     toggleFavoriteGate,
-    updateMemberRole,
+    updateMemberRole, // Ensured this is destructured
   } = useGates(token, handleLogout, navigate);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -61,7 +61,7 @@ const GatesPage = () => {
     []
   );
 
-  const loadGatesData = useCallback(
+  const loadData = useCallback(
     async (signal) => {
       if (!isAuthenticated || !token) {
         showNotification("Authentication required.", "error");
@@ -84,9 +84,9 @@ const GatesPage = () => {
 
   useEffect(() => {
     const controller = new AbortController();
-    loadGatesData(controller.signal);
+    loadData(controller.signal);
     return () => controller.abort();
-  }, [loadGatesData]);
+  }, [loadData]);
 
   useEffect(() => {
     if (error) {
@@ -105,6 +105,7 @@ const GatesPage = () => {
       if (quickFilter === "public") return gate.is_public;
       if (quickFilter === "private") return !gate.is_public;
       if (quickFilter === "favorited") return gate.is_favorited;
+      // Add other filters if necessary, similar to BoardsPage
       return true;
     });
   }, [gates, quickFilter, searchQuery]);
@@ -134,6 +135,7 @@ const GatesPage = () => {
     try {
       const createdGate = await createNewGate(popupGate);
       setCreateDialogOpen(false);
+      // Reset popupGate state as in BoardsPage
       setPopupGate({
         name: "",
         description: "",
@@ -147,7 +149,7 @@ const GatesPage = () => {
         },
       });
       showNotification("Gate created successfully!", "success");
-      navigate(`/gate/${createdGate.gate_id}`);
+      navigate(`/gate/${createdGate.gate_id}`); // Navigate to the new gate's page
     } catch (err) {
       showNotification(err.message || "Failed to create gate", "error");
     }
@@ -168,16 +170,16 @@ const GatesPage = () => {
   }, [editingGate, updateExistingGate, showNotification]);
 
   const handleDeleteGate = useCallback(async () => {
-    if (!gateToDelete) return;
+    if (!gateToDelete) return; // Ensure gateToDelete is not null
     try {
       await deleteExistingGate(gateToDelete);
       setDeleteDialogOpen(false);
-      setGateToDelete(null);
+      setGateToDelete(null); // Reset state
       showNotification("Gate deleted successfully!", "success");
     } catch (err) {
       showNotification(err.message || "Failed to delete gate", "error");
-      setDeleteDialogOpen(false);
-      setGateToDelete(null);
+      setDeleteDialogOpen(false); // Ensure dialog closes on error
+      setGateToDelete(null); // Reset state on error
     }
   }, [gateToDelete, deleteExistingGate, showNotification]);
 
@@ -189,37 +191,37 @@ const GatesPage = () => {
           showNotification("Maximum member limit reached!", "error");
           return;
         }
-        await addMemberToGate(gateId, memberData);
+        await addMemberToGate(gateId, memberData); // Uses destructured addMemberToGate
         showNotification("Member added successfully!", "success");
       } catch (err) {
         showNotification(err.message || "Failed to add member", "error");
       }
     },
-    [addMemberToGate, showNotification, gates]
+    [addMemberToGate, showNotification, gates] // Correct dependency
   );
 
   const handleRemoveMember = useCallback(
     async (gateId, username) => {
       try {
-        await removeMemberFromGate(gateId, username);
+        await removeMemberFromGate(gateId, username); // Uses destructured removeMemberFromGate
         showNotification("Member removed successfully!", "success");
       } catch (err) {
         showNotification(err.message || "Failed to remove member", "error");
       }
     },
-    [removeMemberFromGate, showNotification]
+    [removeMemberFromGate, showNotification] // Correct dependency
   );
 
   const handleUpdateMemberRole = useCallback(
     async (gateId, username, newRole) => {
       try {
-        await updateMemberRole(gateId, username, newRole);
+        await updateMemberRole(gateId, username, newRole); // Uses destructured updateMemberRole
         showNotification("Member role updated successfully!", "success");
       } catch (err) {
         showNotification(err.message || "Failed to update member role", "error");
       }
     },
-    [updateMemberRole, showNotification]
+    [updateMemberRole, showNotification] // Correct dependency
   );
 
   const handleOpenMemberDialog = useCallback((gateId) => {
@@ -229,7 +231,7 @@ const GatesPage = () => {
 
   const handleCancelMemberDialog = useCallback(() => {
     setMemberDialogOpen(false);
-    setSelectedGateId(null);
+    setSelectedGateId(null); // Reset selectedGateId
   }, []);
 
   const handleResetFilters = useCallback(() => {
@@ -241,12 +243,12 @@ const GatesPage = () => {
     type: "page",
     title: "Gates",
     titleAriaLabel: "Gates page",
-    shortDescription: "Your Space for Big Ideas",
+    shortDescription: "Your Space for Big Ideas", // Adjusted to match BoardsPage style
     tooltipDescription:
-      "Gates are like forum topics, starting points for broad discussions. Create a Gate to spark a conversation or join one to explore shared interests. It’s where communities form and ideas take root.",
+      "Gates are like forum topics, starting points for broad discussions. Create a Gate to spark a conversation or join one to explore shared interests. It’s where communities form and ideas take root.", // Adjusted
   };
 
-  if (authLoading || gatesLoading || isLoading) {
+  if (authLoading || gatesLoading || isLoading) { // Combined loading states
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
         <Box sx={{ ...containerStyles }}>
@@ -263,8 +265,8 @@ const GatesPage = () => {
   }
 
   if (!isAuthenticated) {
-    navigate("/login");
-    return null;
+    navigate("/login"); // Redirect if not authenticated
+    return null; // Return null to prevent rendering further
   }
 
   return (

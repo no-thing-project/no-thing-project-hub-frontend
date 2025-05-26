@@ -5,8 +5,8 @@ import {
   IconButton,
   Tooltip,
   Chip,
-  Divider,
   useTheme,
+  alpha,
 } from "@mui/material";
 import {
   Edit,
@@ -18,6 +18,8 @@ import {
   People,
   Forum,
   GroupAdd,
+  School,
+  Dashboard,
 } from "@mui/icons-material";
 import PropTypes from "prop-types";
 
@@ -46,6 +48,8 @@ const GateCard = ({
   const isPublic = gate.access?.is_public || gate.visibility === "public";
   const owner = gate.members?.find((m) => m.role === "owner");
   const ownerUsername = owner?.username || "Unknown";
+  const typeLabel = gate.type === "community" ? "Community" : "Organization";
+  const iconSize = "small";
 
   const handleKeyPress = useCallback(
     (e) => {
@@ -62,11 +66,43 @@ const GateCard = ({
 
   const getVisibilityIcon = () => {
     return isPublic ? (
-      <Public fontSize="small" color="success" />
+      <Public sx={{ mb: 0.1 }} fontSize="inherit" />
     ) : (
-      <Lock fontSize="small" color="error" />
+      <Lock sx={{ color: theme.palette.error.main, mb: 0.5 }} fontSize="inherit" />
     );
   };
+
+  const actionIconButtonSx = {
+    padding: "6px",
+    '&:hover': {
+      backgroundColor: theme.palette.action.hover,
+      borderRadius: '50%',
+    },
+  };
+
+  const deleteIconButtonSx = {
+    ...actionIconButtonSx,
+    color: theme.palette.error.main,
+    '&:hover': {
+      ...actionIconButtonSx['&:hover'],
+      backgroundColor: alpha(theme.palette.error.main, 0.08),
+    },
+  };
+  
+  const getTagColors = () => {
+    const isDark = theme.palette.mode === 'dark';
+    if (gate.type === "organization") {
+      return {
+        backgroundColor: isDark ? theme.palette.secondary.dark : theme.palette.secondary.light,
+        color: theme.palette.secondary.contrastText,
+      };
+    }
+    return {
+      backgroundColor: isDark ? theme.palette.primary.dark : theme.palette.primary.light,
+      color: theme.palette.primary.contrastText,
+    };
+  };
+
 
   return (
     <Box
@@ -74,12 +110,15 @@ const GateCard = ({
         gridColumn: { xs: "span 1", md: `span ${span}` },
         backgroundColor: "background.paper",
         borderRadius: theme.shape.borderRadiusMedium,
-        p: { xs: 1.5, md: 2 },
+        p: { xs: 2, md: 2.5 },
         cursor: "pointer",
         display: "flex",
         flexDirection: "column",
-        minHeight: { xs: 200, md: 250 },
+        minHeight: { xs: 190, sm: 210, md: 210 }, 
         transition: "all 0.3s ease-in-out",
+        width: { xs: "100%", sm: "auto" },
+        boxSizing: "border-box",
+        position: "relative",
         "&:hover": {
           backgroundColor: "background.hover",
           transform: "scale(1.02)",
@@ -91,14 +130,22 @@ const GateCard = ({
       role="button"
       aria-label={`View gate ${gate.name || "Untitled Gate"}`}
     >
-      <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
-        <Typography
-          variant="subtitle2"
-          sx={{ fontWeight: 600, fontSize: { xs: "0.875rem", md: "1rem" } }}
-        >
-          {gate.slug || gate.name || "Untitled Gate"}
-        </Typography>
-        <Box sx={{ display: "flex", gap: { xs: 0.5, md: 1 } }}>
+      {/* Top Section: Tag and Action Icons - Styled like BoardsCard */}
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 1.5 }}>
+        <Chip
+          size="small"
+          label={typeLabel}
+          sx={{
+            ...getTagColors(),
+            fontWeight: 500,
+            fontSize: '0.75rem',
+            borderRadius: '8px',
+            height: '26px',
+            lineHeight: '18px',
+            padding: '0 8px',
+          }}
+        />
+        <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.1, md: 0.25 } }}>
           {canEdit && (
             <Tooltip title="Edit Gate">
               <IconButton
@@ -109,7 +156,8 @@ const GateCard = ({
                     name: gate.name || "",
                     description: gate.description || "",
                     is_public: isPublic,
-                    visibility: isPublic ? "public" : "private",
+                    visibility: gate.visibility || (gate.access?.is_public ? "public" : "private"),
+                    type: gate.type || "community",
                     settings: gate.settings || {
                       class_creation_cost: 100,
                       board_creation_cost: 50,
@@ -118,10 +166,11 @@ const GateCard = ({
                     },
                   });
                 }}
-                size="small"
+                size={iconSize}
                 aria-label="Edit gate"
+                sx={actionIconButtonSx}
               >
-                <Edit fontSize="small" />
+                <Edit fontSize={iconSize} />
               </IconButton>
             </Tooltip>
           )}
@@ -131,10 +180,14 @@ const GateCard = ({
                 e.stopPropagation();
                 handleFavorite(gate.gate_id, isFavorited);
               }}
-              size="small"
+              size={iconSize}
               aria-label={isFavorited ? "Remove from favorites" : "Add to favorites"}
+              sx={actionIconButtonSx}
             >
-              {isFavorited ? <Star color="warning" /> : <StarBorder />}
+              {isFavorited ? 
+                <Star fontSize={iconSize} sx={{ color: theme.palette.primary.main }} /> : 
+                <StarBorder fontSize={iconSize} sx={{ color: theme.palette.text.secondary }} />
+              }
             </IconButton>
           </Tooltip>
           {canEdit && (
@@ -144,10 +197,11 @@ const GateCard = ({
                   e.stopPropagation();
                   handleAddMember(gate.gate_id);
                 }}
-                size="small"
+                size={iconSize}
                 aria-label="Add member to gate"
+                sx={actionIconButtonSx}
               >
-                <GroupAdd fontSize="small" />
+                <GroupAdd fontSize={iconSize} />
               </IconButton>
             </Tooltip>
           )}
@@ -159,121 +213,142 @@ const GateCard = ({
                   setGateToDelete(gate.gate_id);
                   setDeleteDialogOpen(true);
                 }}
-                size="small"
+                size={iconSize}
                 aria-label="Delete gate"
+                sx={deleteIconButtonSx}
               >
-                <Delete fontSize="small" color="error" />
+                <Delete fontSize={iconSize} />
               </IconButton>
             </Tooltip>
           )}
         </Box>
       </Box>
 
-      <Box sx={{ flexGrow: 1 }}>
+      {/* Centered Title and Description - Styled like BoardsCard */}
+      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', px:1 }}>
         <Typography
-          variant="h6"
-          sx={{ mb: 1, fontSize: { xs: "1.25rem", md: "1.5rem" } }}
+          variant="h5"
+          sx={{
+            fontWeight: "bold",
+            my: 0.5,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: '-webkit-box',
+            WebkitLineClamp: '2',
+            WebkitBoxOrient: 'vertical',
+            color: theme.palette.text.primary,
+            width: '100%',
+          }}
         >
           {gate.name || "Untitled Gate"}
         </Typography>
+
         {gate.description && (
-          <Typography
-            variant="body2"
-            sx={{
-              mb: 1,
-              color: "text.secondary",
-              fontSize: { xs: "0.75rem", md: "0.875rem" },
-            }}
-          >
-            {gate.description}
-          </Typography>
+          <Tooltip title={gate.description} placement="bottom" enterDelay={300}>
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                mt: 0.5,
+                mb: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: '-webkit-box',
+                WebkitLineClamp: '2',
+                WebkitBoxOrient: 'vertical',
+                width: '100%',
+              }}
+            >
+              {gate.description}
+            </Typography>
+          </Tooltip>
         )}
-
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 1 }}>
-          <Chip
-            label={gate.type === "community" ? "Community" : "Organization"}
-            icon={<People />}
-            size="small"
-            variant="outlined"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
-          />
-          <Chip
-            label={`Members: ${gate.stats?.member_count || gate.members?.length || 0}`}
-            icon={<People />}
-            size="small"
-            variant="outlined"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
-          />
-          <Chip
-            label={`Classes: ${gate.classes?.length || 0}`}
-            icon={<Forum />}
-            size="small"
-            variant="outlined"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
-          />
-          <Chip
-            label={`Boards: ${gate.boards?.length || 0}`}
-            icon={<Forum />}
-            size="small"
-            variant="outlined"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
-          />
-        </Box>
-
-        <Divider sx={{ my: 1 }} />
-
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-          <Chip
-            label={`Owner: ${ownerUsername}`}
-            size="small"
-            variant="outlined"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
-          />
-          {(gate.stats?.favorite_count || 0) > 0 && (
-            <Chip
-              label={`Favorites: ${gate.stats.favorite_count}`}
-              icon={<Star />}
-              size="small"
-              variant="outlined"
-              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
-            />
-          )}
-          {gate.tags?.length > 0 && (
-            <Chip
-              label={`Tags: ${gate.tags.join(", ")}`}
-              size="small"
-              variant="outlined"
-              sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
-            />
-          )}
-        </Box>
       </Box>
-
+      
+      {/* Footer: Owner, Counters, and Visibility - Styled like BoardsCard */}
       <Box
         sx={{
-          mt: 2,
+          mt: 'auto',
+          pt: 1.5, 
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          fontSize: '0.875rem', 
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          {getVisibilityIcon()}
-          <Typography
-            variant="caption"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
-          >
-            {isPublic ? "Public" : "Private"}
-          </Typography>
-        </Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Forum fontSize="small" />
-          <Typography
-            variant="caption"
-            sx={{ fontSize: { xs: "0.75rem", md: "0.875rem" } }}
-          >
-            {gate.stats?.tweet_count || 0}
-          </Typography>
+        <Typography 
+          variant="caption" 
+          sx={{
+            color: theme.palette.text.secondary, 
+            fontSize: 'inherit' 
+          }}
+        >
+          Owner: {ownerUsername}
+        </Typography>
+        
+        <Box sx={{ display: "flex", alignItems: "center", gap: {xs: 1, md:1.5} }}> {/* Adjusted gap */}
+          <Tooltip title={`Members: ${gate.stats?.member_count || gate.members?.length || 0}`}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.3, color: theme.palette.text.secondary }}>
+              <People fontSize="inherit" />
+              <Typography variant="caption" sx={{fontSize: 'inherit'}}>
+                {gate.stats?.member_count || gate.members?.length || 0}
+              </Typography>
+            </Box>
+          </Tooltip>
+
+          <Tooltip title={`Classes: ${gate.classes?.length || 0}`}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.3, color: theme.palette.text.secondary }}>
+              <School fontSize="inherit" /> 
+              <Typography variant="caption" sx={{fontSize: 'inherit'}}>
+                {gate.classes?.length || 0}
+              </Typography>
+            </Box>
+          </Tooltip>
+          
+          <Tooltip title={`Boards: ${gate.boards?.length || 0}`}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.3, color: theme.palette.text.secondary }}>
+              <Dashboard fontSize="inherit" />
+              <Typography variant="caption" sx={{fontSize: 'inherit'}}>
+                {gate.boards?.length || 0}
+              </Typography>
+            </Box>
+          </Tooltip>
+
+          {(gate.stats?.favorite_count || 0) > 0 && (
+            <Tooltip title={`Favorites: ${gate.stats.favorite_count}`}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.3, color: theme.palette.text.secondary }}>
+                <Star fontSize="inherit" />
+                <Typography variant="caption" sx={{fontSize: 'inherit'}}>
+                  {gate.stats.favorite_count}
+                </Typography>
+              </Box>
+            </Tooltip>
+          )}
+          
+          {(gate.stats?.tweet_count || 0) > 0 && (
+             <Tooltip title={`Posts: ${gate.stats?.tweet_count || 0}`}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.3, color: theme.palette.text.secondary }}>
+                <Forum fontSize="inherit" />
+                <Typography variant="caption" sx={{fontSize: 'inherit'}}>
+                    {gate.stats?.tweet_count || 0}
+                </Typography>
+                </Box>
+            </Tooltip>
+          )}
+
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.3}}>
+            {getVisibilityIcon()}
+            <Typography
+              variant="caption"
+              sx={{ 
+                color: isPublic ? theme.palette.text.primary : theme.palette.error.main,
+                fontWeight: 500, 
+                fontSize: 'inherit' 
+              }}
+            >
+              {isPublic ? "Public" : "Private"}
+            </Typography>
+          </Box>
         </Box>
       </Box>
     </Box>
