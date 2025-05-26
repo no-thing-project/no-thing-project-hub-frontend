@@ -16,6 +16,7 @@ import { useClasses } from '../hooks/useClasses';
 import useAuth from '../hooks/useAuth';
 import { useNotification } from '../context/NotificationContext';
 import { Add, Public, Lock, People, Forum, Star } from '@mui/icons-material';
+import { containerStyles, skeletonStyles, gridStyles } from '../styles/BaseStyles';
 
 /**
  * GatePage component for displaying and managing a gate and its associated classes
@@ -59,6 +60,7 @@ const GatePage = () => {
   } = useClasses(token, handleLogout, navigate);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [createClassDialogOpen, setCreateClassDialogOpen] = useState(false);
   const [editingGate, setEditingGate] = useState(null);
   const [memberDialogOpen, setMemberDialogOpen] = useState(false);
@@ -68,7 +70,6 @@ const GatePage = () => {
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [quickFilter, setQuickFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [actionLoading, setActionLoading] = useState(false);
 
   const [popupClass, setPopupClass] = useState({
     name: '',
@@ -102,6 +103,8 @@ const GatePage = () => {
         await Promise.all([
           fetchGate(gate_id, signal),
           fetchGateMembersList(gate_id, signal),
+          fetchClassesByGate(gate_id, {}, signal),
+          fetchGatesList({ visibility: 'public' }, signal),
         ]);
       } catch (err) {
         if (err.name !== 'AbortError') {
@@ -288,12 +291,7 @@ const GatePage = () => {
         'success'
       );
     } catch (err) {
-      showNotification(
-        gateData?.is_favorited
-          ? 'Failed to remove gate from favorites'
-          : 'Failed to add gate to favorites',
-        'error'
-      );
+      showNotification(err.message || 'Failed to toggle favorite', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -301,6 +299,7 @@ const GatePage = () => {
 
   const handleAddGateMember = useCallback(
     async (gateId, memberData) => {
+      setActionLoading(true);
       try {
         if (members.length >= gateData?.settings?.max_members) {
           showNotification('Maximum member limit reached!', 'error');
@@ -310,6 +309,8 @@ const GatePage = () => {
         showNotification('Member added successfully!', 'success');
       } catch (err) {
         showNotification(err.message || 'Failed to add member', 'error');
+      } finally {
+        setActionLoading(false);
       }
     },
     [addMemberToGate, showNotification, members, gateData]
@@ -317,11 +318,14 @@ const GatePage = () => {
 
   const handleRemoveGateMember = useCallback(
     async (gateId, username) => {
+      setActionLoading(true);
       try {
         await removeMemberFromGate(gateId, username);
         showNotification('Member removed successfully!', 'success');
       } catch (err) {
         showNotification(err.message || 'Failed to remove member', 'error');
+      } finally {
+        setActionLoading(false);
       }
     },
     [removeMemberFromGate, showNotification]
@@ -329,11 +333,14 @@ const GatePage = () => {
 
   const handleUpdateGateMemberRole = useCallback(
     async (gateId, username, newRole) => {
+      setActionLoading(true);
       try {
         await updateGateMemberRole(gateId, username, newRole);
         showNotification('Member role updated successfully!', 'success');
       } catch (err) {
         showNotification(err.message || 'Failed to update member role', 'error');
+      } finally {
+        setActionLoading(false);
       }
     },
     [updateGateMemberRole, showNotification]
@@ -341,6 +348,7 @@ const GatePage = () => {
 
   const handleAddClassMember = useCallback(
     async (classId, memberData) => {
+      setActionLoading(true);
       try {
         const classItem = classes.find((c) => c.class_id === classId);
         if (classItem?.members?.length >= classItem?.settings?.max_members) {
@@ -351,6 +359,8 @@ const GatePage = () => {
         showNotification('Member added successfully!', 'success');
       } catch (err) {
         showNotification(err.message || 'Failed to add member', 'error');
+      } finally {
+        setActionLoading(false);
       }
     },
     [addMemberToClass, showNotification, classes]
@@ -358,11 +368,14 @@ const GatePage = () => {
 
   const handleRemoveClassMember = useCallback(
     async (classId, username) => {
+      setActionLoading(true);
       try {
         await removeMemberFromClass(classId, username);
         showNotification('Member removed successfully!', 'success');
       } catch (err) {
         showNotification(err.message || 'Failed to remove member', 'error');
+      } finally {
+        setActionLoading(false);
       }
     },
     [removeMemberFromClass, showNotification]
@@ -370,11 +383,14 @@ const GatePage = () => {
 
   const handleUpdateClassMemberRole = useCallback(
     async (classId, username, newRole) => {
+      setActionLoading(true);
       try {
         await updateClassMemberRole(classId, username, newRole);
         showNotification('Member role updated successfully!', 'success');
       } catch (err) {
         showNotification(err.message || 'Failed to update member role', 'error');
+      } finally {
+        setActionLoading(false);
       }
     },
     [updateClassMemberRole, showNotification]
@@ -446,7 +462,7 @@ const GatePage = () => {
           icon: <Add />,
           onClick: handleOpenCreateClass,
           tooltip: 'Create a new class within this gate',
-          disabled: actionLoading || classesLoading || gatesLoading,
+          disabled: actionLoading,
           ariaLabel: 'Create a new class',
           isMenuItem: false,
         },
@@ -502,29 +518,21 @@ const GatePage = () => {
       canEdit,
       canDelete,
       actionLoading,
-      classesLoading,
-      gatesLoading,
       handleOpenCreateClass,
       handleOpenMemberDialog,
       handleFavoriteToggle,
     ]
   );
 
-  if (authLoading || gatesLoading || classesLoading || isLoading) {
+  if (isLoading) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-        <Box sx={{ maxWidth: 1500, mx: 'auto', p: { xs: 2, md: 4 } }}>
-          <Skeleton variant='rectangular' height={100} sx={{ mb: 3, borderRadius: 2 }} />
-          <Skeleton variant='rectangular' height={50} sx={{ mb: 3, borderRadius: 2 }} />
-          <Box
-            sx={{
-              display: 'grid',
-              gap: 3,
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(300px, 1fr))' },
-            }}
-          >
+        <Box sx={{ ...containerStyles }}>
+          <Skeleton variant='rectangular' sx={{ ...skeletonStyles.header }} />
+          <Skeleton variant='rectangular' sx={{ ...skeletonStyles.filter }} />
+          <Box sx={{ ...gridStyles.container }}>
             {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} variant='rectangular' height={200} sx={{ borderRadius: 2 }} />
+              <Skeleton key={i} variant='rectangular' sx={{ ...skeletonStyles.card }} />
             ))}
           </Box>
         </Box>
@@ -545,7 +553,7 @@ const GatePage = () => {
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-      <Box sx={{ maxWidth: 1500, mx: 'auto', p: { xs: 2, md: 4 } }}>
+      <Box sx={{ ...containerStyles }}>
         <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData} userRole={userRole} />
         <ClassesFilters
           quickFilter={quickFilter}
@@ -554,20 +562,44 @@ const GatePage = () => {
           setSearchQuery={debouncedSetSearchQuery}
           onReset={handleResetFilters}
           sx={{ mb: 3, bgcolor: theme.palette.background.paper, p: 2, borderRadius: 2 }}
+          disabled={actionLoading}
         />
         {filteredClasses.length > 0 ? (
           <ClassesGrid
             filteredClasses={filteredClasses}
             handleFavorite={async (classId) => {
+              setActionLoading(true);
               try {
                 const currentClass = filteredClasses.find((c) => c.class_id === classId);
                 await toggleFavoriteClass(classId, currentClass?.is_favorited);
                 showNotification('Favorite toggled successfully!', 'success');
               } catch (err) {
                 showNotification(err.message || 'Failed to toggle favorite', 'error');
+              } finally {
+                setActionLoading(false);
               }
             }}
-            setEditingClass={setEditingClass}
+            setEditingClass={(classItem) =>
+              setEditingClass({
+                class_id: classItem.class_id,
+                name: classItem.name || '',
+                description: classItem.description || '',
+                is_public: classItem.access?.is_public || false,
+                visibility: classItem.access?.is_public ? 'public' : 'private',
+                settings: classItem.settings || {
+                  max_boards: 100,
+                  max_members: 50,
+                  board_creation_cost: 50,
+                  tweet_cost: 1,
+                  allow_invites: true,
+                  require_approval: false,
+                  ai_moderation_enabled: true,
+                  auto_archive_after: 30,
+                },
+                gate_id: classItem.gate_id,
+                tags: classItem.tags || [],
+              })
+            }
             setClassToDelete={setClassToDelete}
             setDeleteDialogOpen={setDeleteDialogOpen}
             handleAddMember={handleOpenMemberDialog}
@@ -588,9 +620,11 @@ const GatePage = () => {
           setClass={setPopupClass}
           onSave={handleCreateClass}
           onCancel={handleCancelCreateClass}
-          disabled={actionLoading || gatesLoading || classesLoading}
+          disabled={actionLoading}
           gates={gates}
           fixedGateId={gate_id}
+          initialGateId={gate_id}
+          currentGate={gateData}
         />
         {editingClass && (
           <ClassFormDialog
@@ -600,9 +634,11 @@ const GatePage = () => {
             setClass={setEditingClass}
             onSave={handleUpdateClass}
             onCancel={() => setEditingClass(null)}
-            disabled={actionLoading || gatesLoading || classesLoading}
+            disabled={actionLoading}
             gates={gates}
             fixedGateId={gate_id}
+            initialGateId={gate_id}
+            currentGate={gateData}
           />
         )}
         {editingGate && (
@@ -613,7 +649,7 @@ const GatePage = () => {
             setGate={setEditingGate}
             onSave={handleUpdateGate}
             onCancel={() => setEditingGate(null)}
-            disabled={actionLoading || gatesLoading || classesLoading}
+            disabled={actionLoading}
           />
         )}
         <MemberFormDialog
@@ -624,7 +660,7 @@ const GatePage = () => {
           token={token}
           onSave={handleCancelMemberDialog}
           onCancel={handleCancelMemberDialog}
-          disabled={actionLoading || gatesLoading || classesLoading}
+          disabled={actionLoading}
           members={
             selectedClassId ? classes.find((c) => c.class_id === selectedClassId)?.members || [] : members
           }
@@ -641,7 +677,7 @@ const GatePage = () => {
               ? 'Are you sure you want to delete this class? This action cannot be undone.'
               : 'Are you sure you want to delete this gate? This action cannot be undone.'
           }
-          disabled={actionLoading || gatesLoading || classesLoading}
+          disabled={actionLoading}
         />
       </Box>
     </AppLayout>
