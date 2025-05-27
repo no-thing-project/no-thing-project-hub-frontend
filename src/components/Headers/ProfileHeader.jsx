@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
 import {
   Box,
@@ -19,25 +19,32 @@ import StatusBadge from "../Badges/StatusBadge";
 import Tooltip, { tooltipClasses } from '@mui/material/Tooltip';
 import useMediaQuery from '@mui/material/useMediaQuery';
 
-const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) => {
+const ProfileHeader = React.memo(({ user, isOwnProfile, headerData, userRole, children }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [anchorEl, setAnchorEl] = useState(null);
   const [activeChipIndex, setActiveChipIndex] = useState(null);
   const open = Boolean(anchorEl);
 
-  const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
-  const handleMenuClose = () => setAnchorEl(null);
-
-  const handleMenuAction = (action) => {
+  const handleMenuOpen = useCallback((event) => setAnchorEl(event.currentTarget), []);
+  const handleMenuClose = useCallback(() => setAnchorEl(null), []);
+  const handleMenuAction = useCallback((action) => {
     action();
     handleMenuClose();
-  };
-
-  const handleChipClick = (index) => {
+  }, [handleMenuClose]);
+  const handleChipClick = useCallback((index) => {
     setActiveChipIndex((prev) => (prev === index ? null : index));
-  };
+  }, []);
 
+  // Memoized computed values
+  const isManageable = useMemo(() => ["owner", "admin"].includes(userRole), [userRole]);
+  const menuActions = useMemo(() => headerData?.actions?.filter((action) => action.isMenuItem) || [], [headerData?.actions]);
+  const buttonActions = useMemo(() => headerData?.actions?.filter((action) => !action.isMenuItem) || [], [headerData?.actions]);
+  const hasFavoriteToggle = useMemo(() => headerData?.type !== "user" && headerData?.type !== "page" && !!headerData?.onFavoriteToggle, [headerData?.type, headerData?.onFavoriteToggle]);
+  const hasMenuActions = useMemo(() => headerData?.type !== "user" && headerData?.type !== "page" && isManageable && menuActions.length > 0, [headerData?.type, isManageable, menuActions.length]);
+  const hasMainButton = useMemo(() => (headerData?.type === "page" && !!children) || buttonActions.length > 0, [headerData?.type, children, buttonActions.length]);
+
+  // Loading state
   if (!user) {
     return (
       <Card sx={{ ...headerStyles.card, width: { xs: "100%", customSm: "auto" } }}>
@@ -53,12 +60,13 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
     );
   }
 
+  // Minimal header without headerData
   if (!headerData) {
     return (
       <Card sx={{ ...headerStyles.card, width: { xs: "100%", customSm: "auto" } }}>
         <CardContent>
           <Box sx={headerStyles.content}>
-            <Box sx={{ flex: 1 }}>
+            <Box sx={headerStyles.leftSection}>
               <Typography
                 variant="h4"
                 sx={{
@@ -90,14 +98,77 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
     );
   }
 
-  const isManageable = ["owner", "admin"].includes(userRole);
-  const menuActions = headerData.actions?.filter((action) => action.isMenuItem) || [];
-  const buttonActions = headerData.actions?.filter((action) => !action.isMenuItem) || [];
-  const hasFavoriteToggle = headerData.type !== "user" && headerData.type !== "page" && headerData.onFavoriteToggle;
-  const hasMenuActions = headerData.type !== "user" && headerData.type !== "page" && isManageable && menuActions.length > 0;
-  const secondaryButtonsCount = (hasFavoriteToggle ? 1 : 0) + (hasMenuActions ? 1 : 0);
-  const hasMainButton = (headerData.type === "page" && children) || buttonActions.length > 0;
-  const useSplitButtonLayout = secondaryButtonsCount === 2 && hasMainButton;
+  // Render action buttons (reused for mobile and desktop)
+  const renderActionButtons = () => (
+    <>
+      {headerData.type === "page" && children}
+      {buttonActions.map((action, index) => (
+        <Tooltip key={index} title={action.tooltip}>
+          <Button
+            onClick={action.onClick}
+            startIcon={action.icon}
+            sx={{
+              ...actionButtonStyles,
+              ...(action.variant === "delete" && {
+                bgcolor: theme.palette.error.main,
+                color: theme.palette.common.white,
+                "&:hover": { bgcolor: theme.palette.error.dark },
+              }),
+            }}
+            disabled={action.disabled}
+            aria-label={action.ariaLabel}
+          >
+            {action.label}
+          </Button>
+        </Tooltip>
+      ))}
+      {(hasFavoriteToggle || hasMenuActions) && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          {hasFavoriteToggle && (
+            <Tooltip
+              title={headerData.isFavorited ? `Remove ${headerData.type} from favorites` : `Add ${headerData.type} to favorites`}
+            >
+              <IconButton
+                onClick={headerData.onFavoriteToggle}
+                disabled={headerData.actionLoading}
+                aria-label={headerData.isFavorited ? "Remove from favorites" : "Add to favorites"}
+                sx={{ display: { xs: "none", customSm: "inline-flex" } }}
+              >
+                {headerData.isFavorited ? <Star color="warning" /> : <StarBorder />}
+              </IconButton>
+            </Tooltip>
+          )}
+          {hasMenuActions && (
+            <>
+              <IconButton
+                onClick={handleMenuOpen}
+                disabled={headerData.actionLoading}
+                aria-label="More actions"
+              >
+                <MoreVert />
+              </IconButton>
+              <Menu
+                anchorEl={anchorEl}
+                open={open}
+                onClose={handleMenuClose}
+                PaperProps={{ sx: { mt: 1, boxShadow: "0 4px 16px rgba(0,0,0,0.12)" } }}
+              >
+                {menuActions.map((action, index) => (
+                  <MenuItem
+                    key={index}
+                    onClick={() => handleMenuAction(action.onClick)}
+                    sx={action.variant === "delete" ? { color: theme.palette.error.main } : {}}
+                  >
+                    {action.label}
+                  </MenuItem>
+                ))}
+              </Menu>
+            </>
+          )}
+        </Box>
+      )}
+    </>
+  );
 
   return (
     <Card sx={{ ...headerStyles.card, width: { xs: "100%", customSm: "auto" }, position: "relative" }}>
@@ -176,19 +247,10 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
                     slotProps={{
                       popper: {
                         sx: {
-                            [`& .${tooltipClasses.tooltip}`]: {
-                              padding: 2
-                            }
+                          [`& .${tooltipClasses.tooltip}`]: { padding: 2 },
                         },
-                        modifiers: [
-                          {
-                            name: "offset",
-                            options: {
-                              offset: [0, -10],
-                            },
-                          }
-                        ]
-                      }
+                        modifiers: [{ name: "offset", options: { offset: [0, -10] } }],
+                      },
                     }}
                   >
                     <IconButton size="small" aria-label="More information about this page" sx={{ p: 0 }}>
@@ -220,198 +282,10 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
               </Box>
             )}
           </Box>
-          {isOwnProfile && (
+          {isOwnProfile && (hasMainButton || hasFavoriteToggle || hasMenuActions) && (
             <Box sx={headerStyles.rightSection}>
-              <Box sx={useSplitButtonLayout ? headerStyles.splitButtonGroup : headerStyles.buttonGroup}>
-                {useSplitButtonLayout ? (
-                  <>
-                    <Box sx={{ display: { xs: "flex", customSm: "none" }, alignItems: "center", gap: 1, justifyContent: "center" }}>
-                      {headerData.type === "page" ? (
-                        children
-                      ) : (
-                        buttonActions.map((action, index) => (
-                          <Tooltip key={index} title={action.tooltip}>
-                            <Button
-                              onClick={action.onClick}
-                              startIcon={action.icon}
-                              sx={{
-                                ...actionButtonStyles,
-                                ...(action.variant === "delete" && {
-                                  bgcolor: theme.palette.error.main,
-                                  color: theme.palette.common.white,
-                                  "&:hover": { bgcolor: theme.palette.error.dark },
-                                }),
-                              }}
-                              disabled={action.disabled}
-                              aria-label={action.ariaLabel}
-                            >
-                              {action.label}
-                            </Button>
-                          </Tooltip>
-                        ))
-                      )}
-                      {hasMenuActions && (
-                        <>
-                          <IconButton
-                            onClick={handleMenuOpen}
-                            disabled={headerData.actionLoading}
-                            aria-label="More actions"
-                          >
-                            <MoreVert />
-                          </IconButton>
-                          <Menu
-                            anchorEl={anchorEl}
-                            open={open}
-                            onClose={handleMenuClose}
-                            PaperProps={{ sx: { mt: 1, boxShadow: "0 4px 16px rgba(0,0,0,0.12)" } }}
-                          >
-                            {menuActions.map((action, index) => (
-                              <MenuItem
-                                key={index}
-                                onClick={() => handleMenuAction(action.onClick)}
-                                sx={action.variant === "delete" ? { color: theme.palette.error.main } : {}}
-                              >
-                                {action.label}
-                              </MenuItem>
-                            ))}
-                          </Menu>
-                        </>
-                      )}
-                    </Box>
-                    <Box sx={{ display: { xs: "none", customSm: "flex" }, alignItems: "center", gap: 1 }}>
-                      {headerData.type === "page" && children}
-                      {buttonActions.map((action, index) => (
-                        <Tooltip key={index} title={action.tooltip}>
-                          <Button
-                            onClick={action.onClick}
-                            startIcon={action.icon}
-                            sx={{
-                              ...actionButtonStyles,
-                              ...(action.variant === "delete" && {
-                                bgcolor: theme.palette.error.main,
-                                color: theme.palette.common.white,
-                                "&:hover": { bgcolor: theme.palette.error.dark },
-                              }),
-                            }}
-                            disabled={action.disabled}
-                            aria-label={action.ariaLabel}
-                          >
-                            {action.label}
-                          </Button>
-                        </Tooltip>
-                      ))}
-                      {hasFavoriteToggle && (
-                        <Tooltip
-                          title={headerData.isFavorited ? `Remove ${headerData.type} from favorites` : `Add ${headerData.type} to favorites`}
-                        >
-                          <IconButton
-                            onClick={headerData.onFavoriteToggle}
-                            disabled={headerData.actionLoading}
-                            aria-label={headerData.isFavorited ? "Remove from favorites" : "Add to favorites"}
-                          >
-                            {headerData.isFavorited ? <Star color="warning" /> : <StarBorder />}
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                      {hasMenuActions && (
-                        <>
-                          <IconButton
-                            onClick={handleMenuOpen}
-                            disabled={headerData.actionLoading}
-                            aria-label="More actions"
-                          >
-                            <MoreVert />
-                          </IconButton>
-                          <Menu
-                            anchorEl={anchorEl}
-                            open={open}
-                            onClose={handleMenuClose}
-                            PaperProps={{ sx: { mt: 1, boxShadow: "0 4px 16px rgba(0,0,0,0.12)" } }}
-                          >
-                            {menuActions.map((action, index) => (
-                              <MenuItem
-                                key={index}
-                                onClick={() => handleMenuAction(action.onClick)}
-                                sx={action.variant === "delete" ? { color: theme.palette.error.main } : {}}
-                              >
-                                {action.label}
-                              </MenuItem>
-                            ))}
-                          </Menu>
-                        </>
-                      )}
-                    </Box>
-                  </>
-                ) : (
-                  <>
-                    {headerData.type === "page" && children}
-                    {buttonActions.map((action, index) => (
-                      <Tooltip key={index} title={action.tooltip}>
-                        <Button
-                          onClick={action.onClick}
-                          startIcon={action.icon}
-                          sx={{
-                            ...actionButtonStyles,
-                            ...(action.variant === "delete" && {
-                              bgcolor: theme.palette.error.main,
-                              color: theme.palette.common.white,
-                              "&:hover": { bgcolor: theme.palette.error.dark },
-                            }),
-                          }}
-                          disabled={action.disabled}
-                          aria-label={action.ariaLabel}
-                        >
-                          {action.label}
-                        </Button>
-                      </Tooltip>
-                    ))}
-                    {headerData.type !== "user" && headerData.type !== "page" && (
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, justifyContent: { xs: "center", customSm: "center" } }}>
-                        {hasFavoriteToggle && (
-                          <Tooltip
-                            title={headerData.isFavorited ? `Remove ${headerData.type} from favorites` : `Add ${headerData.type} to favorites`}
-                          >
-                            <IconButton
-                              onClick={headerData.onFavoriteToggle}
-                              disabled={headerData.actionLoading}
-                              aria-label={headerData.isFavorited ? "Remove from favorites" : "Add to favorites"}
-                              sx={{ display: { xs: "none", customSm: "inline-flex" } }}
-                            >
-                              {headerData.isFavorited ? <Star color="warning" /> : <StarBorder />}
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                        {hasMenuActions && (
-                          <>
-                            <IconButton
-                              onClick={handleMenuOpen}
-                              disabled={headerData.actionLoading}
-                              aria-label="More actions"
-                            >
-                              <MoreVert />
-                            </IconButton>
-                            <Menu
-                              anchorEl={anchorEl}
-                              open={open}
-                              onClose={handleMenuClose}
-                              PaperProps={{ sx: { mt: 1, boxShadow: "0 4px 16px rgba(0,0,0,0.12)" } }}
-                            >
-                              {menuActions.map((action, index) => (
-                                <MenuItem
-                                  key={index}
-                                  onClick={() => handleMenuAction(action.onClick)}
-                                  sx={action.variant === "delete" ? { color: theme.palette.error.main } : {}}
-                                >
-                                  {action.label}
-                                </MenuItem>
-                              ))}
-                            </Menu>
-                          </>
-                        )}
-                      </Box>
-                    )}
-                  </>
-                )}
+              <Box sx={headerStyles.buttonGroup}>
+                {renderActionButtons()}
               </Box>
             </Box>
           )}
@@ -419,7 +293,7 @@ const ProfileHeader = ({ user, isOwnProfile, headerData, userRole, children }) =
       </CardContent>
     </Card>
   );
-};
+});
 
 ProfileHeader.propTypes = {
   user: PropTypes.shape({
@@ -463,4 +337,4 @@ ProfileHeader.propTypes = {
   children: PropTypes.node,
 };
 
-export default React.memo(ProfileHeader);
+export default ProfileHeader;

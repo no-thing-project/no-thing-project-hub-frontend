@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import Draggable from 'react-draggable';
 import debounce from 'lodash/debounce';
 import { BOARD_SIZE } from '../../../hooks/useBoard';
-import TweetContentStyles from './tweetContentStyles';
+import TweetContentStyles from './TweetContentStyles';
 
 const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypassOwnership = false }) => {
   const nodeRef = useRef(null);

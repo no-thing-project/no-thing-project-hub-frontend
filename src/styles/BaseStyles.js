@@ -43,8 +43,8 @@ export const baseCardStyles = {
   border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.6)}`,
   transition: "all 0.3s ease",
   ...baseHoverEffect,
-  width: { xs: "100%", sm: "auto" }, // Ensure card takes full width of its container on mobile
-  boxSizing: "border-box", // Include padding and border in the element's total width and height
+  width: { xs: "100%", sm: "auto" },
+  boxSizing: "border-box",
 };
 
 export const baseButtonStyles = {
@@ -162,14 +162,14 @@ export const headerStyles = {
     mb: 3,
     backgroundColor: "background.paper",
     boxShadow: "none",
-    width: { xs: "100%", sm: "auto" }, // Ensure header card takes full width on mobile
-    boxSizing: "border-box", // Include padding and border
+    width: { xs: "100%", sm: "auto" },
+    boxSizing: "border-box",
   },
   content: {
     display: "flex",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: { xs: "column", sm: "row" }, // Stack on mobile, row on desktop
+    alignItems: { xs: "center", sm: "center" },
+    justifyContent: { xs: "center", sm: "space-between" },
     mt: 1,
     mb: 1,
     mx: { xs: 2, sm: 3 },
@@ -180,12 +180,15 @@ export const headerStyles = {
     display: "flex",
     flexDirection: "column",
     gap: 1,
+    width: { xs: "100%", sm: "auto" }, // Full width on mobile
   },
   rightSection: {
     display: "flex",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: { xs: "center", sm: "flex-end" }, // Center on mobile
+    width: { xs: "100%", sm: "auto" }, // Full width on mobile
+    mt: { xs: 2, sm: 0 }, // Add margin-top on mobile to separate from text
   },
   title: { fontWeight: 400, color: "text.primary" },
   level: { color: "text.secondary" },
@@ -193,9 +196,10 @@ export const headerStyles = {
     display: "flex",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: { xs: "center", sm: "flex-end" }, // Center on mobile
     gap: { xs: 1, sm: 2 },
     width: { xs: "100%", sm: "auto" },
+    flexWrap: "wrap", // Allow wrapping if buttons overflow
   },
   splitButtonGroup: {
     display: "flex",
@@ -218,10 +222,6 @@ export const headerStyles = {
     "&::-webkit-scrollbar": { display: "none" },
     msOverflowStyle: "none",
     scrollbarWidth: "none",
-    // sm: {
-    //   display: "flex",
-    //   flexWrap: "wrap",
-    // },
   },
   chip: {
     fontSize: { xs: "0.65rem", sm: "0.75rem" },
@@ -236,12 +236,9 @@ export const headerStyles = {
     "& .MuiChip-icon": { margin: { xs: "0", sm: "0 0 0 -4px" }, fontSize: { xs: "1rem", sm: "0.875rem" } },
   },
   chipExpanded: {
-    width: { xs: "auto", sm: "auto" },
-    // widthMax: {xs: "auto", sm: "3s"}
+    width: "auto",
     padding: { xs: "0.2rem 0.6rem", sm: "0.5rem 1rem" },
-    "& .MuiChip-label": {
-      display: "inline",
-    },
+    "& .MuiChip-label": { display: "inline" },
   },
   chipCollapsed: {
     width: { xs: "32px", sm: "auto" },
@@ -267,8 +264,8 @@ export const sectionStyles = {
     backgroundColor: "background.paper",
     boxShadow: "none",
     mb: 3,
-    width: { xs: "100%", sm: "auto" }, // Ensure section card takes full width on mobile
-    boxSizing: "border-box", // Include padding and border
+    width: { xs: "100%", sm: "auto" },
+    boxSizing: "border-box",
   },
   content: { mx: { xs: 2, sm: 3 }, my: 3 },
   title: { fontWeight: 500, mb: 5 },
@@ -308,8 +305,8 @@ export const containerStyles = {
   width: { xs: "100%", sm: "auto" },
   maxWidth: { xs: "100%", sm: "1500px" },
   margin: { xs: 0, sm: "0 auto" },
-  padding: { xs: 0, sm: 2 }, // Remove padding on mobile (xs), keep for sm and up
-  boxSizing: "border-box", // Added for proper width calculation with padding
+  padding: { xs: 0, sm: 2 },
+  boxSizing: "border-box",
 };
 
 export const gridStyles = {
