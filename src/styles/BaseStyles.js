@@ -193,13 +193,13 @@ export const headerStyles = {
   title: { fontWeight: 400, color: "text.primary" },
   level: { color: "text.secondary" },
   buttonGroup: {
-    display: "flex",
+    display: "contents",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: { xs: "center", sm: "flex-end" }, // Center on mobile
+    justifyContent: { xs: "center", sm: "flex-end" },
     gap: { xs: 1, sm: 0.5 },
-    width: { xs: "100%", sm: "auto" },
-    flexWrap: "wrap", // Allow wrapping if buttons overflow
+    width: { xs: "100%", sm: "100%" },
+    flexWrap: "wrap",
   },
   splitButtonGroup: {
     display: "flex",

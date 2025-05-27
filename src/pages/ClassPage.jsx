@@ -14,8 +14,9 @@ import { useBoards } from '../hooks/useBoards';
 import { useGates } from '../hooks/useGates';
 import useAuth from '../hooks/useAuth';
 import { useNotification } from '../context/NotificationContext';
-import { Home } from '@mui/icons-material';
 import Filters from '../components/Filters/Filters';
+import { Add, Public, Lock, People, Forum, Star, Home } from '@mui/icons-material';
+
 
 const ClassPage = () => {
   const navigate = useNavigate();
@@ -25,6 +26,7 @@ const ClassPage = () => {
   const {
     classItem: classData,
     members,
+    stats,
     fetchClass,
     classes,
     fetchClassesList,
@@ -128,8 +130,8 @@ const ClassPage = () => {
         const cls = classes.find((c) => c.class_id === board.class_id);
         return {
           ...board,
-          gateName: gate ? gate.name : 'N/A',
-          className: cls ? cls.name : 'N/A',
+          gateName: gate ? gate.name : 'No Gate',
+          className: cls ? cls.name : 'No Class',
         };
       })
       .filter((board) => {
@@ -139,7 +141,6 @@ const ClassPage = () => {
           board.gateName.toLowerCase().includes(lowerSearchQuery) ||
           board.className.toLowerCase().includes(lowerSearchQuery) ||
           board.tags?.some((tag) => tag.toLowerCase().includes(lowerSearchQuery));
-        
         if (!matchesSearch) return false;
         if (quickFilter === 'all') return true;
         if (quickFilter === 'public') return board.visibility === 'public';
@@ -315,12 +316,11 @@ const ClassPage = () => {
       await updateMemberRole(boardId, username, newRole);
       showNotification('Board member role updated successfully!', 'success');
     } catch (err) {
-      showNotification(err.message || 'Failed to update board member role', 'error');
+      showNotification(err.message || 'Failed to update member role', 'error');
     }
-    // No setActionLoading here, handled by dialog if needed
   }, [updateMemberRole, showNotification]);
 
-  // const handleOpenMemberDialog = useCallback(() => setMemberDialogOpen(true), []); // Removed unused function
+  const handleOpenClassMemberDialog = useCallback(() => setMemberDialogOpen(true), []);
   const handleCancelMemberDialog = useCallback(() => setMemberDialogOpen(false), []);
   const handleOpenBoardMemberDialog = useCallback((boardId) => {
     setSelectedBoardId(boardId);
@@ -338,31 +338,48 @@ const ClassPage = () => {
   const userRole = members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || 'none';
   const gate = gates.find((g) => g.gate_id === classData?.gate_id);
 
-  const headerData = {
-    type: "class",
-    title: classData?.name || "Class Details",
-    titleAriaLabel: `Class page for ${classData?.name || "the class"}`,
-    shortDescription: classData?.description || "Manage this class and its boards.",
-    tooltipDescription:
-      classData?.description || "Detailed information and settings for this class. You can manage members, boards, and class settings here.",
+  const headerData = useMemo(() => ({
+    type: 'class',
+    title: classData?.name || 'Untitled Class',
+    titleAriaLabel: `Class name: ${classData?.name || 'Untitled Class'}`,
+    description: classData?.description,
+    descriptionAriaLabel: classData?.description ? `Class description: ${classData.description}` : undefined,
+    chips: [
+      { label: `${gate?.name || 'No Gate'}`, icon: <Home />, color: 'secondary', ariaLabel: `${gate?.name || 'No Gate'}` },
+      {
+        label: classData?.access?.is_public ? 'Public' : 'Private',
+        icon: classData?.access?.is_public ? <Public /> : <Lock />,
+        color: classData?.access?.is_public ? 'success' : 'default',
+        ariaLabel: classData?.access?.is_public ? 'Public class' : 'Private class',
+      },
+      { label: `Favorites: ${stats?.favorite_count || 0}`, icon: <Star />, color: 'warning', ariaLabel: `Favorites: ${stats?.favorite_count || 0}` },
+      { label: `Members: ${stats?.member_count || members?.length || 0}`, icon: <People />, color: 'primary', ariaLabel: `Members: ${stats?.member_count || members?.length || 0}` },
+      { label: `Boards: ${filteredBoards?.length || 0}`, icon: <Forum />, color: 'info', ariaLabel: `Boards: ${filteredBoards?.length || 0}` },
+      { label: `Owner: ${classData?.creator?.username || 'Unknown'}`, ariaLabel: `Owner: ${classData?.creator?.username || 'Unknown'}` },
+    ],
+    actions: [
+      { label: 'Create Board', icon: <Add />, onClick: handleOpenCreateBoard, tooltip: 'Create a new board within this class', disabled: actionLoading, ariaLabel: 'Create a new board', isMenuItem: false },
+      {
+        label: 'Edit Class',
+        onClick: () => setEditingClass({ class_id: classData.class_id, name: classData.name, description: classData.description, is_public: classData.access?.is_public, visibility: classData.access?.is_public ? 'public' : 'private', settings: classData.settings, gate_id: classData.gate_id }),
+        tooltip: 'Edit class details',
+        disabled: actionLoading || !['owner', 'admin'].includes(userRole),
+        ariaLabel: 'Edit class',
+        isMenuItem: true,
+      },
+      { label: 'Manage Members', onClick: handleOpenClassMemberDialog, tooltip: 'Manage class members', disabled: actionLoading || !['owner', 'admin'].includes(userRole), ariaLabel: 'Manage members', isMenuItem: true },
+      { label: 'Delete Class', onClick: handleDeleteClass, tooltip: 'Permanently delete this class', disabled: actionLoading || userRole !== 'owner', ariaLabel: 'Delete class', variant: 'delete', isMenuItem: true },
+    ].filter((action) => action.label !== 'Create Board' || classData?.access?.is_public || userRole !== 'viewer'),
     isFavorited: classData?.is_favorited,
     onFavoriteToggle: handleFavoriteToggle,
-    onEdit: () => setEditingClass(classData),
-    onDelete: () => setDeleteDialogOpen(true),
-    showActions: userRole === 'admin' || userRole === 'owner',
-    breadcrumbs: [
-      { label: "Home", onClick: () => navigate("/"), icon: <Home /> },
-      { label: "Gates", onClick: () => navigate("/gates") },
-      gate ? { label: gate.name, onClick: () => navigate(`/gate/${gate.gate_id}`) } : null,
-      { label: classData?.name || "Class", isCurrent: true },
-    ].filter(Boolean),
-  };
+    actionLoading,
+  }), [classData, stats, members, filteredBoards, userRole, actionLoading, handleOpenCreateBoard, handleOpenClassMemberDialog, handleDeleteClass, handleFavoriteToggle, gate]);
 
   if (authLoading || classesLoading || boardsLoading || gatesLoading || isLoading) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
         <Box sx={{ maxWidth: 1500, mx: 'auto', p: { xs: 2, md: 4 } }}>
-          <Skeleton variant="rectangular" sx={{ mb: 3, borderRadius: 2 }} />
+        <Skeleton variant="rectangular" sx={{ mb: 3, borderRadius: 2 }} />
           <Skeleton variant="rectangular" sx={{ mb: 3, borderRadius: 2 }} />
           <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(300px, 1fr))' } }}>
             {[...Array(6)].map((_, i) => (
@@ -375,149 +392,133 @@ const ClassPage = () => {
   }
 
   if (!isAuthenticated) {
-    navigate("/login");
+    navigate('/login');
     return null;
   }
-  
+
+  if (!classData) {
+    showNotification('Class not found', 'error');
+    navigate('/classes');
+    return null;
+  }
+
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box sx={{ maxWidth: 1500, mx: 'auto', p: { xs: 2, md: 4 } }}>
-        <ProfileHeader 
-          user={authData} 
-          isOwnProfile={true}
-          headerData={headerData}
-          showActions={headerData.showActions}
-          onEdit={headerData.onEdit}
-          onDelete={headerData.onDelete}
-          onFavoriteToggle={headerData.onFavoriteToggle}
-          isFavorited={headerData.isFavorited}
-        >
-          <button
-            onClick={handleOpenCreateBoard}
-            aria-label="Create a new board in this class"
-          >
-            Create Board
-          </button>
-        </ProfileHeader>
+        <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData} userRole={userRole} />
         <Filters
           type="boards"
           quickFilter={quickFilter}
           setQuickFilter={setQuickFilter}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
-          // onReset={onReset}
         />
-        <BoardsGrid
-          filteredBoards={filteredBoards}
-          handleFavorite={toggleFavoriteBoard}
-          setEditingBoard={setEditingBoard}
-          setBoardToDelete={setBoardToDelete}
-          setDeleteDialogOpen={(open, boardId) => {
-            setBoardToDelete(boardId);
-            setDeleteDialogOpen(open);
-          }}
-          openMemberDialog={handleOpenBoardMemberDialog}
-          navigate={navigate}
-          currentUser={authData}
-          token={token}
-        />
-      </Box>
-
-      <BoardFormDialog
-        open={createBoardDialogOpen}
-        title="Create New Board in Class"
-        board={popupBoard}
-        setBoard={setPopupBoard}
-        onSave={handleCreateBoard}
-        onCancel={handleCancelCreateBoard}
-        disabled={boardsLoading || actionLoading}
-        gates={gates}
-      />
-      {editingBoard && (
+          <BoardsGrid
+            filteredBoards={filteredBoards}
+            handleFavorite={toggleFavoriteBoard}
+            setEditingBoard={setEditingBoard}
+            setBoardToDelete={setBoardToDelete}
+            setDeleteDialogOpen={setDeleteDialogOpen}
+            openMemberDialog={handleOpenBoardMemberDialog}
+            navigate={navigate}
+            currentUser={authData}
+            token={token}
+          />
+        </Box>
         <BoardFormDialog
-          open={true}
-          title="Edit Board"
-          board={editingBoard}
-          setBoard={setEditingBoard}
-          onSave={handleUpdateBoard}
-          onCancel={() => setEditingBoard(null)}
-          disabled={boardsLoading || actionLoading}
+          open={createBoardDialogOpen}
+          title="Create New Board"
+          board={popupBoard}
+          setBoard={setPopupBoard}
+          onSave={handleCreateBoard}
+          onCancel={handleCancelCreateBoard}
+          disabled={actionLoading || boardsLoading || classesLoading || gatesLoading}
           gates={gates}
+          classes={classes}
+          currentClass={classData}
+          initialClassId={class_id}
+          fixedClassId={class_id}
+          fixedGateId={classData?.gate_id || null}
         />
-      )}
-      {editingClass && (
-        <ClassFormDialog
-          open={true}
-          title="Edit Class"
-          classItem={editingClass}
-          setClassItem={setEditingClass}
-          onSave={handleUpdateClass}
-          onCancel={() => setEditingClass(null)}
-          disabled={classesLoading || actionLoading}
-          gates={gates}
+        {editingBoard && (
+          <BoardFormDialog
+            open={true}
+            title="Edit Board"
+            board={editingBoard}
+            setBoard={setEditingBoard}
+            onSave={handleUpdateBoard}
+            onCancel={() => setEditingBoard(null)}
+            disabled={actionLoading || boardsLoading || classesLoading || gatesLoading}
+            gates={gates}
+            classes={classes}
+            currentClass={classData}
+            initialClassId={class_id}
+            fixedClassId={class_id}
+            fixedGateId={classData?.gate_id || null}
+          />
+        )}
+        {editingClass && (
+          <ClassFormDialog
+            open={true}
+            title="Edit Class"
+            classItem={editingClass}
+            setClass={setEditingClass}
+            onSave={handleUpdateClass}
+            onCancel={() => setEditingClass(null)}
+            disabled={actionLoading || classesLoading}
+            gates={gates}
+          />
+        )}
+        <MemberFormDialog
+          open={memberDialogOpen}
+          title="Manage Class Members"
+          classId={class_id}
+          token={token}
+          onSave={handleCancelMemberDialog}
+          onCancel={handleCancelMemberDialog}
+          disabled={actionLoading || classesLoading || boardsLoading}
+          members={members}
+          addMember={handleAddClassMember}
+          removeMember={handleRemoveClassMember}
+          updateMemberRole={handleUpdateClassMemberRole}
         />
-      )}
-      <MemberFormDialog
-        open={memberDialogOpen}
-        title={`Manage Members for ${classData?.name}`}
-        classId={class_id}
-        token={token}
-        onSave={() => handleCancelMemberDialog()}
-        onCancel={handleCancelMemberDialog}
-        disabled={classesLoading || actionLoading}
-        members={members}
-        addMember={handleAddClassMember}
-        removeMember={handleRemoveClassMember}
-        updateMemberRole={handleUpdateClassMemberRole}
-      />
-      {selectedBoardId && (
         <MemberFormDialog
           open={boardMemberDialogOpen}
-          title={`Manage Members for Board`}
+          title="Manage Board Members"
           boardId={selectedBoardId}
           token={token}
-          onSave={() => handleCancelBoardMemberDialog()}
+          onSave={handleCancelBoardMemberDialog}
           onCancel={handleCancelBoardMemberDialog}
-          disabled={boardsLoading || actionLoading}
-          members={boards.find(b => b.board_id === selectedBoardId)?.members || []}
+          disabled={actionLoading || boardsLoading}
+          members={boards.find((b) => b.board_id === selectedBoardId)?.members || []}
           addMember={handleAddBoardMember}
           removeMember={handleRemoveBoardMember}
           updateMemberRole={handleUpdateBoardMemberRole}
         />
-      )}
-      <DeleteConfirmationDialog
-        open={deleteDialogOpen}
-        onClose={() => {
-          setDeleteDialogOpen(false);
-          setBoardToDelete(null);
-        }}
-        onConfirm={() => {
-          if (boardToDelete) {
-            handleDeleteBoard();
-          } else {
-            handleDeleteClass();
-          }
-        }}
-        message={`Are you sure you want to delete ${boardToDelete ? 'this board' : 'this class'}? This action cannot be undone.`}
-        disabled={classesLoading || boardsLoading || actionLoading}
-      />
+        <DeleteConfirmationDialog
+          open={deleteDialogOpen}
+          onClose={() => setDeleteDialogOpen(false)}
+          onConfirm={handleDeleteBoard}
+          message="Are you sure you want to delete this board? This action cannot be undone."
+          disabled={actionLoading || boardsLoading}
+        />
     </AppLayout>
   );
 };
 
 ClassPage.propTypes = {
-  // class_id is from useParams, not a prop
-  // navigate: PropTypes.func, // from useNavigate, not a prop
-  // token: PropTypes.string, // from useAuth, not a prop
-  // authData: PropTypes.shape({ // from useAuth, not a prop
+  // class_id: PropTypes.string,
+  // navigate: PropTypes.func,
+  // token: PropTypes.string,
+  // authData: PropTypes.shape({
   //   anonymous_id: PropTypes.string,
   //   username: PropTypes.string,
   //   avatar: PropTypes.string,
   //   total_points: PropTypes.number,
   // }),
-  // handleLogout: PropTypes.func, // from useAuth, not a prop
-  // isAuthenticated: PropTypes.bool, // from useAuth, not a prop
-  // authLoading: PropTypes.bool, // from useAuth, not a prop
+  // handleLogout: PropTypes.func,
+  // isAuthenticated: PropTypes.bool,
+  // authLoading: PropTypes.bool,
 };
 
 export default React.memo(ClassPage);
