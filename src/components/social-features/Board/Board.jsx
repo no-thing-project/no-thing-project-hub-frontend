@@ -697,12 +697,13 @@ const Board = ({
           }}
           currentUser={currentUser}
           userRole={userRole}
+          scale={scale} // Додаємо scale
         >
           {tweetContent}
         </DraggableTweet>
       );
     },
-    [highlightedTweetId, getRelatedTweetIds, tweets, tweetProps, updateExistingTweet, currentUser, userRole, isListView]
+    [highlightedTweetId, getRelatedTweetIds, tweets, tweetProps, updateExistingTweet, currentUser, userRole, isListView, scale]
   );
 
   const renderedTweets = useMemo(() => {
@@ -862,6 +863,7 @@ const Board = ({
                     scale={scale}
                     offset={offset}
                     zIndex={Z_INDEX.POPUP}
+                    parentTweet={popupState.replyTweet}
                   />
                 )}
               </Box>

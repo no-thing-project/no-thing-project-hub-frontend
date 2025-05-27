@@ -29,8 +29,8 @@ import PropTypes from 'prop-types';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import Emoji from 'react-emoji-render';
 import { formatDistanceToNow, format, isValid, parseISO } from 'date-fns';
-import TweetContentStyles from './TweetContentStyles';
-import ModalStyles from './ModalStyles';
+import TweetContentStyles from './tweetContentStyles';
+import ModalStyles from './modalStyles';
 
 const MAX_TWEET_LENGTH = 1000;
 
@@ -239,6 +239,10 @@ const TweetContent = ({
   const chipLabel = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
   const resolvedParentTweetText = tweet.parent_tweet_id
     ? parentTweetText || getParentTweetText?.(tweet.parent_tweet_id) || 'Parent tweet not found'
+    : null;
+  // Excerpt first 10 words of parent tweet for quote display
+  const parentExcerpt = resolvedParentTweetText
+    ? resolvedParentTweetText.split(/\s+/).slice(0, 10).join(' ') + '...'
     : null;
 
   useEffect(() => {
@@ -617,18 +621,18 @@ const TweetContent = ({
             </motion.div>
           </Box>
         )}
-        {resolvedParentTweetText && (
+        {parentExcerpt && (
           <motion.div
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.2 }}
           >
-            <Box sx={TweetContentStyles.replyToContainer}>
+            <Box component="blockquote" sx={{ borderLeft: '4px solid', borderColor: 'primary.main', pl: 2, m: 0, mb: 1 }}>
               <Typography variant="caption" sx={TweetContentStyles.replyToCaption}>
                 Replying to:
               </Typography>
-              <Typography variant="body2" sx={TweetContentStyles.replyToText}>
-                <Emoji text={resolvedParentTweetText} />
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic', m: 0 }}>
+                {parentExcerpt}
               </Typography>
             </Box>
           </motion.div>

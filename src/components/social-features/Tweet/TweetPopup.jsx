@@ -705,9 +705,30 @@ const TweetPopup = ({ x, y, onSubmit, onClose, parentTweet, onBoardUpdate }) => 
             </Alert>
           )}
           {parentTweet && (
-            <Typography variant="caption" sx={TweetPopupStyles.popupParentTweetCaption}>
-              Replying to {parentTweet.username || 'Anonymous'}
-            </Typography>
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 'medium' }}>
+                Replying to:
+              </Typography>
+              <Box
+                component="blockquote"
+                sx={{
+                  borderLeft: '4px solid',
+                  borderColor: 'primary.main',
+                  pl: 2,
+                  color: 'text.secondary',
+                  fontStyle: 'italic',
+                  m: 0,
+                }}
+              >
+                <Typography variant="body2">
+                  {parentTweet.content?.value
+                    .split(/\s+/)
+                    .slice(0, 10)
+                    .join(' ')
+                  }...
+                </Typography>
+              </Box>
+            </Box>
           )}
           {files.length > 0 && (
             <Box sx={TweetPopupStyles.popupFilePreviewContainer}>

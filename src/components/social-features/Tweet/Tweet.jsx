@@ -3,9 +3,9 @@ import PropTypes from 'prop-types';
 import Draggable from 'react-draggable';
 import debounce from 'lodash/debounce';
 import { BOARD_SIZE } from '../../../hooks/useBoard';
-import TweetContentStyles from './TweetContentStyles';
+import TweetContentStyles from './tweetContentStyles';
 
-const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypassOwnership = false }) => {
+const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypassOwnership = false, scale = 1 }) => {
   const nodeRef = useRef(null);
   const justDroppedRef = useRef(false);
   const previousPosition = useRef({ x: tweet.position?.x ?? 0, y: tweet.position?.y ?? 0 });
@@ -66,13 +66,14 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
 
   useEffect(() => () => debouncedOnStop.cancel(), [debouncedOnStop]);
 
+  // --- Виправлення: draggable працює у board-координатах, не враховуємо scale ---
   const handleStart = useCallback(() => {
     if (!isDraggable) return false;
     setDragging(true);
     return true;
   }, [isDraggable]);
 
-  const handleDrag = useCallback((_, data) => {
+  const handleDrag = useCallback((e, data) => {
     setLocalPosition({ x: data.x, y: data.y });
   }, []);
 
@@ -81,13 +82,12 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
       if (!isDraggable) return;
       setDragging(false);
       justDroppedRef.current = true;
-
-      if (e.target.closest('.tweet-menu, .MuiIconButton-root, .MuiTypography-root, .MuiChip-root')) return;
-
       setTimeout(() => (justDroppedRef.current = false), 100);
-      debouncedOnStop(e, data);
+      const clampedPos = clampPosition(data.x, data.y);
+      previousPosition.current = clampedPos;
+      onStop?.(e, { x: clampedPos.x, y: clampedPos.y, tweetId: tweet.tweet_id });
     },
-    [isDraggable, debouncedOnStop]
+    [isDraggable, clampPosition, onStop, tweet.tweet_id]
   );
 
   if (!tweet || !tweet.tweet_id) {
@@ -104,7 +104,7 @@ const DraggableTweet = ({ tweet, onStop, children, currentUser, userRole, bypass
       onStart={handleStart}
       onDrag={handleDrag}
       onStop={handleStop}
-      cancel=".tweet-menu, .MuiIconButton-root, .MuiTypography-root, .MuiChip-root"
+      cancel={''} // Драг за весь блок
     >
       <div
         ref={nodeRef}
@@ -143,11 +143,13 @@ DraggableTweet.propTypes = {
   }).isRequired,
   userRole: PropTypes.string.isRequired,
   bypassOwnership: PropTypes.bool,
+  scale: PropTypes.number,
 };
 
 DraggableTweet.defaultProps = {
   bypassOwnership: false,
   onStop: () => {},
+  scale: 1,
 };
 
 export default memo(DraggableTweet);
