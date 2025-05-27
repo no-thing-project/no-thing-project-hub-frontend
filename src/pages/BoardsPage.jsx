@@ -15,8 +15,8 @@ import { actionButtonStyles, gridStyles, skeletonStyles, containerStyles } from 
 import BoardFormDialog from "../components/Dialogs/BoardFormDialog";
 import MemberFormDialog from "../components/Dialogs/MemberFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
-import BoardsFilters from "../components/Boards/BoardsFilters";
 import BoardsGrid from "../components/Boards/BoardsGrid";
+import Filters from "../components/Filters/Filters";
 
 const BoardsPage = () => {
   const navigate = useNavigate();
@@ -277,11 +277,6 @@ const BoardsPage = () => {
     [updateMemberRole, showNotification]
   );
 
-  const handleResetFilters = useCallback(() => {
-    setQuickFilter("all");
-    setSearchQuery("");
-  }, []);
-
   const headerData = {
     type: "page",
     title: "Boards",
@@ -325,12 +320,12 @@ const BoardsPage = () => {
             Create Board
           </Button>
         </ProfileHeader>
-        <BoardsFilters
+        <Filters
+          type="boards"
           quickFilter={quickFilter}
           setQuickFilter={setQuickFilter}
           searchQuery={searchQuery}
-          setSearchQuery={debouncedSetSearchQuery}
-          onReset={handleResetFilters}
+          setSearchQuery={setSearchQuery}
         />
         <BoardsGrid
           filteredBoards={filteredBoards}

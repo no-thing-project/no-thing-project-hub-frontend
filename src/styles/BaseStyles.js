@@ -66,7 +66,7 @@ export const actionButtonStyles = {
   backgroundColor: "primary.main",
   color: "primary.contrastText",
   boxShadow: "none",
-  fontSize: { xs: "0.875rem", sm: "1rem" },
+  fontSize: { xs: "0.7rem", sm: "1rem" },
   fontWeight: 600,
   transition: "all 0.3s ease-in-out",
   "&:hover": { backgroundColor: "primary.dark", boxShadow: "none" },
@@ -81,7 +81,7 @@ export const cancelButtonStyle = {
   backgroundColor: "background.default",
   color: "text.primary",
   boxShadow: "none",
-  fontSize: { xs: "0.875rem", sm: "1rem" },
+  fontSize: { xs: "0.7rem", sm: "1rem" },
   fontWeight: 600,
   transition: "all 0.3s ease-in-out",
   "&:hover": { backgroundColor: "background.hover", boxShadow: "none" },
@@ -96,7 +96,7 @@ export const deleteButtonStyle = {
   backgroundColor: "error.main",
   color: "error.contrastText",
   boxShadow: "none",
-  fontSize: { xs: "0.875rem", sm: "1rem" },
+  fontSize: { xs: "0.7rem", sm: "1rem" },
   fontWeight: 600,
   transition: "all 0.3s ease-in-out",
   "&:hover": { backgroundColor: "error.dark", boxShadow: "none" },
@@ -107,7 +107,7 @@ export const inputStyles = {
   mt: customTheme.spacing(1),
   backgroundColor: "background.default",
   borderRadius: customTheme.shape.borderRadiusSmall,
-  "& .MuiInputLabel-root": { color: "text.secondary", fontSize: { xs: "0.875rem", sm: "1rem" } },
+  "& .MuiInputLabel-root": { color: "text.secondary", fontSize: { xs: "0.7rem", sm: "1rem" } },
   "& .MuiInputLabel-root.Mui-focused": { color: "primary.main" },
   "& .MuiOutlinedInput-root": {
     borderRadius: customTheme.shape.borderRadiusSmall,
@@ -115,7 +115,7 @@ export const inputStyles = {
     "&:hover .MuiOutlinedInput-notchedOutline": { border: "none" },
     "&.Mui-focused .MuiOutlinedInput-notchedOutline": { border: "none" },
   },
-  "& .MuiInputBase-input": { fontSize: { xs: "0.875rem", sm: "1rem" } },
+  "& .MuiInputBase-input": { fontSize: { xs: "0.7rem", sm: "1rem" } },
   "& .MuiInputBase-input::placeholder": { color: "text.secondary", opacity: 1 },
 };
 
@@ -123,7 +123,7 @@ export const inputStylesWhite = {
   mt: customTheme.spacing(1),
   backgroundColor: "background.paper",
   borderRadius: customTheme.shape.borderRadiusSmall,
-  "& .MuiInputLabel-root": { color: "text.secondary", fontSize: { xs: "0.875rem", sm: "1rem" } },
+  "& .MuiInputLabel-root": { color: "text.secondary", fontSize: { xs: "0.7rem", sm: "1rem" } },
   "& .MuiInputLabel-root.Mui-focused": { color: "primary.main" },
   "& .MuiOutlinedInput-root": {
     borderRadius: customTheme.shape.borderRadiusSmall,
@@ -131,7 +131,7 @@ export const inputStylesWhite = {
     "&:hover .MuiOutlinedInput-notchedOutline": { border: "none" },
     "&.Mui-focused .MuiOutlinedInput-notchedOutline": { border: "none" },
   },
-  "& .MuiInputBase-input": { fontSize: { xs: "0.875rem", sm: "1rem" } },
+  "& .MuiInputBase-input": { fontSize: { xs: "0.7rem", sm: "1rem" } },
   "& .MuiInputBase-input::placeholder": { color: "text.secondary", opacity: 1 },
 };
 
@@ -145,13 +145,13 @@ export const selectStyles = {
     "&:hover fieldset": { border: "none" },
     "&.Mui-focused fieldset": { border: "none" },
   },
-  "& .MuiSelect-select": { fontSize: { xs: "0.875rem", sm: "1rem" } },
+  "& .MuiSelect-select": { fontSize: { xs: "0.7rem", sm: "1rem" } },
   "& .MuiSelect-icon": { color: "text.primary" },
-  "& .MuiInputLabel-root": { fontSize: { xs: "0.875rem", sm: "1rem" } },
+  "& .MuiInputLabel-root": { fontSize: { xs: "0.7rem", sm: "1rem" } },
 };
 
 export const chipStyles = {
-  fontSize: { xs: "0.75rem", md: "0.875rem" },
+  fontSize: { xs: "0.75rem", md: "0.7rem" },
   padding: { xs: "0.3rem 0.5rem", md: "0.5rem 1rem" },
   border: "none",
 };
@@ -186,9 +186,9 @@ export const headerStyles = {
     display: "flex",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: { xs: "center", sm: "flex-end" }, // Center on mobile
-    width: { xs: "100%", sm: "auto" }, // Full width on mobile
-    mt: { xs: 2, sm: 0 }, // Add margin-top on mobile to separate from text
+    justifyContent: { xs: "center", sm: "flex-end" },
+    width: { xs: "100%", sm: "auto" },
+    mt: { xs: 1, sm: 0 },
   },
   title: { fontWeight: 400, color: "text.primary" },
   level: { color: "text.secondary" },
@@ -197,7 +197,7 @@ export const headerStyles = {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: { xs: "center", sm: "flex-end" }, // Center on mobile
-    gap: { xs: 1, sm: 2 },
+    gap: { xs: 1, sm: 0.5 },
     width: { xs: "100%", sm: "auto" },
     flexWrap: "wrap", // Allow wrapping if buttons overflow
   },
@@ -233,7 +233,7 @@ export const headerStyles = {
     }),
     cursor: "pointer",
     "& .MuiChip-label": { padding: { xs: 0, sm: "0 6px" }, display: { xs: "none", sm: "inline" } },
-    "& .MuiChip-icon": { margin: { xs: "0", sm: "0 0 0 -4px" }, fontSize: { xs: "1rem", sm: "0.875rem" } },
+    "& .MuiChip-icon": { margin: { xs: "0", sm: "0 0 0 -4px" }, fontSize: { xs: "0.7rem", sm: "1rem" } },
   },
   chipExpanded: {
     width: "auto",
@@ -305,7 +305,7 @@ export const containerStyles = {
   width: { xs: "100%", sm: "auto" },
   maxWidth: { xs: "100%", sm: "1500px" },
   margin: { xs: 0, sm: "0 auto" },
-  padding: { xs: 0, sm: 2 },
+  padding: { xs: 0, sm: 1 },
   boxSizing: "border-box",
 };
 

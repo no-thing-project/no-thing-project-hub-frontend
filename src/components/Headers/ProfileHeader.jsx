@@ -26,6 +26,41 @@ const ProfileHeader = React.memo(({ user, isOwnProfile, headerData, userRole, ch
   const [activeChipIndex, setActiveChipIndex] = useState(null);
   const open = Boolean(anchorEl);
 
+  // Memoized page description block (moved to top level)
+  const renderPageDescription = useMemo(() => (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1, justifyContent: { xs: "center", sm: "flex-start" } }}>
+      <Typography
+        variant="body2"
+        sx={{
+          ...headerStyles.level,
+          fontSize: { xs: "0.875rem", sm: "1rem" },
+        }}
+        aria-label={`Page description: ${headerData?.shortDescription || ''}`}
+      >
+        {headerData?.shortDescription}
+      </Typography>
+      {headerData?.tooltipDescription && (
+        <Tooltip
+          title={headerData.tooltipDescription}
+          placement="top"
+          arrow
+          slotProps={{
+            popper: {
+              sx: {
+                [`& .${tooltipClasses.tooltip}`]: { padding: 2 },
+              },
+              modifiers: [{ name: "offset", options: { offset: [0, -10] } }],
+            },
+          }}
+        >
+          <IconButton size="small" aria-label="More information about this page" sx={{ p: 0 }}>
+            <HelpOutline fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
+    </Box>
+  ), [headerData?.shortDescription, headerData?.tooltipDescription]);
+
   const handleMenuOpen = useCallback((event) => setAnchorEl(event.currentTarget), []);
   const handleMenuClose = useCallback(() => setAnchorEl(null), []);
   const handleMenuAction = useCallback((action) => {
@@ -228,37 +263,7 @@ const ProfileHeader = React.memo(({ user, isOwnProfile, headerData, userRole, ch
                 Level: <StatusBadge level={user.access_level} />
               </Typography>
             ) : headerData.type === "page" ? (
-              <Box sx={{ display: "flex", alignItems: "left", gap: 1, justifyContent: { xs: "center", sm: "flex-start" } }}>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    ...headerStyles.level,
-                    fontSize: { xs: "0.875rem", sm: "1rem" },
-                  }}
-                  aria-label={`Page description: ${headerData.shortDescription}`}
-                >
-                  {headerData.shortDescription}
-                </Typography>
-                {headerData.tooltipDescription && !isMobile && (
-                  <Tooltip
-                    title={headerData.tooltipDescription}
-                    placement="top"
-                    arrow
-                    slotProps={{
-                      popper: {
-                        sx: {
-                          [`& .${tooltipClasses.tooltip}`]: { padding: 2 },
-                        },
-                        modifiers: [{ name: "offset", options: { offset: [0, -10] } }],
-                      },
-                    }}
-                  >
-                    <IconButton size="small" aria-label="More information about this page" sx={{ p: 0 }}>
-                      <HelpOutline fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                )}
-              </Box>
+              renderPageDescription
             ) : (
               <Box sx={headerStyles.chipContainer}>
                 {headerData.chips?.map((chip, index) => (

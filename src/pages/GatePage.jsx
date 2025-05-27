@@ -5,7 +5,6 @@ import { debounce } from 'lodash';
 import PropTypes from 'prop-types';
 import AppLayout from '../components/Layout/AppLayout';
 import ProfileHeader from '../components/Headers/ProfileHeader';
-import ClassesFilters from '../components/Classes/ClassesFilters';
 import ClassesGrid from '../components/Classes/ClassesGrid';
 import GateFormDialog from '../components/Dialogs/GateFormDialog';
 import ClassFormDialog from '../components/Dialogs/ClassFormDialog';
@@ -17,6 +16,7 @@ import useAuth from '../hooks/useAuth';
 import { useNotification } from '../context/NotificationContext';
 import { Add, Public, Lock, People, Forum, Star } from '@mui/icons-material';
 import { containerStyles, skeletonStyles, gridStyles } from '../styles/BaseStyles';
+import Filters from '../components/Filters/Filters';
 
 /**
  * GatePage component for displaying and managing a gate and its associated classes
@@ -406,10 +406,6 @@ const GatePage = () => {
     setSelectedClassId(null);
   }, []);
 
-  const handleResetFilters = useCallback(() => {
-    setQuickFilter('all');
-    setSearchQuery('');
-  }, []);
 
   const userRole = useMemo(
     () => members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || 'none',
@@ -555,14 +551,12 @@ const GatePage = () => {
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
       <Box sx={{ ...containerStyles }}>
         <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData} userRole={userRole} />
-        <ClassesFilters
+        <Filters
+          type="classes"
           quickFilter={quickFilter}
           setQuickFilter={setQuickFilter}
           searchQuery={searchQuery}
-          setSearchQuery={debouncedSetSearchQuery}
-          onReset={handleResetFilters}
-          sx={{ mb: 3, bgcolor: theme.palette.background.paper, p: 2, borderRadius: 2 }}
-          disabled={actionLoading}
+          setSearchQuery={setSearchQuery}
         />
         {filteredClasses.length > 0 ? (
           <ClassesGrid

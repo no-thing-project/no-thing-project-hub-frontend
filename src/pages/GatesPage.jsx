@@ -11,10 +11,10 @@ import { actionButtonStyles, gridStyles, skeletonStyles, containerStyles } from 
 import GateFormDialog from "../components/Dialogs/GateFormDialog";
 import MemberFormDialog from "../components/Dialogs/MemberFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
-import GatesFilters from "../components/Gates/GatesFilters";
 import GatesGrid from "../components/Gates/GatesGrid";
 import { debounce } from "lodash";
 import PropTypes from "prop-types";
+import Filters from "../components/Filters/Filters";
 
 const GatesPage = () => {
   const navigate = useNavigate();
@@ -105,7 +105,6 @@ const GatesPage = () => {
       if (quickFilter === "public") return gate.is_public;
       if (quickFilter === "private") return !gate.is_public;
       if (quickFilter === "favorited") return gate.is_favorited;
-      // Add other filters if necessary, similar to BoardsPage
       return true;
     });
   }, [gates, quickFilter, searchQuery]);
@@ -234,11 +233,6 @@ const GatesPage = () => {
     setSelectedGateId(null); // Reset selectedGateId
   }, []);
 
-  const handleResetFilters = useCallback(() => {
-    setQuickFilter("all");
-    setSearchQuery("");
-  }, []);
-
   const headerData = {
     type: "page",
     title: "Gates",
@@ -282,12 +276,12 @@ const GatesPage = () => {
             Create Gate
           </Button>
         </ProfileHeader>
-        <GatesFilters
+        <Filters
+          type="gates"
           quickFilter={quickFilter}
           setQuickFilter={setQuickFilter}
           searchQuery={searchQuery}
-          setSearchQuery={debouncedSetSearchQuery}
-          onReset={handleResetFilters}
+          setSearchQuery={setSearchQuery}
         />
         <GatesGrid
           filteredGates={filteredGates}

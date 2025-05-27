@@ -12,10 +12,10 @@ import { actionButtonStyles, gridStyles, skeletonStyles, containerStyles } from 
 import ClassFormDialog from "../components/Dialogs/ClassFormDialog";
 import MemberFormDialog from "../components/Dialogs/MemberFormDialog";
 import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
-import ClassesFilters from "../components/Classes/ClassesFilters";
 import ClassesGrid from "../components/Classes/ClassesGrid";
 import { debounce } from "lodash";
 import PropTypes from "prop-types";
+import Filters from "../components/Filters/Filters";
 
 const ClassesPage = () => {
   const navigate = useNavigate();
@@ -313,12 +313,12 @@ const ClassesPage = () => {
             Create Class
           </Button>
         </ProfileHeader>
-        <ClassesFilters
+        <Filters
+          type="classes"
           quickFilter={quickFilter}
           setQuickFilter={setQuickFilter}
           searchQuery={searchQuery}
-          setSearchQuery={debouncedSetSearchQuery}
-          onReset={handleResetFilters}
+          setSearchQuery={setSearchQuery}
         />
         <ClassesGrid
           filteredClasses={filteredClasses}

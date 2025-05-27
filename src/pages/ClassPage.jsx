@@ -4,7 +4,6 @@ import { Box, Skeleton } from '@mui/material';
 import { debounce } from 'lodash';
 import AppLayout from '../components/Layout/AppLayout';
 import ProfileHeader from '../components/Headers/ProfileHeader';
-import BoardsFilters from '../components/Boards/BoardsFilters';
 import BoardsGrid from '../components/Boards/BoardsGrid';
 import ClassFormDialog from '../components/Dialogs/ClassFormDialog';
 import BoardFormDialog from '../components/Dialogs/BoardFormDialog';
@@ -16,6 +15,7 @@ import { useGates } from '../hooks/useGates';
 import useAuth from '../hooks/useAuth';
 import { useNotification } from '../context/NotificationContext';
 import { Home } from '@mui/icons-material';
+import Filters from '../components/Filters/Filters';
 
 const ClassPage = () => {
   const navigate = useNavigate();
@@ -399,12 +399,13 @@ const ClassPage = () => {
             Create Board
           </button>
         </ProfileHeader>
-        <BoardsFilters
+        <Filters
+          type="boards"
           quickFilter={quickFilter}
           setQuickFilter={setQuickFilter}
           searchQuery={searchQuery}
-          setSearchQuery={debouncedSetSearchQuery}
-          onReset={handleResetFilters}
+          setSearchQuery={setSearchQuery}
+          // onReset={onReset}
         />
         <BoardsGrid
           filteredBoards={filteredBoards}
