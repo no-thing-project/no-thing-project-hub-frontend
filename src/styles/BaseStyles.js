@@ -7,10 +7,10 @@ const customTheme = {
   breakpoints: {
     ...theme.breakpoints,
     values: {
-      xs: 0,
-      sm: 770,
-      md: 900,
-      lg: 1200,
+      xs: 150,
+      sm: 700,
+      md: 1200,
+      lg: 1500,
       xl: 1536,
     },
   },

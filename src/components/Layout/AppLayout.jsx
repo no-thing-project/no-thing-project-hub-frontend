@@ -1,18 +1,46 @@
 import React from "react";
+import PropTypes from "prop-types";
 import { Box } from "@mui/material";
 import LeftDrawer from "./LeftDrawer/LeftDrawer";
 import Header from "./Header/Header";
+import { containerStyles, baseCardStyles } from "../../styles/BaseStyles";
 
 const AppLayout = ({ currentUser, onLogout, token, children, headerTitle }) => {
   return (
-    <Box sx={{ display: "flex", minHeight: "100dvh", backgroundColor: "background.default", width: "100%", overflowX: "hidden" }}>
+    <Box
+      sx={{
+        ...containerStyles,
+        display: "flex",
+        minHeight: "100dvh",
+        backgroundColor: "background.default",
+        overflowX: "hidden",
+      }}
+    >
       <LeftDrawer onLogout={onLogout} />
-      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", ml: { xs: 0, sm: "72px" }, width: { xs: 'auto', sm: 'auto' }, maxWidth: { xs: '100%', sm: 'calc(100vw - 72px)' }, boxSizing: 'border-box' }}>
+      <Box
+        sx={{
+          flexGrow: 1,
+          display: "flex",
+          flexDirection: "column",
+          ml: { xs: 0, sm: "72px" }, // Account for 72px drawer on sm+
+          width: "100%",
+          maxWidth: { xs: "100%", sm: "calc(100% - 72px)" },
+          boxSizing: "border-box",
+        }}
+      >
         <Header currentUser={currentUser} token={token} title={headerTitle} />
-        <Box sx={{ flex: 1, p: 3 }}>{children}</Box>
+        <Box
+          aria-label="Main content"
+          sx={{
+            mt: { xs: 8, sm: 8 }, // Match header height
+            p: { xs: 2, sm: 2 }, // 16px mobile, 24px desktop
+          }}
+        >
+          {children}
+        </Box>
       </Box>
     </Box>
   );
 };
 
-export default AppLayout;
+export default React.memo(AppLayout);
