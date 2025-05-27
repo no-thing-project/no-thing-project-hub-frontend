@@ -29,8 +29,8 @@ import PropTypes from 'prop-types';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import Emoji from 'react-emoji-render';
 import { formatDistanceToNow, format, isValid, parseISO } from 'date-fns';
-import TweetContentStyles from './tweetContentStyles';
-import ModalStyles from './modalStyles';
+import TweetContentStyles from './TweetContentStyles';
+import ModalStyles from './ModalStyles';
 
 const MAX_TWEET_LENGTH = 1000;
 
