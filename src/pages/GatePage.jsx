@@ -175,7 +175,7 @@ const GatePage = () => {
 
   const filteredClasses = useMemo(() => {
     const lowerSearchQuery = searchQuery.toLowerCase();
-    return classes
+    return (gateData?.classes || [])
       .map((classItem) => ({
         ...classItem,
         gateName: gateData?.name || 'Unknown Gate',
