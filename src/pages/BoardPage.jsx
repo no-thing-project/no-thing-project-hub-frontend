@@ -70,7 +70,6 @@ const BoardPage = memo(() => {
   const [editingBoard, setEditingBoard] = useState(null);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [inviteLink, setInviteLink] = useState('');
@@ -401,15 +400,6 @@ const BoardPage = memo(() => {
     }
   }, [board_id, deleteExistingBoard, navigate, showNotification]);
 
-  const handleClearBoard = useCallback(async () => {
-    try {
-      await clearBoardTweets(board_id);
-      showNotification('Tweets cleared', 'success');
-      setClearDialogOpen(false);
-    } catch (err) {
-      showNotification('Failed to clear tweets', 'error');
-    }
-  }, [board_id, clearBoardTweets, showNotification]);
 
   const handleCopyLink = useCallback(async () => {
     if (!inviteLink) {
@@ -537,13 +527,6 @@ const BoardPage = memo(() => {
                     <Tooltip title="Edit Board">
                       <IconButton onClick={handleEdit} aria-label="Edit board">
                         <Edit />
-                      </IconButton>
-                    </Tooltip>
-                  </motion.div>
-                  <motion.div variants={buttonVariants} initial="initial" animate="animate" exit="exit">
-                    <Tooltip title="Clear Board Tweets">
-                      <IconButton onClick={() => setClearDialogOpen(true)} aria-label="Clear board tweets">
-                        <Brush color="error" />
                       </IconButton>
                     </Tooltip>
                   </motion.div>
@@ -719,15 +702,6 @@ const BoardPage = memo(() => {
           </Button>
         </DialogActions>
       </Dialog>
-
-      <DeleteConfirmationDialog
-        open={clearDialogOpen}
-        onClose={() => setClearDialogOpen(false)}
-        onConfirm={handleClearBoard}
-        message="Are you sure you want to delete all tweets on this board? This action cannot be undone."
-        disabled={boardLoading}
-      />
-
       <DeleteConfirmationDialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}

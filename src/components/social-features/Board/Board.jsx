@@ -890,7 +890,7 @@ const Board = ({
                   ...BoardStyles.boardViewToggleButton,
                   fontSize: { xs: '0.75rem', sm: '0.875rem' },
                   padding: { xs: '4px 8px', sm: '6px 16px' },
-                  pointerEvents: 'auto', // Ensure button is clickable
+                  pointerEvents: 'auto',
                 }}
                 disabled={isOverlayOpen}
               >
