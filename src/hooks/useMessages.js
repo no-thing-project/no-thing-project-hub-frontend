@@ -17,7 +17,6 @@ import {
   cancelScheduledMessage,
   generatePresignedUrl,
 } from '../api/messagesApi';
-import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Custom hook for managing messages in a conversation.

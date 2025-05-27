@@ -29,11 +29,9 @@ import {
   People,
   Public,
   Lock,
-  Brush,
   Delete,
   Toll,
 } from '@mui/icons-material';
-import PropTypes from 'prop-types';
 import { formatDistanceToNow, format, isValid, parseISO } from 'date-fns';
 import LoadingSpinner from '../components/Layout/LoadingSpinner';
 import Board from '../components/social-features/Board/Board';
@@ -90,12 +88,10 @@ const BoardPage = memo(() => {
     addMemberToBoard,
     removeMemberFromBoard,
     updateMemberRole,
-    clearBoardTweets,
   } = useBoards(token, handleLogout, navigate);
 
   const {
     pointsData,
-    loading: pointsLoading,
     fetchPointsData,
   } = usePoints(token, handleLogout, navigate);
 
@@ -155,7 +151,7 @@ const BoardPage = memo(() => {
         setBoardTimestamp(format(createdAt, 'MMM d'));
       }
 
-    updateTimestamp(); // Initial update
+    updateTimestamp();
 
     // Update every 60 seconds for boards less than 30 minutes old
     if (diffInSeconds < 30 * 60) {
