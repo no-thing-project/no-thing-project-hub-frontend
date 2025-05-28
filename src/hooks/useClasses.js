@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
-import ReactDOM from "react-dom";
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import {
   fetchClasses,
   fetchClassesByGateId,
@@ -15,27 +15,29 @@ import {
   favoriteClass,
   unfavoriteClass,
   updateClassMember,
-} from "../api/classesApi";
+} from '../api/classesApi';
+import { debounce } from 'lodash';
+import isEqual from 'lodash/isEqual';
 
 // Constants for error messages
 const ERROR_MESSAGES = {
-  AUTH_REQUIRED: "Authentication required.",
-  CLASS_ID_MISSING: "Class ID is missing.",
-  CLASS_NAME_MISSING: "Class name is missing.",
-  CLASS_NOT_FOUND: "Class not found.",
-  STATUS_DATA_MISSING: "Status data is missing.",
-  USERNAME_MISSING: "Username is missing.",
-  ROLE_MISSING: "Role is missing.",
-  GATE_ID_MISSING: "Gate ID is missing for public class.",
-  DATA_MISSING: "Required data is missing.",
-  MEMBER_LIMIT_EXCEEDED: "Member limit exceeded.",
-  RATE_LIMIT_EXCEEDED: "Rate limit exceeded, please try again later.",
-  GENERIC: "An error occurred.",
+  AUTH_REQUIRED: 'Authentication required.',
+  CLASS_ID_MISSING: 'Class ID is missing.',
+  CLASS_NAME_MISSING: 'Class name is missing.',
+  CLASS_NOT_FOUND: 'Class not found.',
+  STATUS_DATA_MISSING: 'Status data is missing.',
+  USERNAME_MISSING: 'Username is missing.',
+  ROLE_MISSING: 'Role is missing.',
+  GATE_ID_MISSING: 'Gate ID is missing for public class.',
+  DATA_MISSING: 'Required data is missing.',
+  MEMBER_LIMIT_EXCEEDED: 'Member limit exceeded.',
+  RATE_LIMIT_EXCEEDED: 'Rate limit exceeded, please try again later.',
+  GENERIC: 'An error occurred.',
 };
 
 // Constants for cache
 const MAX_CACHE_SIZE = 10;
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = 'v1';
 const CACHE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
 
 // Cache for class lists and items
@@ -73,8 +75,8 @@ export const useClasses = (token, onLogout, navigate) => {
         return;
       }
       if (status === 401 || status === 403) {
-        onLogout("Your session has expired. Please log in again.");
-        navigate("/login");
+        onLogout('Your session has expired. Please log in again.');
+        navigate('/login');
       }
       setError(
         status === 429
@@ -113,13 +115,13 @@ export const useClasses = (token, onLogout, navigate) => {
    */
   const normalizeMembers = useCallback((members = []) => {
     return members.map((member) => ({
-      member_id: member.member_id || member.anonymous_id || "",
-      username: member.username || "Unknown",
-      role: member.role || "viewer",
+      member_id: member.member_id || member.anonymous_id || '',
+      username: member.username || 'Unknown',
+      role: member.role || 'viewer',
       joined_at: member.joined_at || null,
       avatar: member.avatar || null,
       total_points: member.total_points || 0,
-      anonymous_id: member.anonymous_id || member.member_id || "",
+      anonymous_id: member.anonymous_id || member.member_id || '',
     }));
   }, []);
 
@@ -161,7 +163,7 @@ export const useClasses = (token, onLogout, navigate) => {
 
       try {
         const data = await fetchClasses(token, filters, signal);
-        if (!data) throw new Error("No data received");
+        if (!data) throw new Error('No data received');
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setClasses(data.classes || []);
@@ -176,8 +178,8 @@ export const useClasses = (token, onLogout, navigate) => {
         classListCache.set(cacheKey, { ...data, timestamp });
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch classes error:", err);
+        if (err.name !== 'AbortError') {
+          console.error('Fetch classes error:', err);
           return handleAuthError(err);
         }
         return null;
@@ -218,7 +220,7 @@ export const useClasses = (token, onLogout, navigate) => {
 
       try {
         const data = await fetchClassesByGateId(gateId, token, filters, signal);
-        if (!data) throw new Error("No data received");
+        if (!data) throw new Error('No data received');
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setClasses(data.classes || []);
@@ -233,8 +235,8 @@ export const useClasses = (token, onLogout, navigate) => {
         classListCache.set(cacheKey, { ...data, timestamp });
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch classes by gate error:", err);
+        if (err.name !== 'AbortError') {
+          console.error('Fetch classes by gate error:', err);
           return handleAuthError(err);
         }
         return null;
@@ -274,17 +276,13 @@ export const useClasses = (token, onLogout, navigate) => {
       setError(null);
 
       try {
-        const [classData, membersData] = await Promise.all([
-          fetchClassById(classId, token, signal),
-          fetchClassMembers(classId, token, signal),
-        ]);
-        if (!classData) throw new Error("No class data received");
-        const data = { ...classData, members: membersData?.members || [] };
+        const classData = await fetchClassById(classId, token, signal);
+        if (!classData) throw new Error('No class data received');
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
-          setClassItem(data);
-          setMembers(normalizeMembers(data.members));
-          setStats(data.stats || null);
+          setClassItem(classData);
+          setMembers(normalizeMembers(classData.members || []));
+          setStats(classData.stats || null);
           setLastUpdated(timestamp);
         });
 
@@ -292,11 +290,11 @@ export const useClasses = (token, onLogout, navigate) => {
           const oldestKey = classItemCache.keys().next().value;
           classItemCache.delete(oldestKey);
         }
-        classItemCache.set(cacheKey, { ...data, timestamp });
-        return data;
+        classItemCache.set(cacheKey, { ...classData, timestamp });
+        return classData;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch class error:", err);
+        if (err.name !== 'AbortError') {
+          console.error('Fetch class error:', err);
           return handleAuthError(err);
         }
         return null;
@@ -305,6 +303,59 @@ export const useClasses = (token, onLogout, navigate) => {
       }
     },
     [token, handleAuthError, normalizeMembers, isCacheExpired]
+  );
+
+  /**
+   * Debounced fetch class members list
+   */
+  const debouncedFetchClassMembers = useMemo(
+    () =>
+      debounce(async (classId, signal, callback) => {
+        if (!token || !classId?.trim()) {
+          setError(token ? ERROR_MESSAGES.CLASS_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
+          callback(null);
+          return;
+        }
+
+        setLoading(true);
+        setError(null);
+
+        try {
+          const data = await fetchClassMembers(classId, token, signal);
+          if (!data) throw new Error('No members data received');
+          const normalized = normalizeMembers(data.members);
+          if (!isEqual(members, normalized)) {
+            ReactDOM.unstable_batchedUpdates(() => {
+              setMembers(normalized);
+              setLastUpdated(Date.now());
+            });
+          }
+          callback(data);
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            console.error('Fetch class members error:', err);
+            handleAuthError(err);
+            callback(null);
+          }
+        } finally {
+          setLoading(false);
+        }
+      }, 500),
+    [token, handleAuthError, normalizeMembers, members]
+  );
+
+  /**
+   * Fetch class members list
+   * @param {string} classId - Class ID
+   * @param {AbortSignal} [signal] - Abort signal for request cancellation
+   * @returns {Promise<object|null>} Members data or null if error
+   */
+  const fetchClassMembersList = useCallback(
+    (classId, signal) =>
+      new Promise((resolve) => {
+        debouncedFetchClassMembers(classId, signal, resolve);
+      }),
+    [debouncedFetchClassMembers]
   );
 
   /**
@@ -336,7 +387,7 @@ export const useClasses = (token, onLogout, navigate) => {
           newClass = await createClass(
             {
               ...classData,
-              visibility: classData.visibility || "private",
+              visibility: classData.visibility || 'private',
               settings: {
                 max_members: classData.settings?.max_members || 100,
                 board_creation_cost: classData.settings?.board_creation_cost || 50,
@@ -348,7 +399,7 @@ export const useClasses = (token, onLogout, navigate) => {
             token
           );
         }
-        if (!newClass) throw new Error("Failed to create class");
+        if (!newClass) throw new Error('Failed to create class');
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setClasses((prev) => [...prev, newClass]);
@@ -362,7 +413,7 @@ export const useClasses = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return createNewClass(classData, retryCount + 1);
         }
-        console.error("Create class error:", err);
+        console.error('Create class error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -397,7 +448,7 @@ export const useClasses = (token, onLogout, navigate) => {
       try {
         const { class_id, ...updateData } = classData;
         const updatedClass = await updateClass(classId, updateData, token);
-        if (!updatedClass) throw new Error("Failed to update class");
+        if (!updatedClass) throw new Error('Failed to update class');
         const cacheKey = `${CACHE_VERSION}:${classId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
@@ -420,7 +471,7 @@ export const useClasses = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return updateExistingClass(classId, classData, retryCount + 1);
         }
-        console.error("Update class error:", err);
+        console.error('Update class error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -454,7 +505,7 @@ export const useClasses = (token, onLogout, navigate) => {
 
       try {
         const updatedClass = await updateClassStatus(classId, statusData, token);
-        if (!updatedClass) throw new Error("Failed to update class status");
+        if (!updatedClass) throw new Error('Failed to update class status');
         const cacheKey = `${CACHE_VERSION}:${classId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
@@ -477,7 +528,7 @@ export const useClasses = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return updateClassStatusById(classId, statusData, retryCount + 1);
         }
-        console.error("Update class status error:", err);
+        console.error('Update class status error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -526,7 +577,7 @@ export const useClasses = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return deleteExistingClass(classId, retryCount + 1);
         }
-        console.error("Delete class error:", err);
+        console.error('Delete class error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -543,7 +594,7 @@ export const useClasses = (token, onLogout, navigate) => {
    * @returns {Promise<object|null>} Updated class or null if error
    */
   const addMemberToClass = useCallback(
-    async (classId, { username, role = "viewer" }, retryCount = 0) => {
+    async (classId, { username, role = 'viewer' }, retryCount = 0) => {
       if (!token || !classId?.trim() || !username?.trim()) {
         setError(
           !token
@@ -560,15 +611,17 @@ export const useClasses = (token, onLogout, navigate) => {
 
       try {
         const updatedClass = await addClassMember(classId, { username, role }, token);
-        if (!updatedClass) throw new Error("Failed to add member");
+        if (!updatedClass) throw new Error('Failed to add member');
         const cacheKey = `${CACHE_VERSION}:${classId}`;
-        ReactDOM.unstable_batchedUpdates(() => {
-          setMembers(normalizeMembers(updatedClass.members));
-          setClassItem((prev) => (prev?.class_id === classId ? updatedClass : prev));
-          setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
-          setLastUpdated(Date.now());
-        });
-        classListCache.clear();
+        const normalizedMembers = normalizeMembers(updatedClass.members);
+        if (!isEqual(members, normalizedMembers)) {
+          ReactDOM.unstable_batchedUpdates(() => {
+            setMembers(normalizedMembers);
+            setClassItem((prev) => (prev?.class_id === classId ? updatedClass : prev));
+            setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
+            setLastUpdated(Date.now());
+          });
+        }
         classItemCache.set(cacheKey, { ...updatedClass, timestamp: Date.now() });
         return updatedClass;
       } catch (err) {
@@ -576,13 +629,13 @@ export const useClasses = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return addMemberToClass(classId, { username, role }, retryCount + 1);
         }
-        console.error("Add member error:", err);
+        console.error('Add member error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError, normalizeMembers]
+    [token, handleAuthError, normalizeMembers, members]
   );
 
   /**
@@ -610,15 +663,17 @@ export const useClasses = (token, onLogout, navigate) => {
 
       try {
         const updatedClass = await removeClassMember(classId, username, token);
-        if (!updatedClass) throw new Error("Failed to remove member");
+        if (!updatedClass) throw new Error('Failed to remove member');
         const cacheKey = `${CACHE_VERSION}:${classId}`;
-        ReactDOM.unstable_batchedUpdates(() => {
-          setMembers(normalizeMembers(updatedClass.members));
-          setClassItem((prev) => (prev?.class_id === classId ? updatedClass : prev));
-          setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
-          setLastUpdated(Date.now());
-        });
-        classListCache.clear();
+        const normalizedMembers = normalizeMembers(updatedClass.members);
+        if (!isEqual(members, normalizedMembers)) {
+          ReactDOM.unstable_batchedUpdates(() => {
+            setMembers(normalizedMembers);
+            setClassItem((prev) => (prev?.class_id === classId ? updatedClass : prev));
+            setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
+            setLastUpdated(Date.now());
+          });
+        }
         classItemCache.set(cacheKey, { ...updatedClass, timestamp: Date.now() });
         return updatedClass;
       } catch (err) {
@@ -626,13 +681,13 @@ export const useClasses = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return removeMemberFromClass(classId, username, retryCount + 1);
         }
-        console.error("Remove member error:", err);
+        console.error('Remove member error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError, normalizeMembers]
+    [token, handleAuthError, normalizeMembers, members]
   );
 
   /**
@@ -663,15 +718,17 @@ export const useClasses = (token, onLogout, navigate) => {
 
       try {
         const updatedClass = await updateClassMember(classId, username, { role }, token);
-        if (!updatedClass) throw new Error("Failed to update member role");
+        if (!updatedClass) throw new Error('Failed to update member role');
         const cacheKey = `${CACHE_VERSION}:${classId}`;
-        ReactDOM.unstable_batchedUpdates(() => {
-          setMembers(normalizeMembers(updatedClass.members));
-          setClassItem((prev) => (prev?.class_id === classId ? updatedClass : prev));
-          setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
-          setLastUpdated(Date.now());
-        });
-        classListCache.clear();
+        const normalizedMembers = normalizeMembers(updatedClass.members);
+        if (!isEqual(members, normalizedMembers)) {
+          ReactDOM.unstable_batchedUpdates(() => {
+            setMembers(normalizedMembers);
+            setClassItem((prev) => (prev?.class_id === classId ? updatedClass : prev));
+            setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
+            setLastUpdated(Date.now());
+          });
+        }
         classItemCache.set(cacheKey, { ...updatedClass, timestamp: Date.now() });
         return updatedClass;
       } catch (err) {
@@ -679,50 +736,13 @@ export const useClasses = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return updateMemberRole(classId, username, role, retryCount + 1);
         }
-        console.error("Update member role error:", err);
+        console.error('Update member role error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
       }
     },
-    [token, handleAuthError, normalizeMembers]
-  );
-
-  /**
-   * Fetch class members list
-   * @param {string} classId - Class ID
-   * @param {AbortSignal} [signal] - Abort signal for request cancellation
-   * @returns {Promise<object|null>} Members data or null if error
-   */
-  const fetchClassMembersList = useCallback(
-    async (classId, signal) => {
-      if (!token || !classId?.trim()) {
-        setError(token ? ERROR_MESSAGES.CLASS_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
-        return null;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const data = await fetchClassMembers(classId, token, signal);
-        if (!data) throw new Error("No members data received");
-        ReactDOM.unstable_batchedUpdates(() => {
-          setMembers(normalizeMembers(data.members));
-          setLastUpdated(Date.now());
-        });
-        return data;
-      } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch class members error:", err);
-          return handleAuthError(err);
-        }
-        return null;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleAuthError, normalizeMembers]
+    [token, handleAuthError, normalizeMembers, members]
   );
 
   /**
@@ -746,7 +766,7 @@ export const useClasses = (token, onLogout, navigate) => {
         const updatedClass = isFavorited
           ? await unfavoriteClass(classId, token)
           : await favoriteClass(classId, token);
-        if (!updatedClass) throw new Error("Failed to toggle favorite status");
+        if (!updatedClass) throw new Error('Failed to toggle favorite status');
         const cacheKey = `${CACHE_VERSION}:${classId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setClasses((prev) => prev.map((c) => (c.class_id === classId ? updatedClass : c)));
@@ -769,7 +789,7 @@ export const useClasses = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return toggleFavoriteClass(classId, isFavorited, retryCount + 1);
         }
-        console.error("Toggle favorite error:", err);
+        console.error('Toggle favorite error:', err);
         return handleAuthError(err);
       } finally {
         setLoading(false);
@@ -794,8 +814,8 @@ export const useClasses = (token, onLogout, navigate) => {
       try {
         await fetchClassesList({}, controller.signal);
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Initial fetch classes error:", err);
+        if (err.name !== 'AbortError') {
+          console.error('Initial fetch classes error:', err);
         }
       }
     };
@@ -806,8 +826,9 @@ export const useClasses = (token, onLogout, navigate) => {
     return () => {
       controller.abort();
       clearTimeout(timeoutId);
+      debouncedFetchClassMembers.cancel();
     };
-  }, [token, fetchClassesList, resetState]);
+  }, [token, fetchClassesList, resetState, debouncedFetchClassMembers]);
 
   return useMemo(
     () => ({

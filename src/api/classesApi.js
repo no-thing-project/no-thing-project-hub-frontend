@@ -1,17 +1,14 @@
-import api from "./apiClient";
-import { handleApiError } from "./apiClient";
+import { get, post, put, del, handleApiError } from './apiClient';
 
-const BASE_CLASS_PATH = "/api/v1/classes";
+const BASE_CLASS_PATH = '/api/v1/classes';
 
 const ERROR_MESSAGES = {
-  TOKEN_REQUIRED: "Token is required",
-  CLASS_ID_REQUIRED: "Class ID is required",
-  GATE_ID_REQUIRED: "Gate ID is required",
-  USERNAME_REQUIRED: "Username is required",
-  ROLE_REQUIRED: "Role is required",
-  DATA_REQUIRED: "Data is required",
-  STATUS_REQUIRED: "Status is required",
-  INVALID_RESPONSE: "Invalid response from server",
+  TOKEN_REQUIRED: 'Token is required',
+  CLASS_ID_REQUIRED: 'Class ID is required',
+  GATE_ID_REQUIRED: 'Gate ID is required',
+  USERNAME_REQUIRED: 'Username is required',
+  DATA_REQUIRED: 'Data is required',
+  STATUS_REQUIRED: 'Status is required',
 };
 
 /**
@@ -21,7 +18,7 @@ const ERROR_MESSAGES = {
  * @throws {Error} If parameter is invalid
  */
 const validateStringParam = (param, paramName) => {
-  if (!param || typeof param !== "string") {
+  if (!param || typeof param !== 'string' || !param.trim()) {
     throw new Error(ERROR_MESSAGES[`${paramName.toUpperCase()}_REQUIRED`]);
   }
 };
@@ -33,7 +30,7 @@ const validateStringParam = (param, paramName) => {
  * @throws {Error} If object is invalid
  */
 const validateObjectParam = (obj, paramName) => {
-  if (!obj || typeof obj !== "object" || Object.keys(obj).length === 0) {
+  if (!obj || typeof obj !== 'object' || Object.keys(obj).length === 0) {
     throw new Error(ERROR_MESSAGES[`${paramName.toUpperCase()}_REQUIRED`]);
   }
 };
@@ -46,12 +43,12 @@ const validateObjectParam = (obj, paramName) => {
  * @returns {Promise<object>} Classes data
  */
 export const fetchClasses = async (token, filters = {}, signal) => {
-  validateStringParam(token, "token");
+  validateStringParam(token, 'token');
   try {
-    const response = await api.get(BASE_CLASS_PATH, {
+    const response = await get(BASE_CLASS_PATH, {
       headers: { Authorization: `Bearer ${token}` },
       params: filters,
-      signal,
+      signal: signal instanceof AbortSignal ? signal : undefined,
     });
     return response.data.content || { classes: [], pagination: {} };
   } catch (error) {
@@ -68,13 +65,13 @@ export const fetchClasses = async (token, filters = {}, signal) => {
  * @returns {Promise<object>} Classes data
  */
 export const fetchClassesByGateId = async (gateId, token, filters = {}, signal) => {
-  validateStringParam(gateId, "gateId");
-  validateStringParam(token, "token");
+  validateStringParam(gateId, 'gateId');
+  validateStringParam(token, 'token');
   try {
-    const response = await api.get(`${BASE_CLASS_PATH}/gate/${gateId}`, {
+    const response = await get(`${BASE_CLASS_PATH}/gate/${gateId}`, {
       headers: { Authorization: `Bearer ${token}` },
       params: filters,
-      signal,
+      signal: signal instanceof AbortSignal ? signal : undefined,
     });
     return response.data.content || { classes: [], pagination: {} };
   } catch (error) {
@@ -90,12 +87,12 @@ export const fetchClassesByGateId = async (gateId, token, filters = {}, signal) 
  * @returns {Promise<object>} Class data
  */
 export const fetchClassById = async (classId, token, signal) => {
-  validateStringParam(classId, "classId");
-  validateStringParam(token, "token");
+  validateStringParam(classId, 'classId');
+  validateStringParam(token, 'token');
   try {
-    const response = await api.get(`${BASE_CLASS_PATH}/${classId}`, {
+    const response = await get(`${BASE_CLASS_PATH}/${classId}`, {
       headers: { Authorization: `Bearer ${token}` },
-      signal,
+      signal: signal instanceof AbortSignal ? signal : undefined,
     });
     return response.data.content || null;
   } catch (error) {
@@ -110,10 +107,10 @@ export const fetchClassById = async (classId, token, signal) => {
  * @returns {Promise<object>} Created class data
  */
 export const createClass = async (classData, token) => {
-  validateStringParam(token, "token");
-  validateObjectParam(classData, "data");
+  validateObjectParam(classData, 'data');
+  validateStringParam(token, 'token');
   try {
-    const response = await api.post(BASE_CLASS_PATH, classData, {
+    const response = await post(BASE_CLASS_PATH, classData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content || null;
@@ -130,11 +127,11 @@ export const createClass = async (classData, token) => {
  * @returns {Promise<object>} Created class data
  */
 export const createClassInGate = async (gateId, classData, token) => {
-  validateStringParam(gateId, "gateId");
-  validateStringParam(token, "token");
-  validateObjectParam(classData, "data");
+  validateStringParam(gateId, 'gateId');
+  validateObjectParam(classData, 'data');
+  validateStringParam(token, 'token');
   try {
-    const response = await api.post(`${BASE_CLASS_PATH}/gate/${gateId}`, classData, {
+    const response = await post(`${BASE_CLASS_PATH}/gate/${gateId}`, classData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content || null;
@@ -151,11 +148,11 @@ export const createClassInGate = async (gateId, classData, token) => {
  * @returns {Promise<object>} Updated class data
  */
 export const updateClass = async (classId, classData, token) => {
-  validateStringParam(classId, "classId");
-  validateStringParam(token, "token");
-  validateObjectParam(classData, "data");
+  validateStringParam(classId, 'classId');
+  validateObjectParam(classData, 'data');
+  validateStringParam(token, 'token');
   try {
-    const response = await api.put(`${BASE_CLASS_PATH}/${classId}`, classData, {
+    const response = await put(`${BASE_CLASS_PATH}/${classId}`, classData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content || null;
@@ -172,11 +169,11 @@ export const updateClass = async (classId, classData, token) => {
  * @returns {Promise<object>} Updated class data
  */
 export const updateClassStatus = async (classId, statusData, token) => {
-  validateStringParam(classId, "classId");
-  validateStringParam(token, "token");
-  validateObjectParam(statusData, "status");
+  validateStringParam(classId, 'classId');
+  validateObjectParam(statusData, 'status');
+  validateStringParam(token, 'token');
   try {
-    const response = await api.put(`${BASE_CLASS_PATH}/${classId}/status`, statusData, {
+    const response = await put(`${BASE_CLASS_PATH}/${classId}/status`, statusData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content || null;
@@ -192,10 +189,10 @@ export const updateClassStatus = async (classId, statusData, token) => {
  * @returns {Promise<object>} Deleted class data
  */
 export const deleteClass = async (classId, token) => {
-  validateStringParam(classId, "classId");
-  validateStringParam(token, "token");
+  validateStringParam(classId, 'classId');
+  validateStringParam(token, 'token');
   try {
-    const response = await api.delete(`${BASE_CLASS_PATH}/${classId}`, {
+    const response = await del(`${BASE_CLASS_PATH}/${classId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content || null;
@@ -207,17 +204,16 @@ export const deleteClass = async (classId, token) => {
 /**
  * Add a member to a class
  * @param {string} classId - Class ID
- * @param {object} memberData - Member data (username, role)
+ * @param {object} memberData - Member data
  * @param {string} token - Authorization token
  * @returns {Promise<object>} Updated class data
  */
 export const addClassMember = async (classId, memberData, token) => {
-  validateStringParam(classId, "classId");
-  validateStringParam(token, "token");
-  validateObjectParam(memberData, "data");
-  validateStringParam(memberData.username, "username");
+  validateStringParam(classId, 'classId');
+  validateObjectParam(memberData, 'data');
+  validateStringParam(token, 'token');
   try {
-    const response = await api.post(`${BASE_CLASS_PATH}/${classId}/members`, memberData, {
+    const response = await post(`${BASE_CLASS_PATH}/${classId}/members`, memberData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content || null;
@@ -234,11 +230,11 @@ export const addClassMember = async (classId, memberData, token) => {
  * @returns {Promise<object>} Updated class data
  */
 export const removeClassMember = async (classId, username, token) => {
-  validateStringParam(classId, "classId");
-  validateStringParam(username, "username");
-  validateStringParam(token, "token");
+  validateStringParam(classId, 'classId');
+  validateStringParam(username, 'username');
+  validateStringParam(token, 'token');
   try {
-    const response = await api.delete(`${BASE_CLASS_PATH}/${classId}/members/${username}`, {
+    const response = await del(`${BASE_CLASS_PATH}/${classId}/members/${encodeURIComponent(username)}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content || null;
@@ -256,12 +252,12 @@ export const removeClassMember = async (classId, username, token) => {
  * @returns {Promise<object>} Updated class data
  */
 export const updateClassMember = async (classId, username, roleData, token) => {
-  validateStringParam(classId, "classId");
-  validateStringParam(username, "username");
-  validateStringParam(token, "token");
-  validateObjectParam(roleData, "role");
+  validateStringParam(classId, 'classId');
+  validateStringParam(username, 'username');
+  validateObjectParam(roleData, 'data');
+  validateStringParam(token, 'token');
   try {
-    const response = await api.put(`${BASE_CLASS_PATH}/${classId}/members/${username}`, roleData, {
+    const response = await put(`${BASE_CLASS_PATH}/${classId}/members/${encodeURIComponent(username)}`, roleData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content || null;
@@ -277,10 +273,10 @@ export const updateClassMember = async (classId, username, roleData, token) => {
  * @returns {Promise<object>} Updated class data
  */
 export const favoriteClass = async (classId, token) => {
-  validateStringParam(classId, "classId");
-  validateStringParam(token, "token");
+  validateStringParam(classId, 'classId');
+  validateStringParam(token, 'token');
   try {
-    const response = await api.post(`${BASE_CLASS_PATH}/${classId}/favorite`, {}, {
+    const response = await post(`${BASE_CLASS_PATH}/${classId}/favorite`, {}, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content || null;
@@ -296,10 +292,10 @@ export const favoriteClass = async (classId, token) => {
  * @returns {Promise<object>} Updated class data
  */
 export const unfavoriteClass = async (classId, token) => {
-  validateStringParam(classId, "classId");
-  validateStringParam(token, "token");
+  validateStringParam(classId, 'classId');
+  validateStringParam(token, 'token');
   try {
-    const response = await api.post(`${BASE_CLASS_PATH}/${classId}/unfavorite`, {}, {
+    const response = await post(`${BASE_CLASS_PATH}/${classId}/unfavorite`, {}, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content || null;
@@ -316,12 +312,12 @@ export const unfavoriteClass = async (classId, token) => {
  * @returns {Promise<object>} Members data
  */
 export const fetchClassMembers = async (classId, token, signal) => {
-  validateStringParam(classId, "classId");
-  validateStringParam(token, "token");
+  validateStringParam(classId, 'classId');
+  validateStringParam(token, 'token');
   try {
-    const response = await api.get(`${BASE_CLASS_PATH}/${classId}/members`, {
+    const response = await get(`${BASE_CLASS_PATH}/${classId}/members`, {
       headers: { Authorization: `Bearer ${token}` },
-      signal,
+      signal: signal instanceof AbortSignal ? signal : undefined,
     });
     return response.data.content || { members: [] };
   } catch (error) {

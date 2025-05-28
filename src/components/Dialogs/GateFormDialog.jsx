@@ -19,39 +19,43 @@ import {
 import { inputStyles, actionButtonStyles, cancelButtonStyle, selectStyles } from "../../styles/BaseStyles";
 import { validateForm, validateField } from "../../utils/validations";
 import PropTypes from "prop-types";
+import { DEFAULT_GATE } from "../../constants/default";
 
 const GateFormDialog = ({ open, title, gate, setGate, onSave, onCancel, disabled }) => {
   const theme = useTheme();
   const [errors, setErrors] = useState({});
 
+  // Use default gate values if gate is null
+  const safeGate = gate || DEFAULT_GATE;
+
   const validationRules = useMemo(
     () => ({
       name: {
-        value: gate.name,
+        value: safeGate.name || "",
         rules: { required: true, minLength: 3, maxLength: 100 },
       },
       description: {
-        value: gate.description,
+        value: safeGate.description || "",
         rules: { maxLength: 1000 },
       },
       visibility: {
-        value: gate.visibility,
+        value: safeGate.visibility || "public",
         rules: { required: true },
       },
       "settings.class_creation_cost": {
-        value: gate.settings.class_creation_cost,
+        value: safeGate.settings?.class_creation_cost ?? 100,
         rules: { required: true, minValue: 0 },
       },
       "settings.board_creation_cost": {
-        value: gate.settings.board_creation_cost,
+        value: safeGate.settings?.board_creation_cost ?? 50,
         rules: { required: true, minValue: 0 },
       },
       "settings.max_members": {
-        value: gate.settings.max_members,
+        value: safeGate.settings?.max_members ?? 1000,
         rules: { required: true, minValue: 1, maxValue: 10000 },
       },
     }),
-    [gate]
+    [safeGate]
   );
 
   const handleChange = useCallback(
@@ -64,7 +68,7 @@ const GateFormDialog = ({ open, title, gate, setGate, onSave, onCancel, disabled
         newValue = type === "number" ? Number(value) : checked;
         setGate((prev) => ({
           ...prev,
-          settings: { ...prev.settings, [settingKey]: newValue },
+          settings: { ...prev?.settings, [settingKey]: newValue },
         }));
       } else if (name === "visibility") {
         setGate((prev) => ({
@@ -97,7 +101,7 @@ const GateFormDialog = ({ open, title, gate, setGate, onSave, onCancel, disabled
     }
     setGate((prev) => ({
       ...prev,
-      is_public: prev.visibility === "public",
+      is_public: prev?.visibility === "public",
     }));
     onSave();
   }, [onSave, setGate, validationRules]);
@@ -121,7 +125,7 @@ const GateFormDialog = ({ open, title, gate, setGate, onSave, onCancel, disabled
           <TextField
             label="Gate Name"
             name="name"
-            value={gate.name || ""}
+            value={safeGate.name || ""}
             onChange={handleChange}
             fullWidth
             required
@@ -135,7 +139,7 @@ const GateFormDialog = ({ open, title, gate, setGate, onSave, onCancel, disabled
           <TextField
             label="Description"
             name="description"
-            value={gate.description || ""}
+            value={safeGate.description || ""}
             onChange={handleChange}
             fullWidth
             multiline
@@ -156,7 +160,7 @@ const GateFormDialog = ({ open, title, gate, setGate, onSave, onCancel, disabled
             <InputLabel>Visibility</InputLabel>
             <Select
               name="visibility"
-              value={gate.visibility || "public"}
+              value={safeGate.visibility || "public"}
               onChange={handleChange}
               label="Visibility"
               aria-label="Gate visibility"
@@ -170,7 +174,7 @@ const GateFormDialog = ({ open, title, gate, setGate, onSave, onCancel, disabled
             label="Class Creation Cost"
             name="settings.class_creation_cost"
             type="number"
-            value={gate.settings.class_creation_cost || 0}
+            value={safeGate.settings?.class_creation_cost ?? 100}
             onChange={handleChange}
             fullWidth
             required
@@ -185,7 +189,7 @@ const GateFormDialog = ({ open, title, gate, setGate, onSave, onCancel, disabled
             label="Board Creation Cost"
             name="settings.board_creation_cost"
             type="number"
-            value={gate.settings.board_creation_cost || 0}
+            value={safeGate.settings?.board_creation_cost ?? 50}
             onChange={handleChange}
             fullWidth
             required
@@ -200,7 +204,7 @@ const GateFormDialog = ({ open, title, gate, setGate, onSave, onCancel, disabled
             label="Max Members"
             name="settings.max_members"
             type="number"
-            value={gate.settings.max_members || 1000}
+            value={safeGate.settings?.max_members ?? 1000}
             onChange={handleChange}
             fullWidth
             required
@@ -214,7 +218,7 @@ const GateFormDialog = ({ open, title, gate, setGate, onSave, onCancel, disabled
           <FormControlLabel
             control={
               <Switch
-                checked={gate.settings.ai_moderation_enabled || false}
+                checked={safeGate.settings?.ai_moderation_enabled ?? false}
                 onChange={handleChange}
                 name="settings.ai_moderation_enabled"
                 disabled={disabled}
@@ -245,7 +249,7 @@ const GateFormDialog = ({ open, title, gate, setGate, onSave, onCancel, disabled
             minWidth: { xs: "100%", sm: 150 },
             fontSize: { xs: "0.75rem", sm: "0.875rem" },
           }}
-          disabled={disabled}
+          disabled={disabled || !!Object.values(errors).find((e) => e)}
         >
           Save
         </Button>
@@ -268,7 +272,7 @@ GateFormDialog.propTypes = {
       max_members: PropTypes.number,
       ai_moderation_enabled: PropTypes.bool,
     }),
-  }).isRequired,
+  }), // Removed .isRequired to allow null
   setGate: PropTypes.func.isRequired,
   onSave: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,

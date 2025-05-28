@@ -1,49 +1,28 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Box, Skeleton, Button } from '@mui/material';
-import { debounce } from 'lodash';
+import { Add, Public, Lock, People, Forum, Star } from '@mui/icons-material';
 import PropTypes from 'prop-types';
 import AppLayout from '../components/Layout/AppLayout';
 import ProfileHeader from '../components/Headers/ProfileHeader';
-import GateFormDialog from '../components/Dialogs/GateFormDialog';
-import ClassFormDialog from '../components/Dialogs/ClassFormDialog';
-import MemberFormDialog from '../components/Dialogs/MemberFormDialog';
-import DeleteConfirmationDialog from '../components/Dialogs/DeleteConfirmationDialog';
+import useAuth from '../hooks/useAuth';
 import { useGates } from '../hooks/useGates';
 import { useClasses } from '../hooks/useClasses';
-import useAuth from '../hooks/useAuth';
+import { useEntity } from '../hooks/useEntity';
 import { useNotification } from '../context/NotificationContext';
-import { Add, Public, Lock, People, Forum, Star } from '@mui/icons-material';
-import { containerStyles, gridStyles, skeletonStyles, actionButtonStyles } from '../styles/BaseStyles';
-import Filters from '../components/Filters/Filters';
-import Grids from '../components/Grids/Grids';
 import CardMain from '../components/Cards/CardMain';
-
-const DEFAULT_CLASS = {
-  name: '',
-  description: '',
-  is_public: false,
-  visibility: 'private',
-  gate_id: '',
-  type: 'group',
-  settings: {
-    max_boards: 100,
-    max_members: 50,
-    board_creation_cost: 50,
-    tweet_cost: 1,
-    allow_invites: true,
-    require_approval: false,
-    ai_moderation_enabled: true,
-    auto_archive_after: 30,
-  },
-  tags: [],
-};
+import EntityGrid from '../components/Common/EntityGrid';
+import EntityDialogs from '../components/Common/EntityDialogs';
+import LoadingSkeleton from '../components/Common/LoadingSkeleton';
+import { filterEntities } from '../utils/filterUtils';
+import { DEFAULT_CLASS } from '../constants/default';
+import { CLASS_FILTER_OPTIONS } from '../constants/filterOptions';
+import { debounce } from 'lodash';
 
 const GatePage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { showNotification } = useNotification();
   const { gate_id } = useParams();
+  const { showNotification } = useNotification();
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth();
   const {
     gate: gateData,
@@ -63,7 +42,7 @@ const GatePage = () => {
     error: gateError,
   } = useGates(token, handleLogout, navigate);
   const {
-    classes,
+    classes: classesList,
     fetchClassesByGate,
     createNewClass,
     updateExistingClass,
@@ -76,146 +55,85 @@ const GatePage = () => {
     error: classesError,
   } = useClasses(token, handleLogout, navigate);
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
+  // Dialog states for classes
   const [createClassDialogOpen, setCreateClassDialogOpen] = useState(false);
+  const [editClassDialogOpen, setEditClassDialogOpen] = useState(false);
+  const [deleteClassDialogOpen, setDeleteClassDialogOpen] = useState(false);
+  const [memberClassDialogOpen, setMemberClassDialogOpen] = useState(false);
+  // Dialog states for gates
   const [editGateDialogOpen, setEditGateDialogOpen] = useState(false);
   const [deleteGateDialogOpen, setDeleteGateDialogOpen] = useState(false);
-  const [deleteClassDialogOpen, setDeleteClassDialogOpen] = useState(false);
-  const [memberDialogOpen, setMemberDialogOpen] = useState(false);
-  const [editingGate, setEditingGate] = useState(null);
+  const [memberGateDialogOpen, setMemberGateDialogOpen] = useState(false);
+  // Entity states
   const [editingClass, setEditingClass] = useState(null);
   const [classToDelete, setClassToDelete] = useState(null);
   const [selectedClassId, setSelectedClassId] = useState(null);
+  const [editingGate, setEditingGate] = useState(null);
+  const [popupClass, setPopupClass] = useState({ ...DEFAULT_CLASS, gate_id });
   const [quickFilter, setQuickFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [retryCount, setRetryCount] = useState(0);
-  const [popupClass, setPopupClass] = useState({
-    ...DEFAULT_CLASS,
-    gate_id: gate_id || '',
-  });
+
+  const { isLoading, actionLoading, setActionLoading } = useEntity(
+    useMemo(
+      () => [
+        () => fetchGate(gate_id),
+        () => fetchGateMembersList(gate_id),
+        () => fetchClassesByGate(gate_id, {}),
+        () => fetchGatesList({ visibility: 'public' }),
+      ],
+      [fetchGate, fetchGateMembersList, fetchClassesByGate, fetchGatesList, gate_id]
+    ),
+    token,
+    handleLogout,
+    navigate,
+    'gate'
+  );
 
   const debouncedSetSearchQuery = useMemo(
     () => debounce((value) => setSearchQuery(value), 300),
     []
   );
 
-  const filterOptions = useMemo(
-    () => [
-      { value: 'all', label: 'All Classes' },
-      { value: 'public', label: 'Public' },
-      { value: 'private', label: 'Private' },
-      { value: 'favorited', label: 'Favorited' },
-    ],
-    []
-  );
-
-  const loadData = useCallback(
-    async (signal) => {
-      if (!gate_id || !token || !isAuthenticated) {
-        showNotification('Gate ID or authentication missing.', 'error');
-        setIsLoading(false);
-        navigate('/login', { state: { from: location.pathname } });
-        return;
-      }
-      setIsLoading(true);
-      try {
-        await Promise.all([
-          fetchGate(gate_id, signal),
-          fetchGateMembersList(gate_id, signal),
-          fetchClassesByGate(gate_id, {}, signal),
-          fetchGatesList({ visibility: 'public' }, signal),
-        ]);
-        setRetryCount(0);
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          console.error('Load data error:', err);
-          const errorMessage = err.message.includes('network')
-            ? 'Network error. Please check your connection.'
-            : err.message || 'Failed to load gate or class data.';
-          showNotification(errorMessage, 'error');
-          if (retryCount < 3) {
-            const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s
-            setTimeout(() => setRetryCount((prev) => prev + 1), delay);
-          }
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [
-      gate_id,
-      token,
-      isAuthenticated,
-      fetchGate,
-      fetchGateMembersList,
-      fetchClassesByGate,
-      fetchGatesList,
-      showNotification,
-      retryCount,
-      navigate,
-      location.pathname,
-    ]
-  );
-
+  // Handle errors
   useEffect(() => {
-    const controller = new AbortController();
-    loadData(controller.signal);
-    return () => controller.abort();
-  }, [loadData]);
-
-  useEffect(() => {
-    if (gateError) showNotification(gateError, 'error');
-    if (classesError) showNotification(classesError, 'error');
+    if (gateError && gateError !== 'canceled') {
+      showNotification(gateError, 'error');
+    }
+    if (classesError && classesError !== 'canceled') {
+      showNotification(classesError, 'error');
+    }
   }, [gateError, classesError, showNotification]);
 
+  // Sync popupClass gate_id
   useEffect(() => {
     setPopupClass((prev) => ({ ...prev, gate_id }));
   }, [gate_id]);
 
+  // Close edit dialogs if no editing entity
+  useEffect(() => {
+    if (!editingGate && editGateDialogOpen) {
+      setEditGateDialogOpen(false);
+    }
+    if (!editingClass && editClassDialogOpen) {
+      setEditClassDialogOpen(false);
+    }
+  }, [editingGate, editGateDialogOpen, editingClass, editClassDialogOpen]);
+
+  // Filter classes with gate context
   const filteredClasses = useMemo(() => {
-    const lowerSearchQuery = searchQuery.toLowerCase();
-    return (gateData?.classes || [])
-      .map((classItem) => ({
-        ...classItem,
-        gateName: gateData?.name || 'Unknown Gate',
-      }))
-      .filter((classItem) => {
-        const matchesSearch =
-          (classItem?.name || '').toLowerCase().includes(lowerSearchQuery) ||
-          (classItem?.description || '').toLowerCase().includes(lowerSearchQuery) ||
-          (classItem?.gateName || '').toLowerCase().includes(lowerSearchQuery) ||
-          (classItem?.tags || []).some((tag) => tag.toLowerCase().includes(lowerSearchQuery));
-        if (!matchesSearch) return false;
-        switch (quickFilter) {
-          case 'public':
-            return classItem.access?.is_public;
-          case 'private':
-            return !classItem.access?.is_public;
-          case 'favorited':
-            return classItem.is_favorited;
-          case 'group':
-            return classItem.type === 'group';
-          case 'personal':
-            return classItem.type === 'personal';
-          default:
-            return true;
-        }
-      });
-  }, [classes, gateData, quickFilter, searchQuery]);
+    const gateFilter = gateData ? [{ gate_id: gateData.gate_id || gate_id }] : [];
+    return filterEntities(gateData?.classes || [], 'classes', quickFilter, searchQuery, gates || [], gateFilter);
+  }, [classesList, gateData, gates, quickFilter, searchQuery, gate_id]);
 
+  // Class handlers
   const handleOpenCreateClass = useCallback(() => setCreateClassDialogOpen(true), []);
-
   const handleCancelCreateClass = useCallback(() => {
     setCreateClassDialogOpen(false);
-    setPopupClass({
-      ...DEFAULT_CLASS,
-      gate_id: gate_id || '',
-    });
+    setPopupClass({ ...DEFAULT_CLASS, gate_id: gate_id || '' });
   }, [gate_id]);
 
   const handleCreateClass = useCallback(async () => {
-    if (!popupClass.name.trim()) {
+    if (!popupClass.name?.trim()) {
       showNotification('Class name is required!', 'error');
       return;
     }
@@ -223,10 +141,7 @@ const GatePage = () => {
     try {
       const createdClass = await createNewClass({ ...popupClass, gate_id });
       setCreateClassDialogOpen(false);
-      setPopupClass({
-        ...DEFAULT_CLASS,
-        gate_id: gate_id || '',
-      });
+      setPopupClass({ ...DEFAULT_CLASS, gate_id: gate_id || '' });
       showNotification('Class created successfully!', 'success');
       navigate(`/class/${createdClass.class_id}`);
     } catch (err) {
@@ -234,16 +149,17 @@ const GatePage = () => {
     } finally {
       setActionLoading(false);
     }
-  }, [popupClass, createNewClass, gate_id, navigate, showNotification]);
+  }, [popupClass, createNewClass, gate_id, navigate, showNotification, setActionLoading]);
 
   const handleUpdateClass = useCallback(async () => {
-    if (!editingClass?.name.trim()) {
+    if (!editingClass?.name?.trim()) {
       showNotification('Class name is required!', 'error');
       return;
     }
     setActionLoading(true);
     try {
       await updateExistingClass(editingClass.class_id, editingClass);
+      setEditClassDialogOpen(false);
       setEditingClass(null);
       showNotification('Class updated successfully!', 'success');
     } catch (err) {
@@ -251,7 +167,7 @@ const GatePage = () => {
     } finally {
       setActionLoading(false);
     }
-  }, [editingClass, updateExistingClass, showNotification]);
+  }, [editingClass, updateExistingClass, showNotification, setActionLoading]);
 
   const handleDeleteClass = useCallback(async () => {
     if (!classToDelete) return;
@@ -266,10 +182,11 @@ const GatePage = () => {
     } finally {
       setActionLoading(false);
     }
-  }, [classToDelete, deleteExistingClass, showNotification]);
+  }, [classToDelete, deleteExistingClass, showNotification, setActionLoading]);
 
+  // Gate handlers
   const handleUpdateGate = useCallback(async () => {
-    if (!editingGate?.name.trim()) {
+    if (!editingGate?.name?.trim()) {
       showNotification('Gate name is required!', 'error');
       return;
     }
@@ -284,9 +201,7 @@ const GatePage = () => {
     } finally {
       setActionLoading(false);
     }
-  }, [editingGate, updateExistingGate, showNotification]);
-
-  const handleOpenDeleteGateDialog = useCallback(() => setDeleteGateDialogOpen(true), []);
+  }, [editingGate, updateExistingGate, showNotification, setActionLoading]);
 
   const handleDeleteGate = useCallback(async () => {
     setActionLoading(true);
@@ -300,7 +215,7 @@ const GatePage = () => {
     } finally {
       setActionLoading(false);
     }
-  }, [gate_id, deleteExistingGate, navigate, showNotification]);
+  }, [gate_id, deleteExistingGate, navigate, showNotification, setActionLoading]);
 
   const handleFavoriteToggle = useCallback(async () => {
     setActionLoading(true);
@@ -315,17 +230,21 @@ const GatePage = () => {
     } finally {
       setActionLoading(false);
     }
-  }, [gate_id, gateData, toggleFavoriteGate, showNotification]);
+  }, [gate_id, gateData, toggleFavoriteGate, showNotification, setActionLoading]);
 
-  const handleAddGateMember = useCallback(
-    async (gateId, memberData) => {
+  // Member handlers (for both gate and class)
+  const handleAddMember = useCallback(
+    async (id, memberData, isClass = false) => {
       setActionLoading(true);
       try {
-        if (members.length >= gateData?.settings?.max_members) {
+        const entity = isClass
+          ? classesList.find((c) => c.class_id === id)
+          : { members, settings: gateData?.settings };
+        if (entity?.members?.length >= entity?.settings?.max_members) {
           showNotification('Maximum member limit reached!', 'error');
           return;
         }
-        await addMemberToGate(gateId, memberData);
+        await (isClass ? addMemberToClass : addMemberToGate)(id, memberData);
         showNotification('Member added successfully!', 'success');
       } catch (err) {
         showNotification(err.message || 'Failed to add member', 'error');
@@ -333,14 +252,14 @@ const GatePage = () => {
         setActionLoading(false);
       }
     },
-    [addMemberToGate, showNotification, members, gateData]
+    [addMemberToClass, addMemberToGate, classesList, members, gateData, showNotification, setActionLoading]
   );
 
-  const handleRemoveGateMember = useCallback(
-    async (gateId, username) => {
+  const handleRemoveMember = useCallback(
+    async (id, username, isClass = false) => {
       setActionLoading(true);
       try {
-        await removeMemberFromGate(gateId, username);
+        await (isClass ? removeMemberFromClass : removeMemberFromGate)(id, username);
         showNotification('Member removed successfully!', 'success');
       } catch (err) {
         showNotification(err.message || 'Failed to remove member', 'error');
@@ -348,14 +267,14 @@ const GatePage = () => {
         setActionLoading(false);
       }
     },
-    [removeMemberFromGate, showNotification]
+    [removeMemberFromClass, removeMemberFromGate, showNotification, setActionLoading]
   );
 
-  const handleUpdateGateMemberRole = useCallback(
-    async (gateId, username, newRole) => {
+  const handleUpdateMemberRole = useCallback(
+    async (id, username, newRole, isClass = false) => {
       setActionLoading(true);
       try {
-        await updateGateMemberRole(gateId, username, newRole);
+        await (isClass ? updateClassMemberRole : updateGateMemberRole)(id, username, newRole);
         showNotification('Member role updated successfully!', 'success');
       } catch (err) {
         showNotification(err.message || 'Failed to update member role', 'error');
@@ -363,73 +282,39 @@ const GatePage = () => {
         setActionLoading(false);
       }
     },
-    [updateGateMemberRole, showNotification]
+    [updateClassMemberRole, updateGateMemberRole, showNotification, setActionLoading]
   );
 
-  const handleAddClassMember = useCallback(
-    async (classId, memberData) => {
-      setActionLoading(true);
-      try {
-        const classItem = classes.find((c) => c.class_id === classId);
-        if (classItem?.members?.length >= classItem?.settings?.max_members) {
-          showNotification('Maximum member limit reached!', 'error');
-          return;
-        }
-        await addMemberToClass(classId, memberData);
-        showNotification('Member added successfully!', 'success');
-      } catch (err) {
-        showNotification(err.message || 'Failed to add member', 'error');
-      } finally {
-        setActionLoading(false);
-      }
-    },
-    [addMemberToClass, showNotification, classes]
-  );
-
-  const handleRemoveClassMember = useCallback(
-    async (classId, username) => {
-      setActionLoading(true);
-      try {
-        await removeMemberFromClass(classId, username);
-        showNotification('Member removed successfully!', 'success');
-      } catch (err) {
-        showNotification(err.message || 'Failed to remove member', 'error');
-      } finally {
-        setActionLoading(false);
-      }
-    },
-    [removeMemberFromClass, showNotification]
-  );
-
-  const handleUpdateClassMemberRole = useCallback(
-    async (classId, username, newRole) => {
-      setActionLoading(true);
-      try {
-        await updateClassMemberRole(classId, username, newRole);
-        showNotification('Member role updated successfully!', 'success');
-      } catch (err) {
-        showNotification(err.message || 'Failed to update member role', 'error');
-      } finally {
-        setActionLoading(false);
-      }
-    },
-    [updateClassMemberRole, showNotification]
-  );
-
-  const handleOpenMemberDialog = useCallback((classId) => {
+  // Dialog togglers
+  const handleOpenClassMemberDialog = useCallback((classId) => {
     setSelectedClassId(classId);
-    setMemberDialogOpen(true);
+    setMemberClassDialogOpen(true);
   }, []);
 
-  const handleSaveMembers = useCallback(() => {
-    setMemberDialogOpen(false);
-    setSelectedClassId(null);
-    showNotification('Members updated successfully!', 'success');
-  }, [showNotification]);
+  const handleOpenGateMemberDialog = useCallback(() => {
+    setMemberGateDialogOpen(true);
+  }, []);
 
-  const handleCancelMemberDialog = useCallback(() => {
-    setMemberDialogOpen(false);
+  const handleSaveMembers = useCallback(
+    (isClass = false) => {
+      if (isClass) {
+        setMemberClassDialogOpen(false);
+        setSelectedClassId(null);
+      } else {
+        setMemberGateDialogOpen(false);
+      }
+      showNotification('Members updated successfully!', 'success');
+    },
+    [showNotification]
+  );
+
+  const handleCancelClassMemberDialog = useCallback(() => {
+    setMemberClassDialogOpen(false);
     setSelectedClassId(null);
+  }, []);
+
+  const handleCancelGateMemberDialog = useCallback(() => {
+    setMemberGateDialogOpen(false);
   }, []);
 
   const handleResetFilters = useCallback(() => {
@@ -438,8 +323,9 @@ const GatePage = () => {
     debouncedSetSearchQuery.cancel();
   }, [debouncedSetSearchQuery]);
 
+  // Permissions
   const userRole = useMemo(
-    () => members.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || 'none',
+    () => members?.find((m) => m.anonymous_id === authData?.anonymous_id)?.role || 'none',
     [members, authData]
   );
   const isOwner = gateData?.creator_id === authData?.anonymous_id;
@@ -518,15 +404,15 @@ const GatePage = () => {
         },
         {
           label: 'Manage Members',
-          onClick: () => handleOpenMemberDialog(null),
+          onClick: handleOpenGateMemberDialog,
           tooltip: 'Manage gate members',
           disabled: actionLoading || !canEdit,
-          ariaLabel: 'Manage members',
+          ariaLabel: 'Manage gate members',
           isMenuItem: true,
         },
         {
           label: 'Delete Gate',
-          onClick: handleOpenDeleteGateDialog,
+          onClick: () => setDeleteGateDialogOpen(true),
           tooltip: 'Permanently delete this gate',
           disabled: actionLoading || !canDelete,
           ariaLabel: 'Delete gate',
@@ -549,25 +435,18 @@ const GatePage = () => {
       canEdit,
       canDelete,
       actionLoading,
+      gatesLoading,
+      classesLoading,
       handleOpenCreateClass,
-      handleOpenMemberDialog,
-      handleOpenDeleteGateDialog,
+      handleOpenGateMemberDialog,
       handleFavoriteToggle,
     ]
   );
 
-  if (authLoading || gatesLoading || classesLoading || isLoading) {
+  if (authLoading || isLoading || gatesLoading || classesLoading) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-        <Box sx={{ ...containerStyles, maxWidth: '1500px', mx: 'auto' }}>
-          <Skeleton variant='rectangular' sx={{ ...skeletonStyles.header, height: '150px' }} />
-          <Skeleton variant='rectangular' sx={{ ...skeletonStyles.filter, height: '60px' }} />
-          <Box sx={{ ...gridStyles.container }}>
-            {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} variant='rectangular' sx={{ ...skeletonStyles.card, height: '210px' }} />
-            ))}
-          </Box>
-        </Box>
+        <LoadingSkeleton />
       </AppLayout>
     );
   }
@@ -577,144 +456,121 @@ const GatePage = () => {
     return null;
   }
 
-  if (!gateData) {
-    showNotification('Gate not found', 'error');
+  if (!gateData && gateError && gateError !== 'canceled') {
+    showNotification('Gate not found or failed to load', 'error');
     navigate('/gates');
     return null;
   }
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-      <Box sx={{ ...containerStyles, maxWidth: '1500px', mx: 'auto' }}>
-        <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData} userRole={userRole}>
-          <Button
-            onClick={handleOpenCreateClass}
-            startIcon={<Add />}
-            sx={{ ...actionButtonStyles }}
-            aria-label="Create a new class"
-            disabled={actionLoading || gatesLoading || classesLoading}
-          >
-            Create Class
-          </Button>
-        </ProfileHeader>
-        <Filters
-          type="classes"
-          quickFilter={quickFilter}
-          setQuickFilter={setQuickFilter}
-          searchQuery={searchQuery}
-          setSearchQuery={debouncedSetSearchQuery}
-          filterOptions={filterOptions}
-          onReset={handleResetFilters}
-        />
-        <Grids
-          items={filteredClasses}
-          cardComponent={CardMain}
-          itemKey="class_id"
-          gridType="classes"
-          handleFavorite={toggleFavoriteClass}
-          setEditingItem={setEditingClass}
-          setItemToDelete={setClassToDelete}
-          setDeleteDialogOpen={setDeleteClassDialogOpen}
-          handleManageMembers={handleOpenMemberDialog}
-          navigate={navigate}
-          currentUser={authData}
-          token={token}
-          onCreateNew={handleOpenCreateClass}
-        />
-        <ClassFormDialog
-          open={createClassDialogOpen}
-          title="Create New Class"
-          classItem={popupClass}
-          setClass={setPopupClass}
-          onSave={handleCreateClass}
-          onCancel={handleCancelCreateClass}
-          disabled={actionLoading || gatesLoading || classesLoading}
-          gates={gates}
-          fixedGateId={gate_id}
-          initialGateId={gate_id}
-          currentGate={gateData}
-          loading={actionLoading}
-          aria-labelledby="create-class-dialog"
-        />
-        {editingClass && (
-          <ClassFormDialog
-            open={!!editingClass}
-            title="Edit Class"
-            classItem={editingClass}
-            setClass={setEditingClass}
-            onSave={handleUpdateClass}
-            onCancel={() => setEditingClass(null)}
-            disabled={actionLoading || gatesLoading || classesLoading}
-            gates={gates}
-            fixedGateId={gate_id}
-            initialGateId={gate_id}
-            currentGate={gateData}
-            loading={actionLoading}
-            aria-labelledby="edit-class-dialog"
-          />
-        )}
-        {editingGate && (
-          <GateFormDialog
-            open={editGateDialogOpen}
-            title="Edit Gate"
-            gate={editingGate}
-            setGate={setEditingGate}
-            onSave={handleUpdateGate}
-            onCancel={() => {
-              setEditGateDialogOpen(false);
-              setEditingGate(null);
-            }}
-            disabled={actionLoading || gatesLoading || classesLoading}
-            loading={actionLoading}
-            aria-labelledby="edit-gate-dialog"
-          />
-        )}
-        <MemberFormDialog
-          open={memberDialogOpen}
-          title={selectedClassId ? 'Manage Class Members' : 'Manage Gate Members'}
-          gateId={selectedClassId ? null : gate_id}
-          classId={selectedClassId}
-          token={token}
-          onSave={handleSaveMembers}
-          onCancel={handleCancelMemberDialog}
-          disabled={actionLoading || gatesLoading || classesLoading}
-          members={
-            selectedClassId ? classes.find((c) => c.class_id === selectedClassId)?.members || [] : members
-          }
-          addMember={selectedClassId ? handleAddClassMember : handleAddGateMember}
-          removeMember={selectedClassId ? handleRemoveClassMember : handleRemoveGateMember}
-          updateMemberRole={selectedClassId ? handleUpdateClassMemberRole : handleUpdateGateMemberRole}
-          loading={actionLoading}
-          aria-labelledby="manage-members-dialog"
-        />
-        <DeleteConfirmationDialog
-          open={deleteClassDialogOpen}
-          onClose={() => {
-            setDeleteClassDialogOpen(false);
-            setClassToDelete(null);
-          }}
-          onConfirm={handleDeleteClass}
-          message="Are you sure you want to delete this class? This action cannot be undone."
-          disabled={actionLoading || gatesLoading || classesLoading}
-          loading={actionLoading}
-          aria-labelledby="delete-class-dialog"
-        />
-        <DeleteConfirmationDialog
-          open={deleteGateDialogOpen}
-          onClose={() => setDeleteGateDialogOpen(false)}
-          onConfirm={handleDeleteGate}
-          message="Are you sure you want to delete this gate? This action cannot be undone."
-          disabled={actionLoading || gatesLoading || classesLoading}
-          loading={actionLoading}
-          aria-labelledby="delete-gate-dialog"
-        />
-      </Box>
+        <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData} userRole={userRole} />
+      <EntityGrid
+        type="classes"
+        items={filteredClasses || []}
+        cardComponent={CardMain}
+        itemKey="class_id"
+        quickFilter={quickFilter}
+        setQuickFilter={setQuickFilter}
+        searchQuery={searchQuery}
+        setSearchQuery={debouncedSetSearchQuery}
+        filterOptions={CLASS_FILTER_OPTIONS}
+        onResetFilters={handleResetFilters}
+        handleFavorite={toggleFavoriteClass}
+        setEditingItem={(classItem) => {
+          setEditingClass(classItem);
+          setEditClassDialogOpen(true);
+        }}
+        setItemToDelete={setClassToDelete}
+        setDeleteDialogOpen={setDeleteClassDialogOpen}
+        handleManageMembers={handleOpenClassMemberDialog}
+        navigate={navigate}
+        currentUser={authData}
+        token={token}
+        onCreateNew={handleOpenCreateClass}
+        disabled={actionLoading || gatesLoading || classesLoading}
+      />
+      {/* Class Dialogs */}
+      <EntityDialogs
+        type="classes"
+        createOpen={createClassDialogOpen}
+        editOpen={editClassDialogOpen}
+        deleteOpen={deleteClassDialogOpen}
+        memberOpen={memberClassDialogOpen}
+        item={popupClass}
+        setItem={setPopupClass}
+        editingItem={editingClass}
+        setEditingItem={setEditingClass}
+        itemToDelete={classToDelete}
+        setItemToDelete={setClassToDelete}
+        onSaveCreate={handleCreateClass}
+        onSaveEdit={handleUpdateClass}
+        onCancelCreate={handleCancelCreateClass}
+        onCancelEdit={() => {
+          setEditClassDialogOpen(false);
+          setEditingClass(null);
+        }}
+        onConfirmDelete={handleDeleteClass}
+        onCloseDelete={() => {
+          setDeleteClassDialogOpen(false);
+          setClassToDelete(null);
+        }}
+        selectedId={selectedClassId}
+        members={classesList?.find((c) => c.class_id === selectedClassId)?.members || []}
+        addMember={(id, memberData) => handleAddMember(id, memberData, true)}
+        removeMember={(id, username) => handleRemoveMember(id, username, true)}
+        updateMemberRole={(id, username, role) => handleUpdateMemberRole(id, username, role, true)}
+        onSaveMembers={() => handleSaveMembers(true)}
+        onCancelMembers={handleCancelClassMemberDialog}
+        disabled={actionLoading || gatesLoading || classesLoading}
+        loading={actionLoading}
+        token={token}
+        gates={gates}
+        classes={classesList}
+        currentGate={gateData}
+        fixedgate_id={gate_id}
+        initialgate_id={gate_id}
+      />
+      {/* Gate Dialogs */}
+      <EntityDialogs
+        type="gates"
+        createOpen={false}
+        editOpen={editGateDialogOpen}
+        deleteOpen={deleteGateDialogOpen}
+        memberOpen={memberGateDialogOpen}
+        item={editingGate}
+        setItem={setEditingGate}
+        editingItem={editingGate}
+        setEditingItem={setEditingGate}
+        itemToDelete={gate_id}
+        setItemToDelete={() => {}} // No-op for gate deletion
+        onSaveCreate={() => {}} // No create for gates here
+        onSaveEdit={handleUpdateGate}
+        onCancelCreate={() => {}} // No create for gates
+        onCancelEdit={() => {
+          setEditGateDialogOpen(false);
+          setEditingGate(null);
+        }}
+        onConfirmDelete={handleDeleteGate}
+        onCloseDelete={() => setDeleteGateDialogOpen(false)}
+        selectedId={gate_id}
+        members={gateData.members || []}
+        addMember={(id, memberData) => handleAddMember(id, memberData, false)}
+        removeMember={(id, username) => handleRemoveMember(id, username, false)}
+        updateMemberRole={(id, username, role) => handleUpdateMemberRole(id, username, role, false)}
+        onSaveMembers={() => handleSaveMembers(false)}
+        onCancelMembers={handleCancelGateMemberDialog}
+        disabled={actionLoading || gatesLoading}
+        loading={actionLoading}
+        token={token}
+        gates={gates}
+        classes={classesList}
+      />
     </AppLayout>
   );
 };
 
 GatePage.propTypes = {
-  navigate: PropTypes.func,
   token: PropTypes.string,
   authData: PropTypes.shape({
     anonymous_id: PropTypes.string,

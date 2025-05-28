@@ -1,24 +1,15 @@
-import api from "./apiClient";
-import { handleApiError } from "./apiClient";
+import { get, post, put, del, handleApiError } from './apiClient';
 
 // Базовий шлях API
-const BASE_GATE_PATH = "/api/v1/gates";
+const BASE_GATE_PATH = '/api/v1/gates';
 
-/**
- * Отримання списку гейтів
- * @param {string} token - Токен авторизації
- * @param {object} [filters={}] - Фільтри для запиту
- * @param {AbortSignal} [signal] - Сигнал для скасування запиту
- * @returns {Promise<object>} Дані гейтів
- * @throws {Error} У разі помилки API
- */
 export const fetchGates = async (token, filters = {}, signal) => {
-  if (!token) throw new Error("Token is required");
+  if (!token) throw new Error('Token is required');
   try {
-    const response = await api.get(BASE_GATE_PATH, {
+    const response = await get(BASE_GATE_PATH, {
       headers: { Authorization: `Bearer ${token}` },
       params: filters,
-      signal,
+      signal: signal instanceof AbortSignal ? signal : undefined, // Validate signal
     });
     return response.data.content;
   } catch (error) {
@@ -26,20 +17,12 @@ export const fetchGates = async (token, filters = {}, signal) => {
   }
 };
 
-/**
- * Отримання даних одного гейта за ID
- * @param {string} gateId - ID гейта
- * @param {string} token - Токен авторизації
- * @param {AbortSignal} [signal] - Сигнал для скасування запиту
- * @returns {Promise<object>} Дані гейта
- * @throws {Error} У разі помилки API
- */
 export const fetchGateById = async (gateId, token, signal) => {
-  if (!gateId || !token) throw new Error("Gate ID and token are required");
+  if (!gateId || !token) throw new Error('Gate ID and token are required');
   try {
-    const response = await api.get(`${BASE_GATE_PATH}/${gateId}`, {
+    const response = await get(`${BASE_GATE_PATH}/${gateId}`, {
       headers: { Authorization: `Bearer ${token}` },
-      signal,
+      signal: signal instanceof AbortSignal ? signal : undefined,
     });
     return response.data.content;
   } catch (error) {
@@ -47,17 +30,10 @@ export const fetchGateById = async (gateId, token, signal) => {
   }
 };
 
-/**
- * Створення нового гейта
- * @param {object} gateData - Дані гейта
- * @param {string} token - Токен авторизації
- * @returns {Promise<object>} Створений гейт
- * @throws {Error} У разі помилки API
- */
 export const createGate = async (gateData, token) => {
-  if (!gateData || !token) throw new Error("Gate data and token are required");
+  if (!gateData || !token) throw new Error('Gate data and token are required');
   try {
-    const response = await api.post(BASE_GATE_PATH, gateData, {
+    const response = await post(BASE_GATE_PATH, gateData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content;
@@ -66,18 +42,10 @@ export const createGate = async (gateData, token) => {
   }
 };
 
-/**
- * Оновлення гейта
- * @param {string} gateId - ID гейта
- * @param {object} gateData - Дані для оновлення
- * @param {string} token - Токен авторизації
- * @returns {Promise<object>} Оновлений гейт
- * @throws {Error} У разі помилки API
- */
 export const updateGate = async (gateId, gateData, token) => {
-  if (!gateId || !gateData || !token) throw new Error("Gate ID, data, and token are required");
+  if (!gateId || !gateData || !token) throw new Error('Gate ID, data, and token are required');
   try {
-    const response = await api.put(`${BASE_GATE_PATH}/${gateId}`, gateData, {
+    const response = await put(`${BASE_GATE_PATH}/${gateId}`, gateData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content;
@@ -86,18 +54,10 @@ export const updateGate = async (gateId, gateData, token) => {
   }
 };
 
-/**
- * Оновлення статусу гейта
- * @param {string} gateId - ID гейта
- * @param {object} statusData - Дані статусу
- * @param {string} token - Токен авторизації
- * @returns {Promise<object>} Оновлений гейт
- * @throws {Error} У разі помилки API
- */
 export const updateGateStatus = async (gateId, statusData, token) => {
-  if (!gateId || !statusData || !token) throw new Error("Gate ID, status data, and token are required");
+  if (!gateId || !statusData || !token) throw new Error('Gate ID, status data, and token are required');
   try {
-    const response = await api.put(`${BASE_GATE_PATH}/${gateId}/status`, statusData, {
+    const response = await put(`${BASE_GATE_PATH}/${gateId}/status`, statusData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content;
@@ -106,17 +66,10 @@ export const updateGateStatus = async (gateId, statusData, token) => {
   }
 };
 
-/**
- * Видалення гейта
- * @param {string} gateId - ID гейта
- * @param {string} token - Токен авторизації
- * @returns {Promise<object>} Дані видаленого гейта
- * @throws {Error} У разі помилки API
- */
 export const deleteGate = async (gateId, token) => {
-  if (!gateId || !token) throw new Error("Gate ID and token are required");
+  if (!gateId || !token) throw new Error('Gate ID and token are required');
   try {
-    const response = await api.delete(`${BASE_GATE_PATH}/${gateId}`, {
+    const response = await del(`${BASE_GATE_PATH}/${gateId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content;
@@ -125,18 +78,10 @@ export const deleteGate = async (gateId, token) => {
   }
 };
 
-/**
- * Додавання члена до гейта
- * @param {string} gateId - ID гейта
- * @param {object} memberData - Дані члена { username, role }
- * @param {string} token - Токен авторизації
- * @returns {Promise<object>} Оновлений гейт
- * @throws {Error} У разі помилки API
- */
 export const addGateMember = async (gateId, memberData, token) => {
-  if (!gateId || !memberData || !token) throw new Error("Gate ID, member data, and token are required");
+  if (!gateId || !memberData || !token) throw new Error('Gate ID, member data, and token are required');
   try {
-    const response = await api.post(`${BASE_GATE_PATH}/${gateId}/members`, memberData, {
+    const response = await post(`${BASE_GATE_PATH}/${gateId}/members`, memberData, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content;
@@ -145,18 +90,10 @@ export const addGateMember = async (gateId, memberData, token) => {
   }
 };
 
-/**
- * Видалення члена з гейта
- * @param {string} gateId - ID гейта
- * @param {string} username - Ім'я користувача
- * @param {string} token - Токен авторизації
- * @returns {Promise<object>} Оновлений гейт
- * @throws {Error} У разі помилки API
- */
 export const removeGateMember = async (gateId, username, token) => {
-  if (!gateId || !username || !token) throw new Error("Gate ID, username, and token are required");
+  if (!gateId || !username || !token) throw new Error('Gate ID, username, and token are required');
   try {
-    const response = await api.delete(`${BASE_GATE_PATH}/${gateId}/members/${encodeURIComponent(username)}`, {
+    const response = await del(`${BASE_GATE_PATH}/${gateId}/members/${encodeURIComponent(username)}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content;
@@ -165,19 +102,10 @@ export const removeGateMember = async (gateId, username, token) => {
   }
 };
 
-/**
- * Оновлення ролі члена гейта
- * @param {string} gateId - ID гейта
- * @param {string} username - Ім'я користувача
- * @param {object} data - Дані для оновлення { role }
- * @param {string} token - Токен авторизації
- * @returns {Promise<object>} Оновлений гейт
- * @throws {Error} У разі помилки API
- */
 export const updateGateMember = async (gateId, username, data, token) => {
-  if (!gateId || !username || !data || !token) throw new Error("Gate ID, username, data, and token are required");
+  if (!gateId || !username || !data || !token) throw new Error('Gate ID, username, data, and token are required');
   try {
-    const response = await api.put(`${BASE_GATE_PATH}/${gateId}/members/${encodeURIComponent(username)}`, data, {
+    const response = await put(`${BASE_GATE_PATH}/${gateId}/members/${encodeURIComponent(username)}`, data, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content;
@@ -186,20 +114,12 @@ export const updateGateMember = async (gateId, username, data, token) => {
   }
 };
 
-/**
- * Отримання списку членів гейта
- * @param {string} gateId - ID гейта
- * @param {string} token - Токен авторизації
- * @param {AbortSignal} [signal] - Сигнал для скасування запиту
- * @returns {Promise<object>} Дані членів
- * @throws {Error} У разі помилки API
- */
 export const fetchGateMembers = async (gateId, token, signal) => {
-  if (!gateId || !token) throw new Error("Gate ID and token are required");
+  if (!gateId || !token) throw new Error('Gate ID and token are required');
   try {
-    const response = await api.get(`${BASE_GATE_PATH}/${gateId}/members`, {
+    const response = await get(`${BASE_GATE_PATH}/${gateId}/members`, {
       headers: { Authorization: `Bearer ${token}` },
-      signal,
+      signal: signal instanceof AbortSignal ? signal : undefined,
     });
     return response.data.content;
   } catch (error) {
@@ -207,17 +127,10 @@ export const fetchGateMembers = async (gateId, token, signal) => {
   }
 };
 
-/**
- * Додавання гейта до улюблених
- * @param {string} gateId - ID гейта
- * @param {string} token - Токен авторизації
- * @returns {Promise<object>} Оновлений гейт
- * @throws {Error} У разі помилки API
- */
 export const favoriteGate = async (gateId, token) => {
-  if (!gateId || !token) throw new Error("Gate ID and token are required");
+  if (!gateId || !token) throw new Error('Gate ID and token are required');
   try {
-    const response = await api.post(`${BASE_GATE_PATH}/${gateId}/favorite`, {}, {
+    const response = await post(`${BASE_GATE_PATH}/${gateId}/favorite`, {}, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content;
@@ -226,17 +139,10 @@ export const favoriteGate = async (gateId, token) => {
   }
 };
 
-/**
- * Видалення гейта з улюблених
- * @param {string} gateId - ID гейта
- * @param {string} token - Токен авторизації
- * @returns {Promise<object>} Оновлений гейт
- * @throws {Error} У разі помилки API
- */
 export const unfavoriteGate = async (gateId, token) => {
-  if (!gateId || !token) throw new Error("Gate ID and token are required");
+  if (!gateId || !token) throw new Error('Gate ID and token are required');
   try {
-    const response = await api.post(`${BASE_GATE_PATH}/${gateId}/unfavorite`, {
+    const response = await post(`${BASE_GATE_PATH}/${gateId}/unfavorite`, {}, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.content;

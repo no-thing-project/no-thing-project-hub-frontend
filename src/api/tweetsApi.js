@@ -1,61 +1,116 @@
-import api from './apiClient';
-import { handleApiError } from './apiClient';
+import { get, post, put, del, handleApiError } from './apiClient';
 import { uuidSchema, contentSchema, positionSchema, reminderSchema, validatePayload, querySchema, commentQuerySchema } from '../constants/validations';
 import Joi from 'joi';
 
+const BASE_TWEET_PATH = '/api/v1/tweets';
+
 /**
- * Generic API request handler.
- * @param {string} method
- * @param {string} endpoint
- * @param {string} token
- * @param {Object} [options]
- * @returns {Promise<Object>}
+ * Fetch all tweets for a board
+ * @param {string} boardId - Board ID
+ * @param {string} token - Authorization token
+ * @param {object} [options={}] - Query options
+ * @param {AbortSignal} [signal] - Abort signal
+ * @returns {Promise<object>} Tweets data
  */
-const apiRequest = async (method, endpoint, token, { payload, params, signal } = {}) => {
+export const fetchTweetsApi = async (boardId, token, options = {}, signal) => {
+  validatePayload(uuidSchema, boardId, 'Invalid boardId');
+  validatePayload(querySchema, options, 'Invalid query options');
   try {
-    const config = {
+    const response = await get(`${BASE_TWEET_PATH}/${boardId}`, {
       headers: { Authorization: `Bearer ${token}` },
-      params,
-      signal,
-    };
-    const response = await api[method](endpoint, payload, config);
-    return response.data.content || response.data;
-  } catch (err) {
-    throw handleApiError(err, {});
+      params: options,
+      signal: signal instanceof AbortSignal ? signal : undefined,
+    });
+    return response.data.content || { tweets: [] };
+  } catch (error) {
+    throw handleApiError(error);
   }
 };
 
-// Fetch all tweets for a board
-export const fetchTweetsApi = (boardId, token, options = {}, signal) => {
-  validatePayload(uuidSchema, boardId, 'Invalid boardId');
-  validatePayload(querySchema, options, 'Invalid query options');
-  return apiRequest('get', `/api/v1/tweets/${boardId}`, token, { params: options, signal });
-};
-
-// Fetch a single tweet by ID
-export const fetchTweetById = (boardId, tweetId, token, signal) => {
+/**
+ * Fetch a single tweet by ID
+ * @param {string} boardId - Board ID
+ * @param {string} tweetId - Tweet ID
+ * @param {string} token - Authorization token
+ * @param {AbortSignal} [signal] - Abort signal
+ * @returns {Promise<object>} Tweet data
+ */
+export const fetchTweetById = async (boardId, tweetId, token, signal) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
-  return apiRequest('get', `/api/v1/tweets/${boardId}/${tweetId}`, token, { signal });
+  try {
+    const response = await get(`${BASE_TWEET_PATH}/${boardId}/${tweetId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: signal instanceof AbortSignal ? signal : undefined,
+    });
+    return response.data.content || null;
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };
 
-// Fetch comments for a tweet
-export const getTweetCommentsApi = (boardId, tweetId, token, options = {}, signal) => {
+/**
+ * Fetch comments for a tweet
+ * @param {string} boardId - Board ID
+ * @param {string} tweetId - Tweet ID
+ * @param {string} token - Authorization token
+ * @param {object} [options={}] - Query options
+ * @param {AbortSignal} [signal] - Abort signal
+ * @returns {Promise<object>} Comments data
+ */
+export const getTweetCommentsApi = async (boardId, tweetId, token, options = {}, signal) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
   validatePayload(commentQuerySchema, options, 'Invalid comment query options');
-  return apiRequest('get', `/api/v1/tweets/${boardId}/${tweetId}/comments`, token, { params: options, signal });
+  try {
+    const response = await get(`${BASE_TWEET_PATH}/${boardId}/${tweetId}/comments`, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: options,
+      signal: signal instanceof AbortSignal ? signal : undefined,
+    });
+    return response.data.content || { comments: [] };
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };
 
-// Generate presigned URL for file upload
-export const generatePresignedUrlApi = (fileType, contentType, token) => {
+/**
+ * Generate presigned URL for file upload
+ * @param {string} fileType - File type
+ * @param {string} contentType - Content type
+ * @param {string} token - Authorization token
+ * @returns {Promise<object>} Presigned URL data
+ */
+export const generatePresignedUrlApi = async (fileType, contentType, token) => {
   validatePayload(Joi.string().required(), fileType, 'Invalid fileType');
   validatePayload(Joi.string().required(), contentType, 'Invalid contentType');
-  return apiRequest('post', `/api/v1/tweets/presigned-url`, token, { payload: { fileType, contentType } });
+  try {
+    const response = await post(`${BASE_TWEET_PATH}/presigned-url`, { fileType, contentType }, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data.content || null;
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };
 
-// Create a new tweet
-export const createTweetApi = (
+/**
+ * Create a new tweet
+ * @param {string} boardId - Board ID
+ * @param {object} content - Tweet content
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ * @param {string} [parentTweetId] - Parent tweet ID
+ * @param {boolean} isAnonymous - Is anonymous
+ * @param {string} anonymousId - Anonymous ID
+ * @param {string} status - Tweet status
+ * @param {string} [scheduledAt] - Scheduled date
+ * @param {object} [reminder] - Reminder data
+ * @param {array} [files] - Files array
+ * @param {string} token - Authorization token
+ * @returns {Promise<object>} Created tweet data
+ */
+export const createTweetApi = async (
   boardId,
   content,
   x,
@@ -89,33 +144,44 @@ export const createTweetApi = (
       'Invalid files'
     );
   }
-
-  const payload = {
-    content: {
-      ...content,
-      metadata: {
-        ...content.metadata,
-        files: files || [],
+  try {
+    const payload = {
+      content: {
+        ...content,
+        metadata: {
+          ...content.metadata,
+          files: files || [],
+        },
       },
-    },
-    position: { x, y },
-    is_anonymous: isAnonymous,
-    anonymous_id: anonymousId,
-    status,
-    scheduled_at: scheduledAt || null,
-  };
-  if (parentTweetId) payload.parent_tweet_id = parentTweetId;
-  if (reminder) payload.reminder = reminder;
+      position: { x, y },
+      is_anonymous: isAnonymous,
+      anonymous_id: anonymousId,
+      status,
+      scheduled_at: scheduledAt || null,
+    };
+    if (parentTweetId) payload.parent_tweet_id = parentTweetId;
+    if (reminder) payload.reminder = reminder;
 
-  return apiRequest('post', `/api/v1/tweets/${boardId}`, token, { payload }).then(response => {
-    const tweet = response.tweets?.[0];
+    const response = await post(`${BASE_TWEET_PATH}/${boardId}`, payload, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const tweet = response.data.content?.tweets?.[0];
     if (!tweet || !tweet.tweet_id) throw new Error('Invalid tweet response from server');
     return tweet;
-  });
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };
 
-// Update an existing tweet
-export const updateTweetApi = (boardId, tweetId, updates, token) => {
+/**
+ * Update an existing tweet
+ * @param {string} boardId - Board ID
+ * @param {string} tweetId - Tweet ID
+ * @param {object} updates - Tweet updates
+ * @param {string} token - Authorization token
+ * @returns {Promise<object>} Updated tweet data
+ */
+export const updateTweetApi = async (boardId, tweetId, updates, token) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
   validatePayload(
@@ -129,14 +195,25 @@ export const updateTweetApi = (boardId, tweetId, updates, token) => {
     updates,
     'Invalid updates'
   );
-
-  return apiRequest('put', `/api/v1/tweets/${boardId}/${tweetId}`, token, { payload: updates }).then(
-    response => response.tweets?.[0]
-  );
+  try {
+    const response = await put(`${BASE_TWEET_PATH}/${boardId}/${tweetId}`, updates, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data.content?.tweets?.[0] || null;
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };
 
-// Update tweet status
-export const updateTweetStatusApi = (boardId, tweetId, status, token) => {
+/**
+ * Update tweet status
+ * @param {string} boardId - Board ID
+ * @param {string} tweetId - Tweet ID
+ * @param {string} status - New status
+ * @param {string} token - Authorization token
+ * @returns {Promise<object>} Updated tweet data
+ */
+export const updateTweetStatusApi = async (boardId, tweetId, status, token) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
   validatePayload(
@@ -144,65 +221,156 @@ export const updateTweetStatusApi = (boardId, tweetId, status, token) => {
     status,
     'Invalid status'
   );
-
-  return apiRequest('put', `/api/v1/tweets/${boardId}/${tweetId}/status`, token, { payload: { status } }).then(
-    response => response.tweets?.[0]
-  );
+  try {
+    const response = await put(`${BASE_TWEET_PATH}/${boardId}/${tweetId}/status`, { status }, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data.content?.tweets?.[0] || null;
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };
 
-// Toggle like/dislike for a tweet
-export const toggleLikeApi = (tweetId, isLiked, token) => {
+/**
+ * Toggle like/dislike for a tweet
+ * @param {string} tweetId - Tweet ID
+ * @param {boolean} isLiked - Current like state
+ * @param {string} token - Authorization token
+ * @returns {Promise<object>} Updated tweet data
+ */
+export const toggleLikeApi = async (tweetId, isLiked, token) => {
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
-  const endpoint = isLiked ? 'dislike' : 'like';
-  return apiRequest('post', `/api/v1/tweets/${tweetId}/${endpoint}`, token, {}).then(response => response.tweets?.[0]);
+  try {
+    const endpoint = isLiked ? 'dislike' : 'like';
+    const response = await post(`${BASE_TWEET_PATH}/${tweetId}/${endpoint}`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data.content?.tweets?.[0] || null;
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };
 
-// Delete a tweet
-export const deleteTweetApi = (boardId, tweetId, token) => {
+/**
+ * Delete a tweet
+ * @param {string} boardId - Board ID
+ * @param {string} tweetId - Tweet ID
+ * @param {string} token - Authorization token
+ * @returns {Promise<object>} Deleted tweet data
+ */
+export const deleteTweetApi = async (boardId, tweetId, token) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
-  return apiRequest('delete', `/api/v1/tweets/${boardId}/${tweetId}`, token, {}).then(response => response.tweets?.[0]);
+  try {
+    const response = await del(`${BASE_TWEET_PATH}/${boardId}/${tweetId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data.content?.tweets?.[0] || null;
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };
 
-// Move a tweet to another board
-export const moveTweetApi = (tweetId, targetBoardId, token) => {
+/**
+ * Move a tweet to another board
+ * @param {string} tweetId - Tweet ID
+ * @param {string} targetBoardId - Target board ID
+ * @param {string} token - Authorization token
+ * @returns {Promise<object>} Moved tweet data
+ */
+export const moveTweetApi = async (tweetId, targetBoardId, token) => {
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
   validatePayload(uuidSchema, targetBoardId, 'Invalid targetBoardId');
-  return apiRequest('post', `/api/v1/tweets/${tweetId}/move`, token, { payload: { targetBoardId } }).then(
-    response => response.tweets?.[0]
-  );
+  try {
+    const response = await post(`${BASE_TWEET_PATH}/${tweetId}/move`, { targetBoardId }, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data.content?.tweets?.[0] || null;
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };
 
-// Pin a tweet
-export const pinTweetApi = (boardId, tweetId, token) => {
+/**
+ * Pin a tweet
+ * @param {string} boardId - Board ID
+ * @param {string} tweetId - Tweet ID
+ * @param {string} token - Authorization token
+ * @returns {Promise<object>} Pinned tweet data
+ */
+export const pinTweetApi = async (boardId, tweetId, token) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
-  return apiRequest('post', `/api/v1/tweets/${boardId}/${tweetId}/pin`, token, {}).then(response => response.tweets?.[0]);
+  try {
+    const response = await post(`${BASE_TWEET_PATH}/${boardId}/${tweetId}/pin`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data.content?.tweets?.[0] || null;
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };
 
-// Unpin a tweet
-export const unpinTweetApi = (boardId, tweetId, token) => {
+/**
+ * Unpin a tweet
+ * @param {string} boardId - Board ID
+ * @param {string} tweetId - Tweet ID
+ * @param {string} token - Authorization token
+ * @returns {Promise<object>} Unpinned tweet data
+ */
+export const unpinTweetApi = async (boardId, tweetId, token) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
-  return apiRequest('post', `/api/v1/tweets/${boardId}/${tweetId}/unpin`, token, {}).then(response => response.tweets?.[0]);
+  try {
+    const response = await post(`${BASE_TWEET_PATH}/${boardId}/${tweetId}/unpin`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data.content?.tweets?.[0] || null;
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };
 
-// Set a reminder for a tweet
-export const setReminderApi = (boardId, tweetId, reminder, token) => {
+/**
+ * Set a reminder for a tweet
+ * @param {string} boardId - Board ID
+ * @param {string} tweetId - Tweet ID
+ * @param {object} reminder - Reminder data
+ * @param {string} token - Authorization token
+ * @returns {Promise<object>} Updated tweet data
+ */
+export const setReminderApi = async (boardId, tweetId, reminder, token) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
   validatePayload(reminderSchema, reminder, 'Invalid reminder');
-  return apiRequest('put', `/api/v1/tweets/${boardId}/${tweetId}/reminder`, token, { payload: reminder }).then(
-    response => response.tweets?.[0]
-  );
+  try {
+    const response = await put(`${BASE_TWEET_PATH}/${boardId}/${tweetId}/reminder`, reminder, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data.content?.tweets?.[0] || null;
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };
 
-// Share a tweet
-export const shareTweetApi = (boardId, tweetId, sharedTo, token) => {
+/**
+ * Share a tweet
+ * @param {string} boardId - Board ID
+ * @param {string} tweetId - Tweet ID
+ * @param {string} sharedTo - Share destination
+ * @param {string} token - Authorization token
+ * @returns {Promise<object>} Shared tweet data
+ */
+export const shareTweetApi = async (boardId, tweetId, sharedTo, token) => {
   validatePayload(uuidSchema, boardId, 'Invalid boardId');
   validatePayload(uuidSchema, tweetId, 'Invalid tweetId');
   validatePayload(Joi.string().required(), sharedTo, 'Invalid sharedTo');
-  return apiRequest('post', `/api/v1/tweets/${boardId}/${tweetId}/share`, token, { payload: { shared_to: sharedTo } }).then(
-    response => response.tweets?.[0]
-  );
+  try {
+    const response = await post(`${BASE_TWEET_PATH}/${boardId}/${tweetId}/share`, { shared_to: sharedTo }, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data.content?.tweets?.[0] || null;
+  } catch (error) {
+    throw handleApiError(error);
+  }
 };

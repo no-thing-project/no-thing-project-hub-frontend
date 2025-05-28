@@ -1,4 +1,3 @@
-// src/api/apiClient.js
 import axios from 'axios';
 import config from '../config';
 
@@ -8,6 +7,14 @@ const api = axios.create({
 });
 
 export const handleApiError = (err, setError) => {
+  if (err.name === 'CanceledError') {
+    const error = new Error('canceled');
+    error.status = err.response?.status;
+    console.debug('API Request canceled:', err);
+    if (setError) setError('canceled');
+    return error;
+  }
+
   const errorMessage = err.response?.data?.errors?.[0] || err.message || 'An error occurred';
   const detailedError = {
     message: errorMessage,
@@ -21,5 +28,31 @@ export const handleApiError = (err, setError) => {
   error.status = err.response?.status;
   throw error;
 };
+
+// Validate and normalize request config
+export const createRequest = async (method, url, config = {}) => {
+  const { headers = {}, params, data, signal, ...rest } = config;
+  console.debug('API Request signal:', signal instanceof AbortSignal ? 'Valid AbortSignal' : signal); // Debug
+  try {
+    const response = await api({
+      method,
+      url,
+      headers,
+      params,
+      data,
+      signal: signal instanceof AbortSignal ? signal : undefined, // Only pass valid AbortSignal
+      ...rest,
+    });
+    return response;
+  } catch (error) {
+    throw handleApiError(error);
+  }
+};
+
+// Convenience methods
+export const get = (url, config) => createRequest('get', url, config);
+export const post = (url, data, config) => createRequest('post', url, { ...config, data });
+export const put = (url, data, config) => createRequest('put', url, { ...config, data });
+export const del = (url, config) => createRequest('delete', url, config);
 
 export default api;

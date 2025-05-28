@@ -221,7 +221,7 @@ const Board = ({
         if (isFetching.current) return;
         isFetching.current = true;
         try {
-          await fetchTweets({ include_parents: true, page: 1, limit: 20 });
+          await fetchTweets({ page: 1, limit: 20 });
           setPage(1);
           centerBoard();
           showNotification('Board refreshed successfully!', 'success');
@@ -245,7 +245,7 @@ const Board = ({
       if (isFetching.current) return;
       isFetching.current = true;
       try {
-        await fetchTweets({ include_parents: true, page: 1, limit: 20 }, controller.signal);
+        await fetchTweets({ page: 1, limit: 20 }, controller.signal);
         centerBoard();
       } catch (err) {
         if (err.name !== 'AbortError') {
@@ -564,7 +564,7 @@ const Board = ({
     if (isFetching.current || tweets.length >= pagination.total) return;
     isFetching.current = true;
     try {
-      await fetchTweets({ include_parents: true, page: page + 1, limit: 20 });
+      await fetchTweets({ page: page + 1, limit: 20 });
       setPage((prev) => prev + 1);
     } catch (err) {
       if (err.name !== 'AbortError') {

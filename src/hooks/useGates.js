@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import ReactDOM from "react-dom";
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import {
   fetchGates,
   fetchGateById,
@@ -13,25 +13,25 @@ import {
   unfavoriteGate,
   updateGateMember,
   fetchGateMembers,
-} from "../api/gatesApi";
+} from '../api/gatesApi';
 
 // Constants for error messages
 const ERROR_MESSAGES = {
-  AUTH_REQUIRED: "Authentication required.",
-  GATE_ID_MISSING: "Gate ID is missing.",
-  GATE_NAME_MISSING: "Gate name is missing.",
-  GATE_NOT_FOUND: "Gate not found.",
-  STATUS_DATA_MISSING: "Status data is missing.",
-  USERNAME_MISSING: "Username is missing.",
-  ROLE_MISSING: "Role is missing.",
-  DATA_MISSING: "Required data is missing.",
-  RATE_LIMIT_EXCEEDED: "Rate limit exceeded, please try again later.",
-  GENERIC: "An error occurred.",
+  AUTH_REQUIRED: 'Authentication required.',
+  GATE_ID_MISSING: 'Gate ID is missing.',
+  GATE_NAME_MISSING: 'Gate name is missing.',
+  GATE_NOT_FOUND: 'Gate not found.',
+  STATUS_DATA_MISSING: 'Status data is missing.',
+  USERNAME_MISSING: 'Username is missing.',
+  ROLE_MISSING: 'Role is missing.',
+  DATA_MISSING: 'Required data is missing.',
+  RATE_LIMIT_EXCEEDED: 'Rate limit exceeded, please try again later.',
+  GENERIC: 'An error occurred.',
 };
 
 // Constants for cache
 const MAX_CACHE_SIZE = 10;
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = 'v1';
 const CACHE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
 const DEBOUNCE_MS = 300;
 
@@ -39,13 +39,6 @@ const DEBOUNCE_MS = 300;
 const gateListCache = new Map();
 const gateItemCache = new Map();
 
-/**
- * Hook for managing gates and their members
- * @param {string|null} token - Authorization token
- * @param {function} onLogout - Function to handle logout
- * @param {function} navigate - Function for navigation
- * @returns {object} Object with states and methods for gate operations
- */
 export const useGates = (token, onLogout, navigate) => {
   const [gates, setGates] = useState([]);
   const [gate, setGate] = useState(null);
@@ -56,34 +49,27 @@ export const useGates = (token, onLogout, navigate) => {
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  const debounceTimer = useRef(null);
-  const abortControllers = useRef(new Set());
+  const abortControllerRef = useRef(null);
+  const debounceTimerRef = useRef(null);
 
-  /**
-   * Check if cache entry is expired
-   * @param {object} cacheEntry - Cache entry with timestamp
-   * @returns {boolean} True if expired
-   */
   const isCacheExpired = useCallback((cacheEntry) => {
     return Date.now() - cacheEntry.timestamp > CACHE_EXPIRY_MS;
   }, []);
 
-  /**
-   * Handle authentication errors with retry for 429
-   * @param {Error} err - Error object
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {null} Always returns null
-   */
   const handleError = useCallback(
     async (err, retryCount = 0) => {
+      if (err.message === 'canceled') {
+        console.debug('Gate fetch canceled');
+        return null;
+      }
       const status = err.status || 500;
       if (status === 429 && retryCount < 3) {
         await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
         return;
       }
       if (status === 401 || status === 403) {
-        onLogout("Your session has expired. Please log in again.");
-        navigate("/login");
+        onLogout('Your session has expired. Please log in again.');
+        navigate('/login');
       }
       setError(
         status === 429
@@ -97,36 +83,26 @@ export const useGates = (token, onLogout, navigate) => {
     [onLogout, navigate]
   );
 
-  /**
-   * Normalize gate members data
-   * @param {Array} members - Array of members
-   * @returns {Array} Normalized array of members
-   */
   const normalizeMembers = useCallback((members = []) => {
     return members.map((member) => ({
-      member_id: member.user?.anonymous_id || member.anonymous_id || "",
-      username: member.user?.username || "Unknown",
-      role: member.role || "viewer",
+      member_id: member.user?.anonymous_id || member.anonymous_id || '',
+      username: member.user?.username || 'Unknown',
+      role: member.role || 'viewer',
       joined_at: member.joined_at || null,
       avatar: member.user?.avatar || null,
       total_points: member.user?.total_points || 0,
-      anonymous_id: member.user?.anonymous_id || member.anonymous_id || "",
+      anonymous_id: member.user?.anonymous_id || member.anonymous_id || '',
     }));
   }, []);
 
-  /**
-   * Normalize gate classes data
-   * @param {Array} classes - Array of classes
-   * @returns {Array} Normalized array of classes
-   */
   const normalizeClasses = useCallback((classes = []) => {
     return classes.map((cls) => ({
-      class_id: cls.class_id || "",
-      name: cls.name || "Untitled Class",
-      description: cls.description || "",
-      gate_id: cls.gate_id || "",
-      creator_id: cls.creator_id || "",
-      visibility: cls.visibility || "private",
+      class_id: cls.class_id || '',
+      name: cls.name || 'Untitled Class',
+      description: cls.description || '',
+      gate_id: cls.gate_id || '',
+      creator_id: cls.creator_id || '',
+      visibility: cls.visibility || 'private',
       access: cls.access || { is_public: false },
       settings: cls.settings || {},
       stats: {
@@ -138,16 +114,12 @@ export const useGates = (token, onLogout, navigate) => {
       favorited_by: cls.favorited_by || [],
       is_favorited: cls.is_favorited || false,
       tags: cls.tags || [],
-      status: cls.status || "active",
+      status: cls.status || 'active',
       created_at: cls.created_at || null,
       updated_at: cls.updated_at || null,
     }));
   }, []);
 
-  /**
-   * Reset hook state
-   * @param {boolean} [fullReset=true] - Whether to reset all states
-   */
   const resetState = useCallback((fullReset = true) => {
     ReactDOM.unstable_batchedUpdates(() => {
       setGates([]);
@@ -162,50 +134,35 @@ export const useGates = (token, onLogout, navigate) => {
     });
   }, []);
 
-  /**
-   * Create AbortController with cleanup
-   * @returns {AbortController} New AbortController instance
-   */
-  const createAbortController = useCallback(() => {
-    const controller = new AbortController();
-    abortControllers.current.add(controller);
-    return controller;
+  const cleanup = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
   }, []);
 
-  /**
-   * Cleanup AbortControllers
-   */
-  const cleanupAbortControllers = useCallback(() => {
-    abortControllers.current.forEach((controller) => controller.abort());
-    abortControllers.current.clear();
-  }, []);
-
-  /**
-   * Debounce utility
-   * @param {function} fn - Function to debounce
-   * @param {number} ms - Debounce time in milliseconds
-   * @returns {function} Debounced function
-   */
   const debounce = useCallback((fn, ms) => {
     return (...args) => {
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
       }
       return new Promise((resolve) => {
-        debounceTimer.current = setTimeout(async () => {
-          const result = await fn(...args);
-          resolve(result);
+        debounceTimerRef.current = setTimeout(async () => {
+          try {
+            const result = await fn(...args);
+            resolve(result);
+          } catch (err) {
+            resolve(null);
+          }
         }, ms);
       });
     };
   }, []);
 
-  /**
-   * Fetch list of gates with caching
-   * @param {object} [filters={}] - Query filters
-   * @param {AbortSignal} [signal] - Abort signal for request cancellation
-   * @returns {Promise<object|null>} Gates data or null if error
-   */
   const fetchGatesList = useCallback(
     async (filters = {}, signal) => {
       if (!token) {
@@ -228,8 +185,9 @@ export const useGates = (token, onLogout, navigate) => {
       setError(null);
 
       try {
+        console.debug('Fetching gates with signal:', signal instanceof AbortSignal); // Debug
         const data = await fetchGates(token, filters, signal);
-        if (!data) throw new Error("No data received");
+        if (!data) throw new Error('No data received');
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setGates(data.gates || []);
@@ -244,8 +202,8 @@ export const useGates = (token, onLogout, navigate) => {
         gateListCache.set(cacheKey, { ...data, timestamp });
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch gates error:", err);
+        if (err.name !== 'CanceledError' && err.message !== 'canceled') {
+          console.error('Fetch gates error:', err);
           return handleError(err);
         }
         return null;
@@ -261,12 +219,6 @@ export const useGates = (token, onLogout, navigate) => {
     [fetchGatesList]
   );
 
-  /**
-   * Fetch a single gate by ID
-   * @param {string} gateId - Gate ID
-   * @param {AbortSignal} [signal] - Abort signal for request cancellation
-   * @returns {Promise<object|null>} Gate data or null if error
-   */
   const fetchGate = useCallback(
     async (gateId, signal) => {
       if (!token || !gateId?.trim()) {
@@ -291,7 +243,7 @@ export const useGates = (token, onLogout, navigate) => {
 
       try {
         const gateData = await fetchGateById(gateId, token, signal);
-        if (!gateData) throw new Error("No gate data received");
+        if (!gateData) throw new Error('No gate data received');
         const timestamp = Date.now();
         const normalizedData = {
           ...gateData,
@@ -312,8 +264,8 @@ export const useGates = (token, onLogout, navigate) => {
         gateItemCache.set(cacheKey, { ...normalizedData, timestamp });
         return normalizedData;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch gate error:", err);
+        if (err.name !== 'CanceledError' && err.message !== 'canceled') {
+          console.error('Fetch gate error:', err);
           return handleError(err);
         }
         return null;
@@ -323,13 +275,8 @@ export const useGates = (token, onLogout, navigate) => {
     },
     [token, handleError, normalizeMembers, normalizeClasses, isCacheExpired]
   );
-  /**
-   * Create a new gate
-   * @param {object} gateData - Gate data
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Created gate or null if error
-   */
-    const createNewGate = useCallback(
+
+  const createNewGate = useCallback(
     async (gateData, retryCount = 0) => {
       if (!token || !gateData?.name?.trim()) {
         setError(token ? ERROR_MESSAGES.GATE_NAME_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
@@ -344,7 +291,7 @@ export const useGates = (token, onLogout, navigate) => {
           {
             ...gateData,
             is_public: gateData.is_public ?? true,
-            visibility: gateData.visibility || (gateData.is_public ? "public" : "private"),
+            visibility: gateData.visibility || (gateData.is_public ? 'public' : 'private'),
             settings: {
               class_creation_cost: gateData.settings?.class_creation_cost || 100,
               board_creation_cost: gateData.settings?.board_creation_cost || 50,
@@ -355,7 +302,7 @@ export const useGates = (token, onLogout, navigate) => {
           },
           token
         );
-        if (!newGate) throw new Error("Failed to create gate");
+        if (!newGate) throw new Error('Failed to create gate');
         const timestamp = Date.now();
         ReactDOM.unstable_batchedUpdates(() => {
           setGates((prev) => [...prev, newGate]);
@@ -369,7 +316,7 @@ export const useGates = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return createNewGate(gateData, retryCount + 1);
         }
-        console.error("Create gate error:", err);
+        console.error('Create gate error:', err);
         return handleError(err);
       } finally {
         setLoading(false);
@@ -378,13 +325,6 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleError]
   );
 
-  /**
-   * Update an existing gate
-   * @param {string} gateId - Gate ID
-   * @param {object} gateData - Updated gate data
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated gate or null if error
-   */
   const updateExistingGate = useCallback(
     async (gateId, gateData, retryCount = 0) => {
       if (!token || !gateId?.trim() || !gateData?.name?.trim()) {
@@ -404,7 +344,7 @@ export const useGates = (token, onLogout, navigate) => {
       try {
         const { gate_id, ...updateData } = gateData;
         const updatedGate = await updateGate(gateId, updateData, token);
-        if (!updatedGate) throw new Error("Failed to update gate");
+        if (!updatedGate) throw new Error('Failed to update gate');
         const cacheKey = `${CACHE_VERSION}:${gateId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
@@ -427,7 +367,7 @@ export const useGates = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return updateExistingGate(gateId, gateData, retryCount + 1);
         }
-        console.error("Update gate error:", err);
+        console.error('Update gate error:', err);
         return handleError(err);
       } finally {
         setLoading(false);
@@ -436,13 +376,6 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleError]
   );
 
-  /**
-   * Update gate status
-   * @param {string} gateId - Gate ID
-   * @param {object} statusData - Status data
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated gate or null if error
-   */
   const updateGateStatusById = useCallback(
     async (gateId, statusData, retryCount = 0) => {
       if (!token || !gateId?.trim() || !statusData) {
@@ -457,11 +390,9 @@ export const useGates = (token, onLogout, navigate) => {
       }
 
       setLoading(true);
-      setError(null);
-
       try {
         const updatedGate = await updateGateStatus(gateId, statusData, token);
-        if (!updatedGate) throw new Error("Failed to update gate status");
+        if (!updatedGate) throw new Error('Failed to update gate status');
         const cacheKey = `${CACHE_VERSION}:${gateId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
@@ -484,7 +415,7 @@ export const useGates = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return updateGateStatusById(gateId, statusData, retryCount + 1);
         }
-        console.error("Update gate status error:", err);
+        console.error('Update gate status error:', err);
         return handleError(err);
       } finally {
         setLoading(false);
@@ -493,12 +424,6 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleError]
   );
 
-  /**
-   * Delete an existing gate
-   * @param {string} gateId - Gate ID
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<boolean|null>} True if deleted, null if error
-   */
   const deleteExistingGate = useCallback(
     async (gateId, retryCount = 0) => {
       if (!token || !gateId?.trim()) {
@@ -533,7 +458,7 @@ export const useGates = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return deleteExistingGate(gateId, retryCount + 1);
         }
-        console.error("Delete gate error:", err);
+        console.error('Delete gate error:', err);
         return handleError(err);
       } finally {
         setLoading(false);
@@ -542,15 +467,8 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleError]
   );
 
-  /**
-   * Add a member to a gate
-   * @param {string} gateId - Gate ID
-   * @param {object} memberData - Member data { username, role }
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated gate or null if error
-   */
   const addMemberToGate = useCallback(
-    async (gateId, { username, role = "viewer" }, retryCount = 0) => {
+    async (gateId, { username, role = 'viewer' }, retryCount = 0) => {
       if (!token || !gateId?.trim() || !username?.trim()) {
         setError(
           !token
@@ -567,7 +485,7 @@ export const useGates = (token, onLogout, navigate) => {
 
       try {
         const updatedGate = await addGateMember(gateId, { username, role }, token);
-        if (!updatedGate) throw new Error("Failed to add member");
+        if (!updatedGate) throw new Error('Failed to add member');
         const cacheKey = `${CACHE_VERSION}:${gateId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setMembers(normalizeMembers(updatedGate.members));
@@ -583,7 +501,7 @@ export const useGates = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return addMemberToGate(gateId, { username, role }, retryCount + 1);
         }
-        console.error("Add member error:", err);
+        console.error('Add member error:', err);
         return handleError(err);
       } finally {
         setLoading(false);
@@ -592,13 +510,6 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleError, normalizeMembers]
   );
 
-  /**
-   * Remove a member from a gate
-   * @param {string} gateId - Gate ID
-   * @param {string} username - Username
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated gate or null if error
-   */
   const removeMemberFromGate = useCallback(
     async (gateId, username, retryCount = 0) => {
       if (!token || !gateId?.trim() || !username?.trim()) {
@@ -617,7 +528,7 @@ export const useGates = (token, onLogout, navigate) => {
 
       try {
         const updatedGate = await removeGateMember(gateId, username, token);
-        if (!updatedGate) throw new Error("Failed to remove member");
+        if (!updatedGate) throw new Error('Failed to remove member');
         const cacheKey = `${CACHE_VERSION}:${gateId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setMembers(normalizeMembers(updatedGate.members));
@@ -633,7 +544,7 @@ export const useGates = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return removeMemberFromGate(gateId, username, retryCount + 1);
         }
-        console.error("Remove member error:", err);
+        console.error('Remove member error:', err);
         return handleError(err);
       } finally {
         setLoading(false);
@@ -642,14 +553,6 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleError, normalizeMembers]
   );
 
-  /**
-   * Update a member's role in a gate
-   * @param {string} gateId - Gate ID
-   * @param {string} username - Username
-   * @param {string} role - New role
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated gate or null if error
-   */
   const updateMemberRole = useCallback(
     async (gateId, username, role, retryCount = 0) => {
       if (!token || !gateId?.trim() || !username?.trim() || !role?.trim()) {
@@ -670,7 +573,7 @@ export const useGates = (token, onLogout, navigate) => {
 
       try {
         const updatedGate = await updateGateMember(gateId, username, { role }, token);
-        if (!updatedGate) throw new Error("Failed to update member role");
+        if (!updatedGate) throw new Error('Failed to update member role');
         const cacheKey = `${CACHE_VERSION}:${gateId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setMembers(normalizeMembers(updatedGate.members));
@@ -686,7 +589,7 @@ export const useGates = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return updateMemberRole(gateId, username, role, retryCount + 1);
         }
-        console.error("Update member role error:", err);
+        console.error('Update member role error:', err);
         return handleError(err);
       } finally {
         setLoading(false);
@@ -695,12 +598,6 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleError, normalizeMembers]
   );
 
-  /**
-   * Fetch gate members list
-   * @param {string} gateId - Gate ID
-   * @param {AbortSignal} [signal] - Abort signal for request cancellation
-   * @returns {Promise<object|null>} Members data or null if error
-   */
   const fetchGateMembersList = useCallback(
     async (gateId, signal) => {
       if (!token || !gateId?.trim()) {
@@ -713,15 +610,15 @@ export const useGates = (token, onLogout, navigate) => {
 
       try {
         const data = await fetchGateMembers(gateId, token, signal);
-        if (!data) throw new Error("No members data received");
+        if (!data) throw new Error('No members data received');
         ReactDOM.unstable_batchedUpdates(() => {
           setMembers(normalizeMembers(data.members));
           setLastUpdated(Date.now());
         });
         return data;
       } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("Fetch gate members error:", err);
+        if (err.name !== 'CanceledError' && err.message !== 'canceled') {
+          console.error('Fetch gate members error:', err);
           return handleError(err);
         }
         return null;
@@ -732,13 +629,6 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleError, normalizeMembers]
   );
 
-  /**
-   * Toggle favorite status for a gate
-   * @param {string} gateId - Gate ID
-   * @param {boolean} isFavorited - Current favorite status
-   * @param {number} [retryCount=0] - Retry count
-   * @returns {Promise<object|null>} Updated gate or null if error
-   */
   const toggleFavoriteGate = useCallback(
     async (gateId, isFavorited, retryCount = 0) => {
       if (!token || !gateId?.trim()) {
@@ -750,10 +640,8 @@ export const useGates = (token, onLogout, navigate) => {
       setError(null);
 
       try {
-        const updatedGate = isFavorited
-          ? await unfavoriteGate(gateId, token)
-          : await favoriteGate(gateId, token);
-        if (!updatedGate) throw new Error("Failed to toggle favorite status");
+        const updatedGate = isFavorited ? await unfavoriteGate(gateId, token) : await favoriteGate(gateId, token);
+        if (!updatedGate) throw new Error('Failed to toggle favorite status');
         const cacheKey = `${CACHE_VERSION}:${gateId}`;
         ReactDOM.unstable_batchedUpdates(() => {
           setGates((prev) => prev.map((g) => (g.gate_id === gateId ? updatedGate : g)));
@@ -776,7 +664,7 @@ export const useGates = (token, onLogout, navigate) => {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (retryCount + 1)));
           return toggleFavoriteGate(gateId, isFavorited, retryCount + 1);
         }
-        console.error("Toggle favorite error:", err);
+        console.error('Toggle favorite error:', err);
         return handleError(err);
       } finally {
         setLoading(false);
@@ -785,30 +673,25 @@ export const useGates = (token, onLogout, navigate) => {
     [token, handleError]
   );
 
-  // Handle token change and initial fetch
   useEffect(() => {
     if (!token) {
-      cleanupAbortControllers();
+      cleanup();
       resetState();
       return;
     }
 
-    const controller = createAbortController();
-    debouncedFetchGatesList({}, controller.signal).catch((err) => {
-      if (err.name !== "AbortError") {
-        console.error("Initial fetch gates error:", err);
+    abortControllerRef.current = new AbortController();
+    debouncedFetchGatesList({}, abortControllerRef.current.signal).catch((err) => {
+      if (err.name !== 'CanceledError' && err.message !== 'canceled') {
+        console.error('Initial fetch gates error:', err);
       }
     });
 
     return () => {
-      cleanupAbortControllers();
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
-      }
+      cleanup();
     };
-  }, [token, debouncedFetchGatesList, resetState, createAbortController, cleanupAbortControllers]);
+  }, [token, debouncedFetchGatesList, resetState, cleanup]);
 
-  // Memoized return object
   return useMemo(
     () => ({
       gates,

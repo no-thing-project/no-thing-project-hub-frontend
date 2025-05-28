@@ -112,7 +112,7 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         const effectiveSignal = signal || abortControllerRef.current.signal;
 
         try {
-          const data = await fetchTweetsApi(boardId, token, { ...options, limit: options.limit || 20, include_parents: true }, effectiveSignal);
+          const data = await fetchTweetsApi(boardId, token, { ...options, limit: options.limit || 20 }, effectiveSignal);
           const normalizedTweets = data.tweets.map((tweet) => ({
             ...normalizeTweet(tweet, currentUser),
             children: tweet.children?.map((child) => normalizeTweet(child, currentUser)) || [],

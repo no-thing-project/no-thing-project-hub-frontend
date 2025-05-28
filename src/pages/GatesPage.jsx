@@ -1,21 +1,21 @@
-import React, { useState, useCallback, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { Box, Skeleton } from "@mui/material";
-import { Add } from "@mui/icons-material";
-import { debounce } from "lodash";
-import PropTypes from "prop-types";
-import AppLayout from "../components/Layout/AppLayout";
-import { useGates } from "../hooks/useGates";
-import useAuth from "../hooks/useAuth";
-import { useNotification } from "../context/NotificationContext";
-import ProfileHeader from "../components/Headers/ProfileHeader";
-import Filters from "../components/Filters/Filters";
-import Grids from "../components/Grids/Grids";
-import GateFormDialog from "../components/Dialogs/GateFormDialog";
-import MemberFormDialog from "../components/Dialogs/MemberFormDialog";
-import DeleteConfirmationDialog from "../components/Dialogs/DeleteConfirmationDialog";
-import CardMain from "../components/Cards/CardMain";
-import { containerStyles } from "../styles/BaseStyles";
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import PropTypes from 'prop-types';
+import { Add } from '@mui/icons-material';
+import { debounce } from 'lodash';
+import AppLayout from '../components/Layout/AppLayout';
+import ProfileHeader from '../components/Headers/ProfileHeader';
+import useAuth from '../hooks/useAuth';
+import { useGates } from '../hooks/useGates';
+import { useEntity } from '../hooks/useEntity';
+import { useNotification } from '../context/NotificationContext';
+import CardMain from '../components/Cards/CardMain';
+import EntityGrid from '../components/Common/EntityGrid';
+import EntityDialogs from '../components/Common/EntityDialogs';
+import LoadingSkeleton from '../components/Common/LoadingSkeleton';
+import { filterEntities } from '../utils/filterUtils';
+import { DEFAULT_GATE } from '../constants/default'
+import { GATE_FILTER_OPTIONS } from '../constants/filterOptions'
 
 const GatesPage = () => {
   const navigate = useNavigate();
@@ -23,20 +23,18 @@ const GatesPage = () => {
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth();
   const {
     gates,
-    loading: gatesLoading,
-    error: gatesError,
     fetchGatesList,
     createNewGate,
     updateExistingGate,
     deleteExistingGate,
     addMemberToGate,
     removeMemberFromGate,
-    toggleFavoriteGate,
     updateMemberRole,
+    toggleFavoriteGate,
+    loading: gatesLoading,
+    error: gatesError,
   } = useGates(token, handleLogout, navigate);
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [memberDialogOpen, setMemberDialogOpen] = useState(false);
@@ -44,132 +42,62 @@ const GatesPage = () => {
   const [selectedGateId, setSelectedGateId] = useState(null);
   const [editingGate, setEditingGate] = useState(null);
   const [gateToDelete, setGateToDelete] = useState(null);
-  const [quickFilter, setQuickFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [retryCount, setRetryCount] = useState(0);
+  const [popupGate, setPopupGate] = useState(DEFAULT_GATE);
+  const [quickFilter, setQuickFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const [popupGate, setPopupGate] = useState({
-    name: "",
-    description: "",
-    is_public: true,
-    visibility: "public",
-    type: "community",
-    settings: {
-      class_creation_cost: 100,
-      board_creation_cost: 50,
-      max_members: 1000,
-      ai_moderation_enabled: true,
-    },
-  });
+  const stableFetchGatesList = useMemo(() => [fetchGatesList], [fetchGatesList]);
+
+  const { isLoading, actionLoading, setActionLoading } = useEntity(
+    stableFetchGatesList,
+    token,
+    handleLogout,
+    navigate,
+    'gates'
+  );
 
   const debouncedSetSearchQuery = useMemo(
     () => debounce((value) => setSearchQuery(value), 300),
     []
   );
 
-  const loadData = useCallback(
-    async (signal) => {
-      if (!isAuthenticated || !token) {
-        showNotification("Authentication required.", "error");
-        setIsLoading(false);
-        return;
-      }
-      setIsLoading(true);
-      try {
-        await fetchGatesList({}, signal);
-        setRetryCount(0);
-      } catch (err) {
-        if (err.name !== "AbortError") {
-          showNotification(err.message || "Failed to load gates", "error");
-          if (retryCount < 3) {
-            const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff
-            setTimeout(() => setRetryCount((prev) => prev + 1), delay);
-          }
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [isAuthenticated, token, fetchGatesList, showNotification, retryCount]
-  );
-
   useEffect(() => {
-    const controller = new AbortController();
-    loadData(controller.signal);
-    return () => controller.abort();
-  }, [loadData]);
-
-  useEffect(() => {
-    if (gatesError) showNotification(gatesError, "error");
+    if (gatesError) showNotification(gatesError, 'error');
   }, [gatesError, showNotification]);
 
-  const filteredGates = useMemo(() => {
-    const lowerSearchQuery = searchQuery.toLowerCase();
-    return gates.filter((gate) => {
-      const matchesSearch =
-        (gate.name?.toLowerCase() || "").includes(lowerSearchQuery) ||
-        (gate.description?.toLowerCase() || "").includes(lowerSearchQuery) ||
-        (gate.tags || []).some((tag) => tag.toLowerCase().includes(lowerSearchQuery));
-      if (!matchesSearch) return false;
-      switch (quickFilter) {
-        case "public":
-          return gate.is_public || gate.access?.is_public;
-        case "private":
-          return !(gate.is_public || gate.access?.is_public);
-        case "favorited":
-          return gate.is_favorited;
-        case "community":
-          return gate.type === "community";
-        case "organization":
-          return gate.type === "organization";
-        default:
-          return true;
-      }
-    });
-  }, [gates, quickFilter, searchQuery]);
+  const filteredGates = useMemo(
+    () => filterEntities(gates, 'gates', quickFilter, searchQuery),
+    [gates, quickFilter, searchQuery]
+  );
 
-  const handleOpenCreateGate = useCallback(() => {
-    setCreateDialogOpen(true);
-  }, []);
-
-  const handleCancelCreateGate = useCallback(() => {
+  const handleOpenCreate = useCallback(() => setCreateDialogOpen(true), []);
+  const handleCancelCreate = useCallback(() => {
     setCreateDialogOpen(false);
+    setPopupGate(DEFAULT_GATE);
   }, []);
 
-  const handleCreateGate = useCallback(async () => {
+  const handleCreate = useCallback(async () => {
     if (!popupGate.name.trim()) {
-      showNotification("Gate name is required!", "error");
+      showNotification('Gate name is required!', 'error');
       return;
     }
     setActionLoading(true);
     try {
       const createdGate = await createNewGate(popupGate);
       setCreateDialogOpen(false);
-      setPopupGate({
-        name: "",
-        description: "",
-        is_public: true,
-        visibility: "public",
-        type: "community",
-        settings: {
-          class_creation_cost: 100,
-          board_creation_cost: 50,
-          max_members: 1000,
-          ai_moderation_enabled: true,
-        },
-      });
-      showNotification("Gate created successfully!", "success");
+      setPopupGate(DEFAULT_GATE);
+      showNotification('Gate created successfully!', 'success');
       navigate(`/gate/${createdGate.gate_id}`);
     } catch (err) {
-      showNotification(err.message || "Failed to create gate", "error");
+      showNotification(err.message || 'Failed to create gate', 'error');
     } finally {
       setActionLoading(false);
     }
-  }, [popupGate, createNewGate, navigate, showNotification]);
+  }, [popupGate, createNewGate, navigate, showNotification, setActionLoading]);
 
-  const handleUpdateGate = useCallback(async () => {
+  const handleUpdate = useCallback(async () => {
     if (!editingGate?.name.trim()) {
-      showNotification("Gate name is required!", "error");
+      showNotification('Gate name is required!', 'error');
       return;
     }
     setActionLoading(true);
@@ -177,44 +105,28 @@ const GatesPage = () => {
       await updateExistingGate(editingGate.gate_id, editingGate);
       setEditDialogOpen(false);
       setEditingGate(null);
-      showNotification("Gate updated successfully!", "success");
+      showNotification('Gate updated successfully!', 'success');
     } catch (err) {
-      showNotification(err.message || "Failed to update gate", "error");
+      showNotification(err.message || 'Failed to update gate', 'error');
     } finally {
       setActionLoading(false);
     }
-  }, [editingGate, updateExistingGate, showNotification]);
+  }, [editingGate, updateExistingGate, showNotification, setActionLoading]);
 
-  const handleDeleteGate = useCallback(async () => {
+  const handleDelete = useCallback(async () => {
     if (!gateToDelete) return;
     setActionLoading(true);
     try {
       await deleteExistingGate(gateToDelete);
       setDeleteDialogOpen(false);
       setGateToDelete(null);
-      showNotification("Gate deleted successfully!", "success");
+      showNotification('Gate deleted successfully!', 'success');
     } catch (err) {
-      showNotification(err.message || "Failed to delete gate", "error");
+      showNotification(err.message || 'Failed to delete gate', 'error');
     } finally {
       setActionLoading(false);
     }
-  }, [gateToDelete, deleteExistingGate, showNotification]);
-
-  const handleOpenMemberDialog = useCallback((gateId) => {
-    setSelectedGateId(gateId);
-    setMemberDialogOpen(true);
-  }, []);
-
-  const handleCancelMemberDialog = useCallback(() => {
-    setMemberDialogOpen(false);
-    setSelectedGateId(null);
-  }, []);
-
-  const handleSaveMembers = useCallback(() => {
-    setMemberDialogOpen(false);
-    setSelectedGateId(null);
-    showNotification("Members updated successfully!", "success");
-  }, [showNotification]);
+  }, [gateToDelete, deleteExistingGate, showNotification, setActionLoading]);
 
   const handleAddMember = useCallback(
     async (gateId, memberData) => {
@@ -222,18 +134,18 @@ const GatesPage = () => {
       try {
         const gate = gates.find((g) => g.gate_id === gateId);
         if (gate?.members?.length >= gate?.settings?.max_members) {
-          showNotification("Maximum member limit reached!", "error");
+          showNotification('Maximum member limit reached!', 'error');
           return;
         }
         await addMemberToGate(gateId, memberData);
-        showNotification("Member added successfully!", "success");
+        showNotification('Member added successfully!', 'success');
       } catch (err) {
-        showNotification(err.message || "Failed to add member", "error");
+        showNotification(err.message || 'Failed to add member', 'error');
       } finally {
         setActionLoading(false);
       }
     },
-    [addMemberToGate, showNotification, gates]
+    [addMemberToGate, showNotification, gates, setActionLoading]
   );
 
   const handleRemoveMember = useCallback(
@@ -241,14 +153,14 @@ const GatesPage = () => {
       setActionLoading(true);
       try {
         await removeMemberFromGate(gateId, username);
-        showNotification("Member removed successfully!", "success");
+        showNotification('Member removed successfully!', 'success');
       } catch (err) {
-        showNotification(err.message || "Failed to remove member", "error");
+        showNotification(err.message || 'Failed to remove member', 'error');
       } finally {
         setActionLoading(false);
       }
     },
-    [removeMemberFromGate, showNotification]
+    [removeMemberFromGate, showNotification, setActionLoading]
   );
 
   const handleUpdateMemberRole = useCallback(
@@ -256,165 +168,146 @@ const GatesPage = () => {
       setActionLoading(true);
       try {
         await updateMemberRole(gateId, username, newRole);
-        showNotification("Member role updated successfully!", "success");
+        showNotification('Member role updated successfully!', 'success');
       } catch (err) {
-        showNotification(err.message || "Failed to update member role", "error");
+        showNotification(err.message || 'Failed to update member role', 'error');
       } finally {
         setActionLoading(false);
       }
     },
-    [updateMemberRole, showNotification]
+    [updateMemberRole, showNotification, setActionLoading]
   );
+
+  const handleOpenMemberDialog = useCallback((gateId) => {
+    setSelectedGateId(gateId);
+    setMemberDialogOpen(true);
+  }, []);
+
+  const handleSaveMembers = useCallback(() => {
+    setMemberDialogOpen(false);
+    setSelectedGateId(null);
+    showNotification('Members updated successfully!', 'success');
+  }, [showNotification]);
+
+  const handleCancelMemberDialog = useCallback(() => {
+    setMemberDialogOpen(false);
+    setSelectedGateId(null);
+  }, []);
+
+  const handleResetFilters = useCallback(() => {
+    setQuickFilter('all');
+    setSearchQuery('');
+    debouncedSetSearchQuery.cancel();
+  }, [debouncedSetSearchQuery]);
 
   const headerData = useMemo(
     () => ({
-      type: "page",
-      title: "Gates",
-      titleAriaLabel: "Gates page",
-      shortDescription: "Your Space for Big Ideas",
+      type: 'page',
+      title: 'Gates',
+      titleAriaLabel: 'Gates page',
+      shortDescription: 'Your Space for Big Ideas',
       tooltipDescription:
-        "Gates are like forum topics, starting points for broad discussions. Create a Gate to spark a conversation or join one to explore shared interests. It’s where communities form and ideas take root.",
+        'Gates are like forum topics, starting points for broad discussions. Create a Gate to spark a conversation or join one to explore shared interests.',
       actions: [
         {
-          label: "Create Gate",
+          label: 'Create Gate',
           icon: <Add />,
-          onClick: handleOpenCreateGate,
+          onClick: handleOpenCreate,
           tooltip: "Create a new gate",
           disabled: actionLoading || gatesLoading,
           ariaLabel: "Create a new gate",
         },
       ],
     }),
-    [handleOpenCreateGate, actionLoading, gatesLoading]
+    [handleOpenCreate, actionLoading, gatesLoading]
   );
 
-  if (authLoading || gatesLoading || isLoading) {
+  if (authLoading || isLoading || gatesLoading) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-        <Box sx={{ ...containerStyles, maxWidth: 1500, mx: "auto", p: { xs: 2, md: 4 } }}>
-          <Skeleton variant="rectangular" height={150} sx={{ mb: 3, borderRadius: 2 }} />
-          <Skeleton variant="rectangular" height={60} sx={{ mb: 3, borderRadius: 2 }} />
-          <Box
-            sx={{
-              display: "grid",
-              gap: 3,
-              gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fill, minmax(320px, 1fr))" },
-            }}
-          >
-            {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} variant="rectangular" height={210} sx={{ borderRadius: 2 }} />
-            ))}
-          </Box>
-        </Box>
+        <LoadingSkeleton />
       </AppLayout>
     );
   }
 
   if (!isAuthenticated) {
-    navigate("/login");
+    navigate('/login', { state: { from: window.location.pathname } });
     return null;
   }
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-      <Box sx={{ ...containerStyles, maxWidth: 1500, mx: "auto", p: { xs: 2, md: 4 } }}>
         <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData} />
-        <Filters
-          type="gates"
-          quickFilter={quickFilter}
-          setQuickFilter={setQuickFilter}
-          searchQuery={searchQuery}
-          setSearchQuery={debouncedSetSearchQuery}
-          filterOptions={[
-            { value: "all", label: "All" },
-            { value: "public", label: "Public" },
-            { value: "private", label: "Private" },
-            { value: "favorited", label: "Favorited" },
-            { value: "community", label: "Community" },
-            { value: "organization", label: "Organization" },
-          ]}
-        />
-        <Grids
-          items={filteredGates}
-          cardComponent={CardMain}
-          itemKey="gate_id"
-          gridType="gates"
-          handleFavorite={toggleFavoriteGate}
-          setEditingItem={(gate) => {
-            setEditingGate(gate);
-            setEditDialogOpen(true);
-          }}
-          setItemToDelete={setGateToDelete}
-          setDeleteDialogOpen={setDeleteDialogOpen}
-          handleManageMembers={handleOpenMemberDialog}
-          navigate={navigate}
-          currentUser={authData}
-          token={token}
-          onCreateNew={handleOpenCreateGate}
-        />
-        <GateFormDialog
-          open={createDialogOpen}
-          title="Create New Gate"
-          gate={popupGate}
-          setGate={setPopupGate}
-          onSave={handleCreateGate}
-          onCancel={handleCancelCreateGate}
-          disabled={actionLoading || gatesLoading}
-          loading={actionLoading}
-        />
-        {editingGate && (
-          <GateFormDialog
-            open={editDialogOpen}
-            title="Edit Gate"
-            gate={editingGate}
-            setGate={setEditingGate}
-            onSave={handleUpdateGate}
-            onCancel={() => {
-              setEditDialogOpen(false);
-              setEditingGate(null);
-            }}
-            disabled={actionLoading || gatesLoading}
-            loading={actionLoading}
-          />
-        )}
-        <MemberFormDialog
-          open={memberDialogOpen}
-          title="Manage Members"
-          gateId={selectedGateId}
-          token={token}
-          onSave={handleSaveMembers}
-          onCancel={handleCancelMemberDialog}
-          disabled={actionLoading || gatesLoading}
-          members={gates.find((g) => g.gate_id === selectedGateId)?.members || []}
-          addMember={handleAddMember}
-          removeMember={handleRemoveMember}
-          updateMemberRole={handleUpdateMemberRole}
-          loading={actionLoading}
-        />
-        <DeleteConfirmationDialog
-          open={deleteDialogOpen}
-          onClose={() => {
-            setDeleteDialogOpen(false);
-            setGateToDelete(null);
-          }}
-          onConfirm={handleDeleteGate}
-          message="Are you sure you want to delete this gate? This action cannot be undone."
-          disabled={actionLoading || gatesLoading}
-          loading={actionLoading}
-        />
-      </Box>
+      <EntityGrid
+        type="gates"
+        items={filteredGates}
+        cardComponent={CardMain}
+        itemKey="gate_id"
+        quickFilter={quickFilter}
+        setQuickFilter={setQuickFilter}
+        searchQuery={searchQuery}
+        setSearchQuery={debouncedSetSearchQuery}
+        filterOptions={GATE_FILTER_OPTIONS}
+        onResetFilters={handleResetFilters}
+        handleFavorite={toggleFavoriteGate}
+        setEditingItem={(gate) => {
+          setEditingGate(gate);
+          setEditDialogOpen(true);
+        }}
+        setItemToDelete={setGateToDelete}
+        setDeleteDialogOpen={setDeleteDialogOpen}
+        handleManageMembers={handleOpenMemberDialog}
+        navigate={navigate}
+        currentUser={authData}
+        token={token}
+        onCreateNew={handleOpenCreate}
+        disabled={actionLoading || gatesLoading.loading}
+      />
+      <EntityDialogs
+        type="gates"
+        createOpen={createDialogOpen}
+        editOpen={editDialogOpen}
+        deleteOpen={deleteDialogOpen}
+        memberOpen={memberDialogOpen}
+        item={popupGate}
+        setItem={setPopupGate}
+        editingItem={editingGate}
+        setEditingItem={setEditingGate}
+        itemToDelete={gateToDelete}
+        setItemToDelete={setGateToDelete}
+        onSaveCreate={handleCreate}
+        onSaveEdit={handleUpdate}
+        onCancelCreate={handleCancelCreate}
+        onCancelEdit={() => {
+          setEditDialogOpen(false);
+          setEditingGate(null);
+        }}
+        onConfirmDelete={handleDelete}
+        onCloseDelete={() => {
+          setDeleteDialogOpen(false);
+          setGateToDelete(null);
+        }}
+        selectedId={selectedGateId}
+        members={gates.find((g) => g.gate_id === selectedGateId)?.members || []}
+        addMember={handleAddMember}
+        removeMember={handleRemoveMember}
+        updateMemberRole={handleUpdateMemberRole}
+        onSaveMembers={handleSaveMembers}
+        onCancelMembers={handleCancelMemberDialog}
+        disabled={actionLoading || gatesLoading.loading}
+        loading={actionLoading}
+        token={token}
+      />
     </AppLayout>
   );
 };
 
 GatesPage.propTypes = {
-  navigate: PropTypes.func,
   token: PropTypes.string,
   authData: PropTypes.shape({
-    anonymous_id: PropTypes.string,
+    id: PropTypes.number,
     username: PropTypes.string,
     avatar: PropTypes.string,
-    total_points: PropTypes.number,
   }),
   handleLogout: PropTypes.func,
   isAuthenticated: PropTypes.bool,
