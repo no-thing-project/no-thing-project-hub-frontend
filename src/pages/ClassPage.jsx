@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Add, Public, Lock, People, Forum, Star, Home } from '@mui/icons-material';
 import PropTypes from 'prop-types';
@@ -79,21 +79,26 @@ const ClassPage = () => {
   const [popupBoard, setPopupBoard] = useState({ ...DEFAULT_BOARD, class_id, gate_id: null });
   const [quickFilter, setQuickFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const lastErrorRef = useRef(null);
 
-  const fetchFunctions = useMemo(
-    () => [
-      () => fetchClass(class_id),
-      () => fetchClassMembersList(class_id),
-      () => fetchBoardsByClass(class_id, {}),
-      () => fetchGatesList({ visibility: 'public' }),
-      () => fetchClassesList({}),
-    ],
-    [fetchClass, fetchClassMembersList, fetchBoardsByClass, fetchGatesList, fetchClassesList, class_id]
-  );
+  // Validate class_id early
+  useEffect(() => {
+    if (!class_id || typeof class_id !== 'string' || class_id.trim() === '') {
+      showNotification('Invalid class ID', 'error');
+      navigate('/classes');
+    }
+  }, [class_id, navigate, showNotification]);
 
-    const { isLoading, actionLoading, setActionLoading, failedIndices } = useEntity(
-    fetchFunctions,
+  const { isLoading, actionLoading, setActionLoading } = useEntity(
+    useMemo(
+      () => [
+        () => fetchClass(class_id),
+        () => fetchClassMembersList(class_id),
+        () => fetchBoardsByClass(class_id, {}),
+        () => fetchGatesList({}),
+        () => fetchClassesList({}),
+      ],
+      [fetchClass, fetchClassMembersList, fetchBoardsByClass, fetchGatesList, fetchClassesList, class_id]
+    ),
     token,
     handleLogout,
     navigate,
@@ -105,45 +110,16 @@ const ClassPage = () => {
     []
   );
 
-  // Debug data
-  useEffect(() => {
-    console.log('ClassPage data:', {
-      classId: class_id,
-      className: classData?.name,
-      boardsCount: boards?.length,
-      gatesCount: gates?.length,
-      classesCount: classes?.length,
-      membersCount: members?.length,
-      isLoading,
-      authLoading,
-      classesLoading,
-      boardsLoading,
-      gatesLoading,
-      failedIndices,
-    });
-  }, [
-    class_id,
-    classData,
-    boards,
-    gates,
-    classes,
-    members,
-    isLoading,
-    authLoading,
-    classesLoading,
-    boardsLoading,
-    gatesLoading,
-    failedIndices,
-  ]);
-
   // Handle errors
   useEffect(() => {
-    const errors = [classError, boardsError, gatesError].filter(
-      (err) => err && err !== 'canceled' && err !== lastErrorRef.current
-    );
-    if (errors.length > 0) {
-      showNotification(errors[0], 'error');
-      lastErrorRef.current = errors[0];
+    if (classError && classError !== 'canceled') {
+      showNotification(classError, 'error');
+    }
+    if (boardsError && boardsError !== 'canceled') {
+      showNotification(boardsError, 'error');
+    }
+    if (gatesError && gatesError !== 'canceled') {
+      showNotification(gatesError, 'error');
     }
   }, [classError, boardsError, gatesError, showNotification]);
 
@@ -159,6 +135,7 @@ const ClassPage = () => {
   // Close edit dialogs if no editing entity
   useEffect(() => {
     if (!editingClass && editClassDialogOpen) {
+      console.warn('editClassDialogOpen is true but editingClass is null');
       setEditClassDialogOpen(false);
     }
     if (!editingBoard && editBoardDialogOpen) {
@@ -186,7 +163,11 @@ const ClassPage = () => {
     }
     setActionLoading(true);
     try {
-      const createdBoard = await createNewBoard(popupBoard);
+      const createdBoard = await createNewBoard({
+        ...popupBoard,
+        class_id,
+        gate_id: classData?.gate_id || null,
+      });
       setCreateBoardDialogOpen(false);
       setPopupBoard({ ...DEFAULT_BOARD, class_id, gate_id: classData?.gate_id || null });
       showNotification('Board created successfully!', 'success');
@@ -279,7 +260,7 @@ const ClassPage = () => {
     }
   }, [class_id, classData, toggleFavoriteClass, showNotification, setActionLoading]);
 
-  // Member handlers (for both class and board)
+  // Member handlers
   const handleAddMember = useCallback(
     async (id, memberData, isBoard = false) => {
       setActionLoading(true);
@@ -381,6 +362,36 @@ const ClassPage = () => {
   const canDelete = isOwner;
   const canCreateBoard = classData?.access?.is_public || userRole !== 'viewer';
 
+  // Edit Class handler
+  const handleEditClass = useCallback(() => {
+    if (!classData) {
+      console.warn('Attempted to edit class but classData is null');
+      showNotification('Class data not available', 'error');
+      return;
+    }
+    const newEditingClass = {
+      class_id: classData.class_id,
+      name: classData.name || '',
+      description: classData.description || '',
+      is_public: classData.access?.is_public || false,
+      visibility: classData.access?.is_public ? 'public' : 'private',
+      gate_id: classData.gate_id || '',
+      settings: classData.settings || {
+        max_boards: 100,
+        max_members: 50,
+        board_creation_cost: 50,
+        tweet_cost: 1,
+        allow_invites: true,
+        require_approval: false,
+        ai_moderation_enabled: true,
+        auto_archive_after: 30,
+      },
+      tags: classData.tags || [],
+    };
+    setEditingClass(newEditingClass);
+    setEditClassDialogOpen(true);
+  }, [classData, showNotification]);
+
   const headerData = useMemo(
     () => ({
       type: 'class',
@@ -403,12 +414,6 @@ const ClassPage = () => {
           ariaLabel: classData?.access?.is_public ? 'Public class' : 'Private class',
         },
         {
-          label: `Favorites: ${stats?.favorite_count || 0}`,
-          icon: <Star />,
-          color: 'warning',
-          ariaLabel: `Favorites: ${stats?.favorite_count || 0}`,
-        },
-        {
           label: `Members: ${stats?.member_count || members?.length || 0}`,
           icon: <People />,
           color: 'primary',
@@ -419,6 +424,12 @@ const ClassPage = () => {
           icon: <Forum />,
           color: 'info',
           ariaLabel: `Boards: ${filteredBoards?.length || 0}`,
+        },
+        {
+          label: `Favorites: ${stats?.favorite_count || 0}`,
+          icon: <Star />,
+          color: 'warning',
+          ariaLabel: `Favorites: ${stats?.favorite_count || 0}`,
         },
         {
           label: `Owner: ${classData?.creator?.username || 'Unknown'}`,
@@ -438,7 +449,6 @@ const ClassPage = () => {
         {
           label: 'Edit Class',
           onClick: () => {
-            if (!classData) return;
             setEditingClass({
               class_id: classData.class_id,
               name: classData.name || '',
@@ -456,12 +466,10 @@ const ClassPage = () => {
                 ai_moderation_enabled: true,
                 auto_archive_after: 30,
               },
-              tags: classData.tags || [],
-            });
-            setEditClassDialogOpen(true);
+            })
           },
           tooltip: 'Edit class details and settings',
-          disabled: actionLoading || !canEdit || !classData,
+          disabled: actionLoading || !canEdit || !classData || isLoading,
           ariaLabel: 'Edit class',
           isMenuItem: true,
         },
@@ -480,10 +488,10 @@ const ClassPage = () => {
           disabled: actionLoading || !canDelete,
           ariaLabel: 'Delete class',
           variant: 'delete',
-          isMenuItem: true,
+          isMenuItem: 'delete',
         },
       ].filter(
-        (action) => action.label !== 'Create Board' || classData?.access?.is_public || userRole !== 'viewer'
+        (action) => action.label !== 'Create Board' || canCreateBoard
       ),
       isFavorited: classData?.is_favorited || false,
       onFavoriteToggle: handleFavoriteToggle,
@@ -502,14 +510,17 @@ const ClassPage = () => {
       actionLoading,
       classesLoading,
       boardsLoading,
+      isLoading,
       handleOpenCreateBoard,
       handleOpenClassMemberDialog,
       handleFavoriteToggle,
       navigate,
+      handleEditClass, // Add to dependencies
     ]
   );
 
-  if (authLoading || isLoading || classesLoading || boardsLoading || gatesLoading) {
+  // Modified loading condition to prioritize classData
+  if (authLoading || (isLoading && !classData)) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
         <LoadingSkeleton />
@@ -533,7 +544,7 @@ const ClassPage = () => {
       <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData} userRole={userRole} />
       <EntityGrid
         type="boards"
-        items={filteredBoards}
+        items={filteredBoards || []}
         cardComponent={CardMain}
         itemKey="board_id"
         quickFilter={quickFilter}
@@ -553,7 +564,7 @@ const ClassPage = () => {
         navigate={navigate}
         currentUser={authData}
         token={token}
-        onCreateNew={canCreateBoard ? handleOpenCreateBoard : undefined}
+        onCreateNew={canCreateBoard ? handleOpenCreateBoard : null}
         disabled={actionLoading || classesLoading || boardsLoading}
       />
       {/* Board Dialogs */}
@@ -571,7 +582,7 @@ const ClassPage = () => {
         setItemToDelete={setBoardToDelete}
         onSaveCreate={handleCreateBoard}
         onSaveEdit={handleUpdateBoard}
-        onCancelCreate={handleCancelCreateBoard}
+        onCancelCreate={handleCancelCreateBoard} // Fixed reference
         onCancelEdit={() => {
           setEditBoardDialogOpen(false);
           setEditingBoard(null);
@@ -594,8 +605,8 @@ const ClassPage = () => {
         gates={gates}
         classes={classes}
         currentClass={classData}
-        fixedclass_id={class_id}
-        initialclass_id={class_id}
+        fixedClassId={class_id}
+        initialClassId={class_id}
       />
       {/* Class Dialogs */}
       <EntityDialogs
@@ -604,11 +615,11 @@ const ClassPage = () => {
         editOpen={editClassDialogOpen}
         deleteOpen={deleteClassDialogOpen}
         memberOpen={memberClassDialogOpen}
-        item={null}
-        setItem={() => {}}
+        item={classData}
+        setItem={setEditingClass}
         editingItem={editingClass}
         setEditingItem={setEditingClass}
-        itemToDelete={class_id}
+        itemToDelete={null}
         setItemToDelete={() => {}}
         onSaveCreate={() => {}}
         onSaveEdit={handleUpdateClass}
@@ -620,12 +631,12 @@ const ClassPage = () => {
         onConfirmDelete={handleDeleteClass}
         onCloseDelete={() => setDeleteClassDialogOpen(false)}
         selectedId={class_id}
-        members={members}
+        members={classData?.members || []}
         addMember={(id, memberData) => handleAddMember(id, memberData, false)}
         removeMember={(id, username) => handleRemoveMember(id, username, false)}
         updateMemberRole={(id, username, role) => handleUpdateMemberRole(id, username, role, false)}
         onSaveMembers={() => handleSaveMembers(false)}
-        onCancelMembers={handleCancelClassMemberDialog}
+        onCancel={handleCancelClassMemberDialog}
         disabled={actionLoading || classesLoading}
         loading={actionLoading}
         token={token}

@@ -3,6 +3,7 @@ import { Box, Typography, Button, useTheme } from "@mui/material";
 import { motion, AnimatePresence } from "framer-motion";
 import PropTypes from "prop-types";
 import { containerStyles, gridStyles, baseTypographyStyles } from "../../styles/BaseStyles";
+import CardMain from "../Cards/CardMain";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -138,10 +139,10 @@ const Grids = ({
           >
             {items.map((item) => (
               <motion.div key={item[itemKey]} variants={itemVariants} role="gridcell">
-                <CardComponent
+                <CardMain
                   item={item}
                   entityType={entityType}
-                  itemId={item[itemKey]} // Pass specific ID (e.g., gate_id)
+                  itemId={item[itemKey]}
                   handleFavorite={handleFavorite}
                   setEditingItem={setEditingItem}
                   setItemToDelete={setItemToDelete}
