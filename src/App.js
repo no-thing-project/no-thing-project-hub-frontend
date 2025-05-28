@@ -16,7 +16,7 @@ const ClassesPage = lazy(() => import("./pages/ClassesPage"));
 const ClassPage = lazy(() => import("./pages/ClassPage"));
 const BoardPage = lazy(() => import("./pages/BoardPage"));
 const FriendsPage = lazy(() => import("./pages/FriendsPage"));
-const MessagesPage = lazy(() => import("./pages/MessagesPage"));
+// const MessagesPage = lazy(() => import("./pages/MessagesPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 const LoginForm = lazy(() => import("./components/Forms/LoginForm/LoginForm"));
 const ResetPasswordForm = lazy(() => import("./components/Forms/ResetPasswordForm/ResetPasswordForm"));

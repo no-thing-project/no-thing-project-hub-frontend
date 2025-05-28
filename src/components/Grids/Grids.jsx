@@ -1,5 +1,5 @@
-import React from "react";
-import { Box, Typography, Button, useTheme } from "@mui/material";
+import React, { useEffect, useRef, memo } from "react";
+import { Box, Typography, Button, useTheme, CircularProgress } from "@mui/material";
 import { motion, AnimatePresence } from "framer-motion";
 import PropTypes from "prop-types";
 import { containerStyles, gridStyles, baseTypographyStyles } from "../../styles/BaseStyles";
@@ -15,7 +15,45 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
+const loaderVariants = {
+  hidden: { opacity: 0, scale: 0.8 },
+  visible: { opacity: 1, scale: 1, transition: { duration: 0.2 } },
+};
+
 const VALID_GRID_TYPES = ["gates", "classes", "boards"];
+
+// Memoized CardWrapper to prevent re-rendering of existing items
+const CardWrapper = memo(({ item, itemKey, entityType, handleFavorite, setEditingItem, setItemToDelete, setDeleteDialogOpen, handleManageMembers, navigate, currentUser, token }) => (
+  <motion.div variants={itemVariants} role="gridcell">
+    <CardMain
+      item={item}
+      entityType={entityType}
+      itemId={item[itemKey]}
+      handleFavorite={handleFavorite}
+      setEditingItem={setEditingItem}
+      setItemToDelete={setItemToDelete}
+      setDeleteDialogOpen={setDeleteDialogOpen}
+      handleManageMembers={handleManageMembers}
+      navigate={navigate}
+      currentUser={currentUser}
+      token={token}
+    />
+  </motion.div>
+));
+
+CardWrapper.propTypes = {
+  item: PropTypes.object.isRequired,
+  itemKey: PropTypes.string.isRequired,
+  entityType: PropTypes.string.isRequired,
+  handleFavorite: PropTypes.func,
+  setEditingItem: PropTypes.func,
+  setItemToDelete: PropTypes.func,
+  setDeleteDialogOpen: PropTypes.func,
+  handleManageMembers: PropTypes.func,
+  navigate: PropTypes.func.isRequired,
+  currentUser: PropTypes.object,
+  token: PropTypes.string,
+};
 
 const Grids = ({
   items,
@@ -31,8 +69,56 @@ const Grids = ({
   currentUser,
   token,
   onCreateNew,
+  loadMore,
+  hasMore,
+  loading,
 }) => {
   const theme = useTheme();
+  const observerRef = useRef(null);
+  const loadMoreRef = useRef(null);
+  const containerRef = useRef(null);
+
+  // Set up IntersectionObserver for infinite scroll
+  useEffect(() => {
+    if (!hasMore || loading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore();
+        }
+      },
+      { threshold: 0.6 } // Slightly increased for smoother triggering
+    );
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+
+    observerRef.current = observer;
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [loadMore, hasMore, loading]);
+
+  // Auto-load more if container is smaller than viewport
+  useEffect(() => {
+    if (!hasMore || loading) return;
+
+    const checkContainerHeight = () => {
+      const container = containerRef.current;
+      if (container && container.scrollHeight <= window.innerHeight + 100) {
+        loadMore();
+      }
+    };
+
+    checkContainerHeight();
+    window.addEventListener("resize", checkContainerHeight);
+    return () => window.removeEventListener("resize", checkContainerHeight);
+  }, [loadMore, hasMore, loading, items]);
 
   // Validate gridType
   if (!VALID_GRID_TYPES.includes(gridType)) {
@@ -73,9 +159,28 @@ const Grids = ({
   const emptyState = getEmptyState();
   const entityType = gridType.slice(0, -1); // e.g., "gates" -> "gate"
 
+  // Initial loading state
+  if (loading && items.length === 0) {
+    return (
+      <Box
+        sx={{
+          ...containerStyles,
+          my: { xs: 10, sm: 15, md: 20 },
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <motion.div variants={loaderVariants} initial="hidden" animate="visible">
+          <CircularProgress size={40} color="primary" aria-label="Loading items" />
+        </motion.div>
+      </Box>
+    );
+  }
+
   return (
     <AnimatePresence>
-      {items.length === 0 ? (
+      {items.length === 0 && !hasMore ? (
         <motion.div
           key={`no-${gridType}`}
           variants={containerVariants}
@@ -118,13 +223,12 @@ const Grids = ({
       ) : (
         <motion.section
           key={`${gridType}-grid`}
-          variants={containerVariants}
-          initial="hidden"
+          initial="initial"
           animate="visible"
-          exit="hidden"
-          transition={{ duration: 0.3 }}
+          transition={{}}
           role="grid"
           aria-label={`${gridType} grid`}
+          ref={containerRef}
         >
           <Box
             sx={{
@@ -137,12 +241,13 @@ const Grids = ({
               boxSizing: "border-box",
             }}
           >
-            {items.map((item) => (
-              <motion.div key={item[itemKey]} variants={itemVariants} role="gridcell">
-                <CardMain
+            <AnimatePresence initial={false}>
+              {items.map((item) => (
+                <CardWrapper
+                  key={item[itemKey]} // Stable key to prevent re-rendering
                   item={item}
+                  itemKey={itemKey}
                   entityType={entityType}
-                  itemId={item[itemKey]}
                   handleFavorite={handleFavorite}
                   setEditingItem={setEditingItem}
                   setItemToDelete={setItemToDelete}
@@ -152,8 +257,55 @@ const Grids = ({
                   currentUser={currentUser}
                   token={token}
                 />
+              ))}
+            </AnimatePresence>
+          </Box>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              padding: 2,
+              textAlign: "center",
+            }}
+            aria-live="polite"
+          >
+            {hasMore ? (
+              <motion.div
+                variants={loaderVariants}
+                initial="hidden"
+                animate="visible"
+                ref={loadMoreRef}
+              >
+                {loading ? (
+                  <CircularProgress size={24} color="primary" aria-label="Loading more items" />
+                ) : (
+                  <>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Scroll to load more...
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={loadMore}
+                      sx={{
+                        fontSize: "0.875rem",
+                        textTransform: "none",
+                      }}
+                      aria-label={`Load more ${gridType}`}
+                    >
+                      Show More
+                    </Button>
+                  </>
+                )}
               </motion.div>
-            ))}
+            ) : (
+              items.length > 0 && (
+                <Typography variant="body2" color="text.secondary">
+                  No more {gridType} to load.
+                </Typography>
+              )
+            )}
           </Box>
         </motion.section>
       )}
@@ -180,6 +332,9 @@ Grids.propTypes = {
   }),
   token: PropTypes.string,
   onCreateNew: PropTypes.func,
+  loadMore: PropTypes.func,
+  hasMore: PropTypes.bool,
+  loading: PropTypes.bool,
 };
 
 Grids.defaultProps = {
@@ -188,6 +343,9 @@ Grids.defaultProps = {
   setItemToDelete: () => {},
   setDeleteDialogOpen: () => {},
   handleManageMembers: () => {},
+  loadMore: () => {},
+  hasMore: false,
+  loading: false,
 };
 
 export default React.memo(Grids);

@@ -12,7 +12,6 @@ import { useGates } from '../hooks/useGates';
 import { useEntity } from '../hooks/useEntity';
 import { useNotification } from '../context/NotificationContext';
 import CardMain from '../components/Cards/CardMain';
-import EntityGrid from '../components/Common/EntityGrid';
 import EntityDialogs from '../components/Common/EntityDialogs';
 import LoadingSkeleton from '../components/Common/LoadingSkeleton';
 import { filterEntities } from '../utils/filterUtils';
@@ -40,6 +39,7 @@ const BoardsPage = () => {
     toggleFavoriteBoard,
     loading: boardsLoading,
     error: boardsError,
+    pagination,
   } = useBoards(token, handleLogout, navigate);
   const { classes, fetchClassesList, loading: classesLoading, error: classesError } = useClasses(
     token,
@@ -68,11 +68,11 @@ const BoardsPage = () => {
 
   const fetchFunctions = useMemo(
     () => [
-      () => fetchBoardsList({}),
+      () => fetchBoardsList({ page: 1, limit: pagination.limit }),
       () => fetchClassesList({ visibility: 'public' }),
       () => fetchGatesList({ visibility: 'public' }),
     ],
-    [fetchBoardsList, fetchClassesList, fetchGatesList]
+    [fetchBoardsList, fetchClassesList, fetchGatesList, pagination.limit]
   );
 
   const { isLoading, actionLoading, setActionLoading } = useEntity(
@@ -140,7 +140,7 @@ const BoardsPage = () => {
   }, [popupBoard, createNewBoard, navigate, showNotification, setActionLoading]);
 
   const handleUpdate = useCallback(async () => {
-    if (!editingBoard?.name?.trim()) {
+    if (!editingBoard?.name?.()) {
       showNotification('Board name is required!', 'error');
       return;
     }
@@ -244,6 +244,13 @@ const BoardsPage = () => {
     debouncedSetSearchQuery.cancel();
   }, [debouncedSetSearchQuery]);
 
+  // Load more boards for infinite scroll
+  const handleLoadMore = useCallback(async () => {
+    if (boardsLoading || !pagination.hasMore) return;
+    const nextPage = pagination.page + 1;
+    await fetchBoardsList({ page: nextPage, limit: pagination.limit }, null, true);
+  }, [fetchBoardsList, boardsLoading, pagination]);
+
   const headerData = useMemo(
     () => ({
       type: 'page',
@@ -251,7 +258,7 @@ const BoardsPage = () => {
       titleAriaLabel: 'Boards page',
       shortDescription: 'Your Spaces for Collaboration',
       tooltipDescription:
-        'Boards are interactive spaces for discussions and tasks within classes. Create a board to organize your projects, share ideas, or collaborate with your team.',
+        'Boards are interactive spaces for discussions and tasks within classes. Create a board to organize your projects.',
       actions: canCreateBoard
         ? [
             {
@@ -275,7 +282,6 @@ const BoardsPage = () => {
       </AppLayout>
     );
   }
-
   if (!isAuthenticated) {
     navigate('/login', { state: { from: location.pathname } });
     return null;
@@ -283,35 +289,42 @@ const BoardsPage = () => {
 
   return (
     <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-      <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData}>
+      <ProfileHeader 
+        user={authData} 
+        isOwnProfile={true} 
+        headerData={headerData}
+      >
       </ProfileHeader>
-      <Filters
-          type="boards"
-          quickFilter={quickFilter}
-          setQuickFilter={setQuickFilter}
-          searchQuery={searchQuery}
-          setSearchQuery={debouncedSetSearchQuery}
-          filterOptions={BOARD_FILTER_OPTIONS}
-          onReset={handleResetFilters}
-        />
-        <Grids
-          items={filteredBoards}
-          cardComponent={CardMain}
-          itemKey="board_id"
-          gridType="boards"
-          handleFavorite={toggleFavoriteBoard}
-          setEditingItem={(board) => {
-            setEditingBoard(board);
-            setEditDialogOpen(true);
-          }}
-          setItemToDelete={setBoardToDelete}
-          setDeleteDialogOpen={setDeleteDialogOpen}
-          handleManageMembers={handleOpenMemberDialog}
-          navigate={navigate}
-          currentUser={authData}
-          token={token}
-          onCreateNew={handleOpenCreateBoard}
-        />
+      <Filters 
+        type="boards"
+        quickFilter={quickFilter}
+        setQuickFilter={setQuickFilter}
+        searchQuery={searchQuery}
+        setSearchQuery={debouncedSetSearchQuery}
+        filterOptions={BOARD_FILTER_OPTIONS}
+        onReset={handleResetFilters}
+      />
+      <Grids
+        items={filteredBoards}
+        cardComponent={CardMain}
+        itemKey="board_id"
+        gridType="boards"
+        handleFavorite={toggleFavoriteBoard}
+        setEditingItem={(board) => {
+          setEditingBoard(board);
+          setEditDialogOpen(true);
+        }}
+        setItemToDelete={setBoardToDelete}
+        setDeleteDialogOpen={setDeleteDialogOpen}
+        handleManageMembers={handleOpenMemberDialog}
+        navigate={navigate}
+        currentUser={authData}
+        token={token}
+        onCreateNew={handleOpenCreateBoard}
+        loadMore={handleLoadMore}
+        hasMore={pagination.hasMore}
+        loading={boardsLoading}
+      />
       <EntityDialogs
         type="boards"
         createOpen={createDialogOpen}

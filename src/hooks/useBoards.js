@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   fetchBoards,
   fetchBoardsByGateId,
@@ -39,6 +39,7 @@ const ERROR_MESSAGES = {
 const MAX_CACHE_SIZE = 10;
 const DEBOUNCE_MS = 300;
 const CACHE_VERSION = 'v1';
+const DEFAULT_LIMIT = 20;
 
 // LRU Cache implementation
 class LRUCache {
@@ -85,7 +86,7 @@ export const useBoards = (token, onLogout, navigate) => {
   const [boards, setBoards] = useState([]);
   const [boardItem, setBoardItem] = useState(null);
   const [members, setMembers] = useState([]);
-  const [pagination, setPagination] = useState({});
+  const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_LIMIT, total: 0, hasMore: true });
   const [gateInfo, setGateInfo] = useState(null);
   const [classInfo, setClassInfo] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -142,7 +143,7 @@ export const useBoards = (token, onLogout, navigate) => {
     setBoards([]);
     setBoardItem(null);
     setMembers([]);
-    setPagination({});
+    setPagination({ page: 1, limit: DEFAULT_LIMIT, total: 0, hasMore: true });
     setGateInfo(null);
     setClassInfo(null);
     setError(null);
@@ -162,19 +163,20 @@ export const useBoards = (token, onLogout, navigate) => {
     abortControllers.current.clear();
   }, []);
 
-  // Fetch list of boards with caching
+  // Fetch list of boards with caching and pagination
   const fetchBoardsList = useCallback(
-    async (filters = {}, signal) => {
+    async (filters = {}, signal, append = false) => {
       if (!token) {
         setError(ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
 
-      const cacheKey = `${CACHE_VERSION}:boards:${JSON.stringify(filters)}`;
+      const { page = 1, limit = DEFAULT_LIMIT } = filters;
+      const cacheKey = `${CACHE_VERSION}:boards:${JSON.stringify({ ...filters, page, limit })}`;
       const cachedData = boardCache.get(cacheKey);
-      if (cachedData) {
+      if (cachedData && !append) {
         setBoards(cachedData.boards || []);
-        setPagination(cachedData.pagination || {});
+        setPagination(cachedData.pagination || { page, limit, total: 0, hasMore: true });
         setGateInfo(null);
         setClassInfo(null);
         return cachedData;
@@ -184,10 +186,16 @@ export const useBoards = (token, onLogout, navigate) => {
       setError(null);
 
       try {
-        const data = await fetchBoards(token, filters, signal);
+        const data = await fetchBoards(token, { ...filters, page, limit }, signal);
         if (!data) throw new Error('No data received');
-        setBoards(data.boards || []);
-        setPagination(data.pagination || {});
+        const newBoards = data.boards || [];
+        setBoards((prev) => (append ? [...prev, ...newBoards] : newBoards));
+        setPagination({
+          page: data.pagination?.page || page,
+          limit: data.pagination?.limit || limit,
+          total: data.pagination?.total || 0,
+          hasMore: newBoards.length === limit,
+        });
         setGateInfo(null);
         setClassInfo(null);
         boardCache.set(cacheKey, data);
@@ -208,17 +216,18 @@ export const useBoards = (token, onLogout, navigate) => {
 
   // Fetch boards by gate ID
   const fetchBoardsByGate = useCallback(
-    async (gateId, filters = {}, signal) => {
+    async (gateId, filters = {}, signal, append = false) => {
       if (!token || !gateId?.trim()) {
         setError(token ? ERROR_MESSAGES.GATE_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
 
-      const cacheKey = `${CACHE_VERSION}:gate:${gateId}:${JSON.stringify(filters)}`;
+      const { page = 1, limit = DEFAULT_LIMIT } = filters;
+      const cacheKey = `${CACHE_VERSION}:gate:${gateId}:${JSON.stringify({ ...filters, page, limit })}`;
       const cachedData = boardCache.get(cacheKey);
-      if (cachedData) {
+      if (cachedData && !append) {
         setBoards(cachedData.boards || []);
-        setPagination(cachedData.pagination || []);
+        setPagination(cachedData.pagination || { page, limit, total: 0, hasMore: true });
         setGateInfo(cachedData.gate || null);
         setClassInfo(null);
         return cachedData;
@@ -228,10 +237,16 @@ export const useBoards = (token, onLogout, navigate) => {
       setError(null);
 
       try {
-        const data = await fetchBoardsByGateId(gateId, token, filters, signal);
+        const data = await fetchBoardsByGateId(gateId, token, { ...filters, page, limit }, signal);
         if (!data) throw new Error('No data received');
-        setBoards(data.boards || []);
-        setPagination(data.pagination || {});
+        const newBoards = data.boards || [];
+        setBoards((prev) => (append ? [...prev, ...newBoards] : newBoards));
+        setPagination({
+          page: data.pagination?.page || page,
+          limit: data.pagination?.limit || limit,
+          total: data.pagination?.total || 0,
+          hasMore: newBoards.length === limit,
+        });
         setGateInfo(data.gate || null);
         setClassInfo(null);
         boardCache.set(cacheKey, data);
@@ -252,17 +267,18 @@ export const useBoards = (token, onLogout, navigate) => {
 
   // Fetch boards by class ID
   const fetchBoardsByClass = useCallback(
-    async (classId, filters = {}, signal) => {
+    async (classId, filters = {}, signal, append = false) => {
       if (!token || !classId?.trim()) {
         setError(token ? ERROR_MESSAGES.CLASS_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
         return null;
       }
 
-      const cacheKey = `${CACHE_VERSION}:class:${classId}:${JSON.stringify(filters)}`;
+      const { page = 1, limit = DEFAULT_LIMIT } = filters;
+      const cacheKey = `${CACHE_VERSION}:class:${classId}:${JSON.stringify({ ...filters, page, limit })}`;
       const cachedData = boardCache.get(cacheKey);
-      if (cachedData) {
+      if (cachedData && !append) {
         setBoards(cachedData.boards || []);
-        setPagination(cachedData.pagination || {});
+        setPagination(cachedData.pagination || { page, limit, total: 0, hasMore: true });
         setClassInfo(cachedData.class || null);
         setGateInfo(null);
         return cachedData;
@@ -272,10 +288,16 @@ export const useBoards = (token, onLogout, navigate) => {
       setError(null);
 
       try {
-        const data = await fetchBoardsByClassId(classId, token, filters, signal);
+        const data = await fetchBoardsByClassId(classId, token, { ...filters, page, limit }, signal);
         if (!data) throw new Error('No data received');
-        setBoards(data.boards || []);
-        setPagination(data.pagination || {});
+        const newBoards = data.boards || [];
+        setBoards((prev) => (append ? [...prev, ...newBoards] : newBoards));
+        setPagination({
+          page: data.pagination?.page || page,
+          limit: data.pagination?.limit || limit,
+          total: data.pagination?.total || 0,
+          hasMore: newBoards.length === limit,
+        });
         setClassInfo(data.class || null);
         setGateInfo(null);
         boardCache.set(cacheKey, data);
@@ -787,6 +809,7 @@ export const useBoards = (token, onLogout, navigate) => {
       classInfo,
       loading,
       error,
+      debouncedFetchBoardsList,
       debouncedFetchBoardsByGate,
       debouncedFetchBoardsByClass,
       fetchBoard,
