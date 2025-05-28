@@ -14,8 +14,23 @@ import EntityGrid from '../components/Common/EntityGrid';
 import EntityDialogs from '../components/Common/EntityDialogs';
 import LoadingSkeleton from '../components/Common/LoadingSkeleton';
 import { filterEntities } from '../utils/filterUtils';
-import { DEFAULT_GATE } from '../constants/default'
-import { GATE_FILTER_OPTIONS } from '../constants/filterOptions'
+import { DEFAULT_GATE } from '../constants/default';
+import { GATE_FILTER_OPTIONS } from '../constants/filterOptions';
+
+const ErrorBoundary = ({ children }) => {
+  const [hasError, setHasError] = useState(false);
+
+  const handleError = useCallback((error, errorInfo) => {
+    console.error('ErrorBoundary caught:', error, errorInfo);
+    setHasError(true);
+  }, []);
+
+  if (hasError) {
+    return <div>Something went wrong. Please try again later.</div>;
+  }
+
+  return children;
+};
 
 const GatesPage = () => {
   const navigate = useNavigate();
@@ -23,6 +38,7 @@ const GatesPage = () => {
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth();
   const {
     gates,
+    pagination,
     fetchGatesList,
     createNewGate,
     updateExistingGate,
@@ -46,7 +62,17 @@ const GatesPage = () => {
   const [quickFilter, setQuickFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const stableFetchGatesList = useMemo(() => [fetchGatesList], [fetchGatesList]);
+  const stableFetchGatesList = useMemo(
+    () => [
+      () =>
+        fetchGatesList({ page: 1, limit: pagination.limit }, null, false, (err) => {
+          if (err && err.name !== 'AbortError') {
+            showNotification(err.message || 'Failed to fetch gates', 'error');
+          }
+        }),
+    ],
+    [fetchGatesList, pagination.limit, showNotification]
+  );
 
   const { isLoading, actionLoading, setActionLoading } = useEntity(
     stableFetchGatesList,
@@ -69,6 +95,17 @@ const GatesPage = () => {
     () => filterEntities(gates, 'gates', quickFilter, searchQuery),
     [gates, quickFilter, searchQuery]
   );
+
+  const handleLoadMore = useCallback(() => {
+    if (gatesLoading || !pagination.hasMore) return;
+    const controller = new AbortController();
+    fetchGatesList({ page: pagination.page + 1, limit: pagination.limit }, controller.signal, true, (err) => {
+      if (err && err.name !== 'AbortError') {
+        showNotification(err.message || 'Failed to load more gates', 'error');
+      }
+    });
+    return () => controller.abort();
+  }, [fetchGatesList, gatesLoading, pagination.hasMore, pagination.page, pagination.limit, showNotification]);
 
   const handleOpenCreate = useCallback(() => setCreateDialogOpen(true), []);
   const handleCancelCreate = useCallback(() => {
@@ -198,7 +235,12 @@ const GatesPage = () => {
     setQuickFilter('all');
     setSearchQuery('');
     debouncedSetSearchQuery.cancel();
-  }, [debouncedSetSearchQuery]);
+    fetchGatesList({ page: 1, reset: { visibility: true } }, null, false, (err) => {
+      if (err && err.name !== 'AbortError') {
+        showNotification(err.message || 'Failed to reset filters', 'error');
+      }
+    });
+  }, [debouncedSetSearchQuery, fetchGatesList, showNotification]);
 
   const headerData = useMemo(
     () => ({
@@ -213,16 +255,16 @@ const GatesPage = () => {
           label: 'Create Gate',
           icon: <Add />,
           onClick: handleOpenCreate,
-          tooltip: "Create a new gate",
+          tooltip: 'Create a new gate',
           disabled: actionLoading || gatesLoading,
-          ariaLabel: "Create a new gate",
+          ariaLabel: 'Create a new gate',
         },
       ],
     }),
     [handleOpenCreate, actionLoading, gatesLoading]
   );
 
-  if (authLoading || isLoading || gatesLoading) {
+  if (authLoading || isLoading) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
         <LoadingSkeleton />
@@ -236,69 +278,74 @@ const GatesPage = () => {
   }
 
   return (
-    <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
+    <ErrorBoundary>
+      <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
         <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData} />
-      <EntityGrid
-        type="gates"
-        items={filteredGates}
-        cardComponent={CardMain}
-        itemKey="gate_id"
-        quickFilter={quickFilter}
-        setQuickFilter={setQuickFilter}
-        searchQuery={searchQuery}
-        setSearchQuery={debouncedSetSearchQuery}
-        filterOptions={GATE_FILTER_OPTIONS}
-        onResetFilters={handleResetFilters}
-        handleFavorite={toggleFavoriteGate}
-        setEditingItem={(gate) => {
-          setEditingGate(gate);
-          setEditDialogOpen(true);
-        }}
-        setItemToDelete={setGateToDelete}
-        setDeleteDialogOpen={setDeleteDialogOpen}
-        handleManageMembers={handleOpenMemberDialog}
-        navigate={navigate}
-        currentUser={authData}
-        token={token}
-        onCreateNew={handleOpenCreate}
-        disabled={actionLoading || gatesLoading.loading}
-      />
-      <EntityDialogs
-        type="gates"
-        createOpen={createDialogOpen}
-        editOpen={editDialogOpen}
-        deleteOpen={deleteDialogOpen}
-        memberOpen={memberDialogOpen}
-        item={popupGate}
-        setItem={setPopupGate}
-        editingItem={editingGate}
-        setEditingItem={setEditingGate}
-        itemToDelete={gateToDelete}
-        setItemToDelete={setGateToDelete}
-        onSaveCreate={handleCreate}
-        onSaveEdit={handleUpdate}
-        onCancelCreate={handleCancelCreate}
-        onCancelEdit={() => {
-          setEditDialogOpen(false);
-          setEditingGate(null);
-        }}
-        onConfirmDelete={handleDelete}
-        onCloseDelete={() => {
-          setDeleteDialogOpen(false);
-          setGateToDelete(null);
-        }}
-        selectedId={selectedGateId}
-        members={gates.find((g) => g.gate_id === selectedGateId)?.members || []}
-        addMember={handleAddMember}
-        removeMember={handleRemoveMember}
-        updateMemberRole={handleUpdateMemberRole}
-        onSaveMembers={handleSaveMembers}
-        onCancelMembers={handleCancelMemberDialog}
-        disabled={actionLoading || gatesLoading.loading}
-        loading={actionLoading}
-        token={token}
-      />
-    </AppLayout>
+        <EntityGrid
+          type="gates"
+          items={filteredGates}
+          cardComponent={CardMain}
+          itemKey="gate_id"
+          quickFilter={quickFilter}
+          setQuickFilter={setQuickFilter}
+          searchQuery={searchQuery}
+          setSearchQuery={debouncedSetSearchQuery}
+          filterOptions={GATE_FILTER_OPTIONS}
+          onResetFilters={handleResetFilters}
+          handleFavorite={toggleFavoriteGate}
+          setEditingItem={(gate) => {
+            setEditingGate(gate);
+            setEditDialogOpen(true);
+          }}
+          setItemToDelete={setGateToDelete}
+          setDeleteDialogOpen={setDeleteDialogOpen}
+          handleManageMembers={handleOpenMemberDialog}
+          navigate={navigate}
+          currentUser={authData}
+          token={token}
+          onCreateNew={handleOpenCreate}
+          loadMore={handleLoadMore}
+          hasMore={pagination.hasMore}
+          loading={gatesLoading}
+          disabled={actionLoading || gatesLoading}
+        />
+        <EntityDialogs
+          type="gates"
+          createOpen={createDialogOpen}
+          editOpen={editDialogOpen}
+          deleteOpen={deleteDialogOpen}
+          memberOpen={memberDialogOpen}
+          item={popupGate}
+          setItem={setPopupGate}
+          editingItem={editingGate}
+          setEditingItem={setEditingGate}
+          itemToDelete={gateToDelete}
+          setItemToDelete={setGateToDelete}
+          onSaveCreate={handleCreate}
+          onSaveEdit={handleUpdate}
+          onCancelCreate={handleCancelCreate}
+          onCancelEdit={() => {
+            setEditDialogOpen(false);
+            setEditingGate(null);
+          }}
+          onConfirmDelete={handleDelete}
+          onCloseDelete={() => {
+            setDeleteDialogOpen(false);
+            setGateToDelete(null);
+          }}
+          selectedId={selectedGateId}
+          members={gates.find((g) => g.gate_id === selectedGateId)?.members || []}
+          addMember={handleAddMember}
+          removeMember={handleRemoveMember}
+          updateMemberRole={handleUpdateMemberRole}
+          onSaveMembers={handleSaveMembers}
+          onCancelMembers={handleCancelMemberDialog}
+          disabled={actionLoading || gatesLoading}
+          loading={actionLoading}
+          token={token}
+        />
+      </AppLayout>
+    </ErrorBoundary>
   );
 };
 

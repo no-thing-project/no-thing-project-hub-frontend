@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Add } from '@mui/icons-material';
 import { debounce } from 'lodash';
@@ -12,15 +12,28 @@ import { useGates } from '../hooks/useGates';
 import { useEntity } from '../hooks/useEntity';
 import { useNotification } from '../context/NotificationContext';
 import CardMain from '../components/Cards/CardMain';
+import Filters from '../components/Filters/Filters';
+import Grids from '../components/Grids/Grids';
 import EntityDialogs from '../components/Common/EntityDialogs';
 import LoadingSkeleton from '../components/Common/LoadingSkeleton';
 import { filterEntities } from '../utils/filterUtils';
 import { DEFAULT_BOARD } from '../constants/default';
 import { BOARD_FILTER_OPTIONS } from '../constants/filterOptions';
-import { actionButtonStyles } from '../styles/BaseStyles';
-import { Button, Typography, Box } from '@mui/material';
-import Filters from '../components/Filters/Filters';
-import Grids from '../components/Grids/Grids';
+
+const ErrorBoundary = ({ children }) => {
+  const [hasError, setHasError] = useState(false);
+
+  const handleError = useCallback((error, errorInfo) => {
+    console.error('ErrorBoundary caught:', error, errorInfo);
+    setHasError(true);
+  }, []);
+
+  if (hasError) {
+    return <div>Something went wrong. Please try again later.</div>;
+  }
+
+  return children;
+};
 
 const BoardsPage = () => {
   const navigate = useNavigate();
@@ -29,6 +42,7 @@ const BoardsPage = () => {
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth();
   const {
     boards,
+    pagination,
     fetchBoardsList,
     createNewBoard,
     updateExistingBoard,
@@ -39,17 +53,18 @@ const BoardsPage = () => {
     toggleFavoriteBoard,
     loading: boardsLoading,
     error: boardsError,
-    pagination,
-  } = useBoards(token, handleLogout, navigate);
+  } = useBoards(token, handleLogout, navigate, false); // Enable initial fetch
   const { classes, fetchClassesList, loading: classesLoading, error: classesError } = useClasses(
     token,
     handleLogout,
-    navigate
+    navigate,
+    true
   );
   const { gates, fetchGatesList, loading: gatesLoading, error: gatesError } = useGates(
     token,
     handleLogout,
-    navigate
+    navigate,
+    true
   );
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -63,20 +78,32 @@ const BoardsPage = () => {
   const [quickFilter, setQuickFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Track last shown error
-  const lastErrorRef = useRef(null);
-
-  const fetchFunctions = useMemo(
+  const stableFetchBoardsList = useMemo(
     () => [
-      () => fetchBoardsList({ page: 1, limit: pagination.limit }),
-      () => fetchClassesList({ visibility: 'public' }),
-      () => fetchGatesList({ visibility: 'public' }),
+      () =>
+        fetchBoardsList({ page: 1, limit: pagination.limit }, null, false, (err) => {
+          if (err && err.name !== 'AbortError') {
+            showNotification(err.message || 'Failed to fetch boards', 'error');
+          }
+        }),
+      () =>
+        fetchClassesList({ visibility: 'public' }, null, false, (err) => {
+          if (err && err.name !== 'AbortError') {
+            showNotification(err.message || 'Failed to fetch classes', 'error');
+          }
+        }),
+      () =>
+        fetchGatesList({ visibility: 'public' }, null, false, (err) => {
+          if (err && err.name !== 'AbortError') {
+            showNotification(err.message || 'Failed to fetch gates', 'error');
+          }
+        }),
     ],
-    [fetchBoardsList, fetchClassesList, fetchGatesList, pagination.limit]
+    [fetchBoardsList, fetchClassesList, fetchGatesList, pagination.limit, showNotification]
   );
 
   const { isLoading, actionLoading, setActionLoading } = useEntity(
-    fetchFunctions,
+    stableFetchBoardsList,
     token,
     handleLogout,
     navigate,
@@ -88,59 +115,99 @@ const BoardsPage = () => {
     []
   );
 
-  // Global permission: authenticated users can create boards
-  const canCreateBoard = isAuthenticated;
-
   useEffect(() => {
-    // Deduplicate error notifications
-    const errors = [boardsError, classesError, gatesError].filter(Boolean);
-    const errorMessage = errors[0];
-    if (errorMessage && errorMessage !== lastErrorRef.current && errorMessage !== 'canceled') {
-      console.error('Data fetching errors:', { boardsError, classesError, gatesError });
-      showNotification(errorMessage, 'error');
-      lastErrorRef.current = errorMessage;
+    if (boardsError && boardsError !== 'canceled') {
+      showNotification(boardsError, 'error');
+    }
+    if (classesError && classesError !== 'canceled') {
+      showNotification(classesError, 'error');
+    }
+    if (gatesError && gatesError !== 'canceled') {
+      showNotification(gatesError, 'error');
     }
   }, [boardsError, classesError, gatesError, showNotification]);
-
-  // Close edit dialog if no editing board
-  useEffect(() => {
-    if (!editingBoard && editDialogOpen) {
-      setEditDialogOpen(false);
-    }
-  }, [editingBoard, editDialogOpen]);
 
   const filteredBoards = useMemo(
     () => filterEntities(boards || [], 'boards', quickFilter, searchQuery, gates || [], classes || []),
     [boards, gates, classes, quickFilter, searchQuery]
   );
 
-  const handleOpenCreateBoard = useCallback(() => setCreateDialogOpen(true), []);
+  useEffect(() => {
+    if (searchQuery || quickFilter !== 'all') {
+      const controller = new AbortController();
+      Promise.all([
+        fetchClassesList({ visibility: 'public' }, controller.signal, false, (err) => {
+          if (err && err.name !== 'AbortError') {
+            showNotification(err.message || 'Failed to fetch classes', 'error');
+          }
+        }),
+        fetchGatesList({ visibility: 'public' }, controller.signal, false, (err) => {
+          if (err && err.name !== 'AbortError') {
+            showNotification(err.message || 'Failed to fetch gates', 'error');
+          }
+        }),
+      ]).catch((err) => {
+        if (err.name !== 'AbortError') {
+          showNotification(err.message || 'Failed to fetch related data', 'error');
+        }
+      });
+      return () => controller.abort();
+    }
+  }, [searchQuery, quickFilter, fetchClassesList, fetchGatesList, showNotification]);
+
+  const handleLoadMore = useCallback(() => {
+    if (boardsLoading || !pagination.hasMore) return;
+    const controller = new AbortController();
+    fetchBoardsList(
+      { visibility: quickFilter === 'all' ? undefined : quickFilter, page: pagination.page + 1 },
+      controller.signal,
+      true,
+      (err) => {
+        if (err && err.name !== 'AbortError') {
+          showNotification(err.message || 'Failed to load more boards', 'error');
+        }
+      }
+    );
+    return () => controller.abort();
+  }, [fetchBoardsList, boardsLoading, pagination.hasMore, pagination.page, quickFilter, showNotification]);
+
+  const handleOpenCreate = useCallback(() => setCreateDialogOpen(true), []);
   const handleCancelCreate = useCallback(() => {
     setCreateDialogOpen(false);
     setPopupBoard(DEFAULT_BOARD);
   }, []);
 
-  const handleCreate = useCallback(async () => {
-    if (!popupBoard.name?.trim()) {
-      showNotification('Board name is required!', 'error');
-      return;
-    }
-    setActionLoading(true);
-    try {
-      const createdBoard = await createNewBoard(popupBoard);
-      setCreateDialogOpen(false);
-      setPopupBoard(DEFAULT_BOARD);
-      showNotification('Board created successfully!', 'success');
-      navigate(`/board/${createdBoard.board_id}`);
-    } catch (err) {
-      showNotification(err.message || 'Failed to create board', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  }, [popupBoard, createNewBoard, navigate, showNotification, setActionLoading]);
+  const handleCreate = useCallback(
+    async (gateId, classId) => {
+      if (!popupBoard.name?.trim()) {
+        showNotification('Board name is required!', 'error');
+        return;
+      }
+      setActionLoading(true);
+      try {
+        let createdBoard;
+        if (gateId) {
+          createdBoard = await createNewBoard({ ...popupBoard, gate_id: gateId });
+        } else if (classId) {
+          createdBoard = await createNewBoard({ ...popupBoard, class_id: classId });
+        } else {
+          createdBoard = await createNewBoard(popupBoard);
+        }
+        setCreateDialogOpen(false);
+        setPopupBoard(DEFAULT_BOARD);
+        showNotification('Board created successfully!', 'success');
+        navigate(`/board/${createdBoard.board_id}`);
+      } catch (err) {
+        showNotification(err.message || 'Failed to create board', 'error');
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [popupBoard, createNewBoard, navigate, showNotification, setActionLoading]
+  );
 
   const handleUpdate = useCallback(async () => {
-    if (!editingBoard?.name?.()) {
+    if (!editingBoard?.name?.trim()) {
       showNotification('Board name is required!', 'error');
       return;
     }
@@ -233,7 +300,7 @@ const BoardsPage = () => {
     showNotification('Members updated successfully!', 'success');
   }, [showNotification]);
 
-  const handleCancelMembers = useCallback(() => {
+  const handleCancelMemberDialog = useCallback(() => {
     setMemberDialogOpen(false);
     setSelectedBoardId(null);
   }, []);
@@ -242,14 +309,12 @@ const BoardsPage = () => {
     setQuickFilter('all');
     setSearchQuery('');
     debouncedSetSearchQuery.cancel();
-  }, [debouncedSetSearchQuery]);
-
-  // Load more boards for infinite scroll
-  const handleLoadMore = useCallback(async () => {
-    if (boardsLoading || !pagination.hasMore) return;
-    const nextPage = pagination.page + 1;
-    await fetchBoardsList({ page: nextPage, limit: pagination.limit }, null, true);
-  }, [fetchBoardsList, boardsLoading, pagination]);
+    fetchBoardsList({ page: 1, reset: { visibility: true } }, null, false, (err) => {
+      if (err && err.name !== 'AbortError') {
+        showNotification(err.message || 'Failed to reset filters', 'error');
+      }
+    });
+  }, [debouncedSetSearchQuery, fetchBoardsList, showNotification]);
 
   const headerData = useMemo(
     () => ({
@@ -258,111 +323,110 @@ const BoardsPage = () => {
       titleAriaLabel: 'Boards page',
       shortDescription: 'Your Spaces for Collaboration',
       tooltipDescription:
-        'Boards are interactive spaces for discussions and tasks within classes. Create a board to organize your projects.',
-      actions: canCreateBoard
+        'Boards are interactive spaces for discussions and tasks within classes or gates. Create a board to organize your projects or collaborate with others.',
+      actions: isAuthenticated
         ? [
             {
               label: 'Create Board',
               icon: <Add />,
-              onClick: handleOpenCreateBoard,
-              tooltipAriaLabel: 'Create a new board',
+              onClick: handleOpenCreate,
+              tooltip: 'Create a new board',
               disabled: actionLoading || boardsLoading || classesLoading || gatesLoading,
-              isMenuItem: false,
+              ariaLabel: 'Create a new board',
             },
           ]
         : [],
     }),
-    [canCreateBoard, handleOpenCreateBoard, actionLoading, boardsLoading, classesLoading, gatesLoading]
+    [isAuthenticated, handleOpenCreate, actionLoading, boardsLoading, classesLoading, gatesLoading]
   );
 
-  if (authLoading || isLoading || boardsLoading || classesLoading || gatesLoading) {
+  if (authLoading || isLoading) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
         <LoadingSkeleton />
       </AppLayout>
     );
   }
+
   if (!isAuthenticated) {
     navigate('/login', { state: { from: location.pathname } });
     return null;
   }
 
   return (
-    <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-      <ProfileHeader 
-        user={authData} 
-        isOwnProfile={true} 
-        headerData={headerData}
-      >
-      </ProfileHeader>
-      <Filters 
-        type="boards"
-        quickFilter={quickFilter}
-        setQuickFilter={setQuickFilter}
-        searchQuery={searchQuery}
-        setSearchQuery={debouncedSetSearchQuery}
-        filterOptions={BOARD_FILTER_OPTIONS}
-        onReset={handleResetFilters}
-      />
-      <Grids
-        items={filteredBoards}
-        cardComponent={CardMain}
-        itemKey="board_id"
-        gridType="boards"
-        handleFavorite={toggleFavoriteBoard}
-        setEditingItem={(board) => {
-          setEditingBoard(board);
-          setEditDialogOpen(true);
-        }}
-        setItemToDelete={setBoardToDelete}
-        setDeleteDialogOpen={setDeleteDialogOpen}
-        handleManageMembers={handleOpenMemberDialog}
-        navigate={navigate}
-        currentUser={authData}
-        token={token}
-        onCreateNew={handleOpenCreateBoard}
-        loadMore={handleLoadMore}
-        hasMore={pagination.hasMore}
-        loading={boardsLoading}
-      />
-      <EntityDialogs
-        type="boards"
-        createOpen={createDialogOpen}
-        editOpen={editDialogOpen}
-        deleteOpen={deleteDialogOpen}
-        memberOpen={memberDialogOpen}
-        item={popupBoard}
-        setItem={setPopupBoard}
-        editingItem={editingBoard}
-        setEditingItem={setEditingBoard}
-        itemToDelete={boardToDelete}
-        setItemToDelete={setBoardToDelete}
-        onSaveCreate={handleCreate}
-        onSaveEdit={handleUpdate}
-        onCancelCreate={handleCancelCreate}
-        onCancelEdit={() => {
-          setEditDialogOpen(false);
-          setEditingBoard(null);
-        }}
-        onConfirmDelete={handleDelete}
-        onCloseDelete={() => {
-          setDeleteDialogOpen(false);
-          setBoardToDelete(null);
-        }}
-        selectedId={selectedBoardId}
-        members={boards.find((b) => b.board_id === selectedBoardId)?.members || []}
-        addMember={handleAddMember}
-        removeMember={handleRemoveMember}
-        updateMemberRole={handleUpdateMemberRole}
-        onSaveMembers={handleSaveMembers}
-        onCancelMembers={handleCancelMembers}
-        disabled={actionLoading || boardsLoading || classesLoading || gatesLoading}
-        loading={actionLoading}
-        token={token}
-        gates={gates}
-        classes={classes}
-      />
-    </AppLayout>
+    <ErrorBoundary>
+      <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
+        <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData} />
+        <Filters
+          type="boards"
+          quickFilter={quickFilter}
+          setQuickFilter={setQuickFilter}
+          searchQuery={searchQuery}
+          setSearchQuery={debouncedSetSearchQuery}
+          filterOptions={BOARD_FILTER_OPTIONS}
+          onReset={handleResetFilters}
+        />
+        <Grids
+          items={filteredBoards}
+          cardComponent={CardMain}
+          itemKey="board_id"
+          gridType="boards"
+          handleFavorite={toggleFavoriteBoard}
+          setEditingItem={(board) => {
+            setEditingBoard(board);
+            setEditDialogOpen(true);
+          }}
+          setItemToDelete={setBoardToDelete}
+          setDeleteDialogOpen={setDeleteDialogOpen}
+          handleManageMembers={handleOpenMemberDialog}
+          navigate={navigate}
+          currentUser={authData}
+          token={token}
+          onCreateNew={handleOpenCreate}
+          loadMore={handleLoadMore}
+          hasMore={pagination.hasMore}
+          loading={boardsLoading}
+          disabled={actionLoading || boardsLoading || classesLoading || gatesLoading}
+        />
+        <EntityDialogs
+          type="boards"
+          createOpen={createDialogOpen}
+          editOpen={editDialogOpen}
+          deleteOpen={deleteDialogOpen}
+          memberOpen={memberDialogOpen}
+          item={popupBoard}
+          setItem={setPopupBoard}
+          editingItem={editingBoard}
+          setEditingItem={setEditingBoard}
+          itemToDelete={boardToDelete}
+          setItemToDelete={setBoardToDelete}
+          onSaveCreate={handleCreate}
+          onSaveEdit={handleUpdate}
+          onCancelCreate={handleCancelCreate}
+          onCancelEdit={() => {
+            setEditDialogOpen(false);
+            setEditingBoard(null);
+          }}
+          onConfirmDelete={handleDelete}
+          onCloseDelete={() => {
+            setDeleteDialogOpen(false);
+            setBoardToDelete(null);
+          }}
+          selectedId={selectedBoardId}
+          members={boards.find((b) => b.board_id === selectedBoardId)?.members || []}
+          addMember={handleAddMember}
+          removeMember={handleRemoveMember}
+          updateMemberRole={handleUpdateMemberRole}
+          onSaveMembers={handleSaveMembers}
+          onCancelMembers={handleCancelMemberDialog}
+          disabled={actionLoading || boardsLoading || classesLoading || gatesLoading}
+          loading={actionLoading}
+          token={token}
+          gates={gates}
+          classes={classes}
+        />
+      </AppLayout>
+    </ErrorBoundary>
   );
 };
 

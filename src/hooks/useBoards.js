@@ -1,4 +1,9 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+/**
+ * @module useBoards
+ * @description React hook for managing boards and their members with caching and debounced API calls.
+ */
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import debounce from 'lodash/debounce';
 import {
   fetchBoards,
   fetchBoardsByGateId,
@@ -19,7 +24,7 @@ import {
   fetchBoardMembers,
 } from '../api/boardsApi';
 
-// Constants for error messages
+// Constants
 const ERROR_MESSAGES = {
   AUTH_REQUIRED: 'Authentication required.',
   BOARD_ID_MISSING: 'Board ID is missing.',
@@ -31,15 +36,16 @@ const ERROR_MESSAGES = {
   GATE_ID_MISSING: 'Gate ID is required.',
   CLASS_ID_MISSING: 'Class ID is required.',
   PARENT_BOARD_ID_MISSING: 'Parent board ID is required.',
-  DATA_MISSING: 'Required data is missing.',
   GENERIC: 'An error occurred.',
 };
 
-// Constants for configuration
-const MAX_CACHE_SIZE = 10;
-const DEBOUNCE_MS = 300;
-const CACHE_VERSION = 'v1';
-const DEFAULT_LIMIT = 20;
+const CONFIG = {
+  MAX_CACHE_SIZE: 10,
+  CACHE_EXPIRY_MS: 30 * 60 * 1000, // 30 minutes
+  DEBOUNCE_MS: 300,
+  DEFAULT_LIMIT: 20,
+  CACHE_VERSION: 'v1',
+};
 
 // LRU Cache implementation
 class LRUCache {
@@ -49,10 +55,14 @@ class LRUCache {
   }
 
   get(key) {
-    if (!this.cache.has(key)) return undefined;
-    const value = this.cache.get(key);
+    if (!this.cache.has(key)) return null;
+    const { value, timestamp } = this.cache.get(key);
+    if (Date.now() - timestamp > CONFIG.CACHE_EXPIRY_MS) {
+      this.cache.delete(key);
+      return null;
+    }
     this.cache.delete(key);
-    this.cache.set(key, value);
+    this.cache.set(key, { value, timestamp });
     return value;
   }
 
@@ -61,11 +71,7 @@ class LRUCache {
       const firstKey = this.cache.keys().next().value;
       this.cache.delete(firstKey);
     }
-    this.cache.set(key, value);
-  }
-
-  has(key) {
-    return this.cache.has(key);
+    this.cache.set(key, { value, timestamp: Date.now() });
   }
 
   clear() {
@@ -73,59 +79,38 @@ class LRUCache {
   }
 }
 
-const boardCache = new LRUCache(MAX_CACHE_SIZE);
+const boardCache = new LRUCache(CONFIG.MAX_CACHE_SIZE);
 
 /**
- * Hook for managing boards and their members
- * @param {string|null} token - Authorization token
- * @param {function} onLogout - Function to handle logout
- * @param {function} navigate - Function for navigation
- * @returns {object} Object with states and methods for board operations
+ * Hook for managing boards and their members.
+ * @param {string|null} token - Authentication token.
+ * @param {function} onLogout - Logout callback.
+ * @param {function} navigate - Navigation callback.
+ * @param {boolean} skipInitialFetch - Skip initial boards fetch.
+ * @returns {object} Board management functions and state.
  */
-export const useBoards = (token, onLogout, navigate) => {
+export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) => {
   const [boards, setBoards] = useState([]);
   const [boardItem, setBoardItem] = useState(null);
   const [members, setMembers] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_LIMIT, total: 0, hasMore: true });
+  const [pagination, setPagination] = useState({ page: 1, limit: CONFIG.DEFAULT_LIMIT, total: 0, hasMore: true });
   const [gateInfo, setGateInfo] = useState(null);
   const [classInfo, setClassInfo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const debounceTimer = useRef(null);
-  const abortControllers = useRef(new Set());
+  const handleError = useCallback((err, message) => {
+    if (err.name === 'AbortError') return Promise.resolve(null);
+    const status = err.status || 500;
+    if (status === 401 || status === 403) {
+      onLogout('Session expired. Please log in again.');
+      navigate('/login');
+    }
+    const errorMessage = message || err.message || ERROR_MESSAGES.GENERIC;
+    setError(errorMessage);
+    return Promise.reject(new Error(errorMessage));
+  }, [onLogout, navigate]);
 
-  // Centralized error handling
-  const handleError = useCallback(
-    (err, customMessage) => {
-      if (err.name === 'AbortError') return null;
-      const status = err.status || 500;
-      if (status === 401 || status === 403) {
-        onLogout('Your session has expired. Please log in again.');
-        navigate('/login');
-      }
-      setError(customMessage || err.message || ERROR_MESSAGES.GENERIC);
-      return null;
-    },
-    [onLogout, navigate]
-  );
-
-  // Debounce utility
-  const debounce = useCallback((fn, ms) => {
-    return (...args) => {
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
-      }
-      return new Promise((resolve) => {
-        debounceTimer.current = setTimeout(async () => {
-          const result = await fn(...args);
-          resolve(result);
-        }, ms);
-      });
-    };
-  }, []);
-
-  // Normalize board members data
   const normalizeMembers = useCallback((members = []) => {
     return members.map((member) => ({
       member_id: member.member_id || member.anonymous_id || '',
@@ -138,696 +123,563 @@ export const useBoards = (token, onLogout, navigate) => {
     }));
   }, []);
 
-  // Reset hook state
   const resetState = useCallback(() => {
     setBoards([]);
     setBoardItem(null);
     setMembers([]);
-    setPagination({ page: 1, limit: DEFAULT_LIMIT, total: 0, hasMore: true });
+    setPagination({ page: 1, limit: CONFIG.DEFAULT_LIMIT, total: 0, hasMore: true });
     setGateInfo(null);
     setClassInfo(null);
     setError(null);
     boardCache.clear();
   }, []);
 
-  // Create AbortController with cleanup
-  const createAbortController = useCallback(() => {
-    const controller = new AbortController();
-    abortControllers.current.add(controller);
-    return controller;
-  }, []);
+  const fetchBoardsList = useCallback(async (filters = {}, signal, append = false) => {
+    if (!token) return handleError(new Error(), ERROR_MESSAGES.AUTH_REQUIRED);
 
-  // Cleanup AbortControllers
-  const cleanupAbortControllers = useCallback(() => {
-    abortControllers.current.forEach((controller) => controller.abort());
-    abortControllers.current.clear();
-  }, []);
+    const { page = 1, limit = CONFIG.DEFAULT_LIMIT } = filters;
+    const cacheKey = `${CONFIG.CACHE_VERSION}:boards:${JSON.stringify({ ...filters, page, limit })}`;
+    const cachedData = boardCache.get(cacheKey);
 
-  // Fetch list of boards with caching and pagination
-  const fetchBoardsList = useCallback(
-    async (filters = {}, signal, append = false) => {
-      if (!token) {
-        setError(ERROR_MESSAGES.AUTH_REQUIRED);
-        return null;
-      }
+    if (cachedData && !append) {
+      setBoards(cachedData.boards || []);
+      setPagination(cachedData.pagination || { page, limit, total: 0, hasMore: true });
+      setGateInfo(null);
+      setClassInfo(null);
+      return Promise.resolve(cachedData);
+    }
 
-      const { page = 1, limit = DEFAULT_LIMIT } = filters;
-      const cacheKey = `${CACHE_VERSION}:boards:${JSON.stringify({ ...filters, page, limit })}`;
-      const cachedData = boardCache.get(cacheKey);
-      if (cachedData && !append) {
-        setBoards(cachedData.boards || []);
-        setPagination(cachedData.pagination || { page, limit, total: 0, hasMore: true });
-        setGateInfo(null);
-        setClassInfo(null);
-        return cachedData;
-      }
+    setLoading(true);
+    setError(null);
 
-      setLoading(true);
-      setError(null);
+    try {
+      const data = await fetchBoards(token, { ...filters, page, limit }, signal);
+      if (!data) throw new Error('No data received');
+      const newBoards = data.boards || [];
+      setBoards((prev) => (append ? [...prev, ...newBoards] : newBoards));
+      setPagination({
+        page: data.pagination?.page || page,
+        limit: data.pagination?.limit || limit,
+        total: data.pagination?.total || 0,
+        hasMore: newBoards.length === limit,
+      });
+      setGateInfo(null);
+      setClassInfo(null);
+      boardCache.set(cacheKey, data);
+      return Promise.resolve(data);
+    } catch (err) {
+      if (err.name === 'AbortError') return Promise.resolve(null);
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError]);
 
-      try {
-        const data = await fetchBoards(token, { ...filters, page, limit }, signal);
-        if (!data) throw new Error('No data received');
-        const newBoards = data.boards || [];
-        setBoards((prev) => (append ? [...prev, ...newBoards] : newBoards));
-        setPagination({
-          page: data.pagination?.page || page,
-          limit: data.pagination?.limit || limit,
-          total: data.pagination?.total || 0,
-          hasMore: newBoards.length === limit,
-        });
-        setGateInfo(null);
-        setClassInfo(null);
-        boardCache.set(cacheKey, data);
-        return data;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError]
-  );
+  const debouncedFetchBoardsList = useMemo(() => {
+    return debounce((filters, signal, append, callback) => {
+      fetchBoardsList(filters, signal, append)
+        .then((result) => callback(null, result))
+        .catch((err) => callback(err, null));
+    }, CONFIG.DEBOUNCE_MS);
+  }, [fetchBoardsList]);
 
-  const debouncedFetchBoardsList = useMemo(
-    () => debounce(fetchBoardsList, DEBOUNCE_MS),
-    [fetchBoardsList]
-  );
+  const fetchBoardsByGate = useCallback(async (gateId, filters = {}, signal, append = false) => {
+    if (!token || !gateId?.trim()) {
+      return handleError(new Error(), token ? ERROR_MESSAGES.GATE_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
+    }
 
-  // Fetch boards by gate ID
-  const fetchBoardsByGate = useCallback(
-    async (gateId, filters = {}, signal, append = false) => {
-      if (!token || !gateId?.trim()) {
-        setError(token ? ERROR_MESSAGES.GATE_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
-        return null;
-      }
+    const { page = 1, limit = CONFIG.DEFAULT_LIMIT } = filters;
+    const cacheKey = `${CONFIG.CACHE_VERSION}:gate:${gateId}:${JSON.stringify({ ...filters, page, limit })}`;
+    const cachedData = boardCache.get(cacheKey);
 
-      const { page = 1, limit = DEFAULT_LIMIT } = filters;
-      const cacheKey = `${CACHE_VERSION}:gate:${gateId}:${JSON.stringify({ ...filters, page, limit })}`;
-      const cachedData = boardCache.get(cacheKey);
-      if (cachedData && !append) {
-        setBoards(cachedData.boards || []);
-        setPagination(cachedData.pagination || { page, limit, total: 0, hasMore: true });
-        setGateInfo(cachedData.gate || null);
-        setClassInfo(null);
-        return cachedData;
-      }
+    if (cachedData && !append) {
+      setBoards(cachedData.boards || []);
+      setPagination(cachedData.pagination || { page, limit, total: 0, hasMore: true });
+      setGateInfo(cachedData.gate || null);
+      setClassInfo(null);
+      return Promise.resolve(cachedData);
+    }
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const data = await fetchBoardsByGateId(gateId, token, { ...filters, page, limit }, signal);
-        if (!data) throw new Error('No data received');
-        const newBoards = data.boards || [];
-        setBoards((prev) => (append ? [...prev, ...newBoards] : newBoards));
-        setPagination({
-          page: data.pagination?.page || page,
-          limit: data.pagination?.limit || limit,
-          total: data.pagination?.total || 0,
-          hasMore: newBoards.length === limit,
-        });
-        setGateInfo(data.gate || null);
-        setClassInfo(null);
-        boardCache.set(cacheKey, data);
-        return data;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError]
-  );
+    try {
+      const data = await fetchBoardsByGateId(gateId, token, { ...filters, page, limit }, signal);
+      if (!data) throw new Error('No data received');
+      const newBoards = data.boards || [];
+      setBoards((prev) => (append ? [...prev, ...newBoards] : newBoards));
+      setPagination({
+        page: data.pagination?.page || page,
+        limit: data.pagination?.limit || limit,
+        total: data.pagination?.total || 0,
+        hasMore: newBoards.length === limit,
+      });
+      setGateInfo(data.gate || null);
+      setClassInfo(null);
+      boardCache.set(cacheKey, data);
+      return Promise.resolve(data);
+    } catch (err) {
+      if (err.name === 'AbortError') return Promise.resolve(null);
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError]);
 
-  const debouncedFetchBoardsByGate = useMemo(
-    () => debounce(fetchBoardsByGate, DEBOUNCE_MS),
-    [fetchBoardsByGate]
-  );
+  const debouncedFetchBoardsByGate = useMemo(() => {
+    return debounce((gateId, filters, signal, append, callback) => {
+      fetchBoardsByGate(gateId, filters, signal, append)
+        .then((result) => callback(null, result))
+        .catch((err) => callback(err, null));
+    }, CONFIG.DEBOUNCE_MS);
+  }, [fetchBoardsByGate]);
 
-  // Fetch boards by class ID
-  const fetchBoardsByClass = useCallback(
-    async (classId, filters = {}, signal, append = false) => {
-      if (!token || !classId?.trim()) {
-        setError(token ? ERROR_MESSAGES.CLASS_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
-        return null;
-      }
+  const fetchBoardsByClass = useCallback(async (classId, filters = {}, signal, append = false) => {
+    if (!token || !classId?.trim()) {
+      return handleError(new Error(), token ? ERROR_MESSAGES.CLASS_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
+    }
 
-      const { page = 1, limit = DEFAULT_LIMIT } = filters;
-      const cacheKey = `${CACHE_VERSION}:class:${classId}:${JSON.stringify({ ...filters, page, limit })}`;
-      const cachedData = boardCache.get(cacheKey);
-      if (cachedData && !append) {
-        setBoards(cachedData.boards || []);
-        setPagination(cachedData.pagination || { page, limit, total: 0, hasMore: true });
-        setClassInfo(cachedData.class || null);
-        setGateInfo(null);
-        return cachedData;
-      }
+    const { page = 1, limit = CONFIG.DEFAULT_LIMIT } = filters;
+    const cacheKey = `${CONFIG.CACHE_VERSION}:class:${classId}:${JSON.stringify({ ...filters, page, limit })}`;
+    const cachedData = boardCache.get(cacheKey);
 
-      setLoading(true);
-      setError(null);
+    if (cachedData && !append) {
+      setBoards(cachedData.boards || []);
+      setPagination(cachedData.pagination || { page, limit, total: 0, hasMore: true });
+      setClassInfo(cachedData.class || null);
+      setGateInfo(null);
+      return Promise.resolve(cachedData);
+    }
 
-      try {
-        const data = await fetchBoardsByClassId(classId, token, { ...filters, page, limit }, signal);
-        if (!data) throw new Error('No data received');
-        const newBoards = data.boards || [];
-        setBoards((prev) => (append ? [...prev, ...newBoards] : newBoards));
-        setPagination({
-          page: data.pagination?.page || page,
-          limit: data.pagination?.limit || limit,
-          total: data.pagination?.total || 0,
-          hasMore: newBoards.length === limit,
-        });
-        setClassInfo(data.class || null);
-        setGateInfo(null);
-        boardCache.set(cacheKey, data);
-        return data;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError]
-  );
+    setLoading(true);
+    setError(null);
 
-  const debouncedFetchBoardsByClass = useMemo(
-    () => debounce(fetchBoardsByClass, DEBOUNCE_MS),
-    [fetchBoardsByClass]
-  );
+    try {
+      const data = await fetchBoardsByClassId(classId, token, { ...filters, page, limit }, signal);
+      if (!data) throw new Error('No data received');
+      const newBoards = data.boards || [];
+      setBoards((prev) => (append ? [...prev, ...newBoards] : newBoards));
+      setPagination({
+        page: data.pagination?.page || page,
+        limit: data.pagination?.limit || limit,
+        total: data.pagination?.total || 0,
+        hasMore: newBoards.length === limit,
+      });
+      setClassInfo(data.class || null);
+      setGateInfo(null);
+      boardCache.set(cacheKey, data);
+      return Promise.resolve(data);
+    } catch (err) {
+      if (err.name === 'AbortError') return Promise.resolve(null);
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError]);
 
-  // Fetch a single board by ID
-  const fetchBoard = useCallback(
-    async (boardId, signal) => {
-      if (!token || !boardId?.trim()) {
-        setError(token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
-        return null;
-      }
+  const debouncedFetchBoardsByClass = useMemo(() => {
+    return debounce((classId, filters, signal, append, callback) => {
+      fetchBoardsByClass(classId, filters, signal, append)
+        .then((result) => callback(null, result))
+        .catch((err) => callback(err, null));
+    }, CONFIG.DEBOUNCE_MS);
+  }, [fetchBoardsByClass]);
 
-      const cacheKey = `${CACHE_VERSION}:board:${boardId}`;
-      const cachedData = boardCache.get(cacheKey);
-      if (cachedData) {
-        setBoardItem(cachedData);
-        setMembers(normalizeMembers(cachedData.members));
-        return cachedData;
-      }
+  const fetchBoard = useCallback(async (boardId, signal) => {
+    if (!token || !boardId?.trim()) {
+      return handleError(new Error(), token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
+    }
 
-      setLoading(true);
-      setError(null);
+    const cacheKey = `${CONFIG.CACHE_VERSION}:board:${boardId}`;
+    const cachedData = boardCache.get(cacheKey);
 
-      try {
-        const [boardData, membersData] = await Promise.all([
-          fetchBoardById(boardId, token, signal),
-          fetchBoardMembers(boardId, token, signal),
-        ]);
-        if (!boardData) throw new Error('No board data received');
-        const data = { ...boardData, members: membersData?.members || [] };
-        setBoardItem(data);
-        setMembers(normalizeMembers(data.members));
-        boardCache.set(cacheKey, data);
-        return data;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.BOARD_NOT_FOUND);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError, normalizeMembers]
-  );
+    if (cachedData) {
+      setBoardItem(cachedData);
+      setMembers(normalizeMembers(cachedData.members));
+      return Promise.resolve(cachedData);
+    }
 
-  // Create a new board
-  const createNewBoard = useCallback(
-    async (boardData) => {
-      if (!token || !boardData?.name?.trim()) {
-        setError(token ? ERROR_MESSAGES.BOARD_NAME_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
-        return null;
-      }
+    setLoading(true);
+    setError(null);
 
-      setLoading(true);
-      setError(null);
+    try {
+      const boardData = await fetchBoardById(boardId, token, signal);
+      if (!boardData) throw new Error('No board data received');
+      setBoardItem(boardData);
+      setMembers(normalizeMembers(boardData.members || []));
+      boardCache.set(cacheKey, boardData);
+      return Promise.resolve(boardData);
+    } catch (err) {
+      if (err.name === 'AbortError') return Promise.resolve(null);
+      return handleError(err, ERROR_MESSAGES.BOARD_NOT_FOUND);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError, normalizeMembers]);
 
-      try {
-        const newBoard = await createBoard(
-          {
-            ...boardData,
-            visibility: boardData.visibility || 'private',
-            type: boardData.type || 'personal',
-            settings: {
-              max_tweets: boardData.settings?.max_tweets || 100,
-              max_members: boardData.settings?.max_members || 50,
-              tweet_cost: boardData.settings?.tweet_cost || 1,
-              favorite_cost: boardData.settings?.favorite_cost || 1,
-              points_to_creator: boardData.settings?.points_to_creator || 1,
-              allow_invites: boardData.settings?.allow_invites ?? true,
-              require_approval: boardData.settings?.require_approval ?? false,
-              ai_moderation_enabled: boardData.settings?.ai_moderation_enabled ?? true,
-              auto_archive_after: boardData.settings?.auto_archive_after || 30,
-              ...boardData.settings,
-            },
+  const fetchBoardMembersList = useCallback(async (boardId, signal) => {
+    if (!token || !boardId?.trim()) {
+      return handleError(new Error(), token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await fetchBoardMembers(boardId, token, signal);
+      if (!data) throw new Error('No members data received');
+      setMembers(normalizeMembers(data.members));
+      return Promise.resolve(data);
+    } catch (err) {
+      if (err.name === 'AbortError') return Promise.resolve(null);
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError, normalizeMembers]);
+
+  const debouncedFetchBoardMembersList = useMemo(() => {
+    return debounce((boardId, signal, callback) => {
+      fetchBoardMembersList(boardId, signal)
+        .then((result) => callback(null, result))
+        .catch((err) => callback(err, null));
+    }, CONFIG.DEBOUNCE_MS);
+  }, [fetchBoardMembersList]);
+
+  const createNewBoard = useCallback(async (boardData) => {
+    if (!token || !boardData?.name?.trim()) {
+      return handleError(new Error(), token ? ERROR_MESSAGES.BOARD_NAME_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const newBoard = await createBoard(
+        {
+          ...boardData,
+          visibility: boardData.visibility || 'private',
+          type: boardData.type || 'personal',
+          settings: {
+            max_tweets: boardData.settings?.max_tweets || 100,
+            max_members: boardData.settings?.max_members || 50,
+            tweet_cost: boardData.settings?.tweet_cost || 1,
+            favorite_cost: boardData.settings?.favorite_cost || 1,
+            points_to_creator: boardData.settings?.points_to_creator || 1,
+            allow_invites: boardData.settings?.allow_invites ?? true,
+            require_approval: boardData.settings?.require_approval ?? false,
+            ai_moderation_enabled: boardData.settings?.ai_moderation_enabled ?? true,
+            auto_archive_after: boardData.settings?.auto_archive_after || 30,
+            ...boardData.settings,
           },
-          token
-        );
-        if (!newBoard) throw new Error('Failed to create board');
-        setBoards((prev) => [...prev, newBoard]);
-        boardCache.clear();
-        return newBoard;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError]
-  );
+        },
+        token
+      );
+      if (!newBoard) throw new Error('Failed to create board');
+      setBoards((prev) => [...prev, newBoard]);
+      boardCache.clear();
+      return Promise.resolve(newBoard);
+    } catch (err) {
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError]);
 
-  // Create a new board in a gate
-  const createNewBoardInGate = useCallback(
-    async (gateId, boardData) => {
-      if (!token || !gateId?.trim() || !boardData?.name?.trim()) {
-        setError(
-          !token
-            ? ERROR_MESSAGES.AUTH_REQUIRED
-            : !gateId
-            ? ERROR_MESSAGES.GATE_ID_MISSING
-            : ERROR_MESSAGES.BOARD_NAME_MISSING
-        );
-        return null;
-      }
+  const createNewBoardInGate = useCallback(async (gateId, boardData) => {
+    if (!token || !gateId?.trim() || !boardData?.name?.trim()) {
+      return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !gateId ? ERROR_MESSAGES.GATE_ID_MISSING : ERROR_MESSAGES.BOARD_NAME_MISSING);
+    }
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const newBoard = await createBoardInGate(gateId, boardData, token);
-        if (!newBoard) throw new Error('Failed to create board in gate');
-        setBoards((prev) => [...prev, newBoard]);
-        boardCache.clear();
-        return newBoard;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError]
-  );
+    try {
+      const newBoard = await createBoardInGate(gateId, boardData, token);
+      if (!newBoard) throw new Error('Failed to create board in gate');
+      setBoards((prev) => [...prev, newBoard]);
+      boardCache.clear();
+      return Promise.resolve(newBoard);
+    } catch (err) {
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError]);
 
-  // Create a new board in a class
-  const createNewBoardInClass = useCallback(
-    async (classId, boardData) => {
-      if (!token || !classId?.trim() || !boardData?.name?.trim()) {
-        setError(
-          !token
-            ? ERROR_MESSAGES.AUTH_REQUIRED
-            : !classId
-            ? ERROR_MESSAGES.CLASS_ID_MISSING
-            : ERROR_MESSAGES.BOARD_NAME_MISSING
-        );
-        return null;
-      }
+  const createNewBoardInClass = useCallback(async (classId, boardData) => {
+    if (!token || !classId?.trim() || !boardData?.name?.trim()) {
+      return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !classId ? ERROR_MESSAGES.CLASS_ID_MISSING : ERROR_MESSAGES.BOARD_NAME_MISSING);
+    }
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const { class_id, ...cleanedBoardData } = boardData;
-        const newBoard = await createBoardInClass(classId, cleanedBoardData, token);
-        if (!newBoard) throw new Error('Failed to create board in class');
-        setBoards((prev) => [...prev, newBoard]);
-        boardCache.clear();
-        return newBoard;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError]
-  );
+    try {
+      const { class_id, ...cleanedBoardData } = boardData;
+      const newBoard = await createBoardInClass(classId, cleanedBoardData, token);
+      if (!newBoard) throw new Error('Failed to create board in class');
+      setBoards((prev) => [...prev, newBoard]);
+      boardCache.clear();
+      return Promise.resolve(newBoard);
+    } catch (err) {
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError]);
 
-  // Create a new board in another board
-  const createNewBoardInBoard = useCallback(
-    async (parentBoardId, boardData) => {
-      if (!token || !parentBoardId?.trim() || !boardData?.name?.trim()) {
-        setError(
-          !token
-            ? ERROR_MESSAGES.AUTH_REQUIRED
-            : !parentBoardId
-            ? ERROR_MESSAGES.PARENT_BOARD_ID_MISSING
-            : ERROR_MESSAGES.BOARD_NAME_MISSING
-        );
-        return null;
-      }
+  const createNewBoardInBoard = useCallback(async (parentBoardId, boardData) => {
+    if (!token || !parentBoardId?.trim() || !boardData?.name?.trim()) {
+      return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !parentBoardId ? ERROR_MESSAGES.PARENT_BOARD_ID_MISSING : ERROR_MESSAGES.BOARD_NAME_MISSING);
+    }
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const newBoard = await createBoardInBoard(parentBoardId, boardData, token);
-        if (!newBoard) throw new Error('Failed to create board in board');
-        setBoards((prev) => [...prev, newBoard]);
-        boardCache.clear();
-        return newBoard;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError]
-  );
+    try {
+      const newBoard = await createBoardInBoard(parentBoardId, boardData, token);
+      if (!newBoard) throw new Error('Failed to create board in board');
+      setBoards((prev) => [...prev, newBoard]);
+      boardCache.clear();
+      return Promise.resolve(newBoard);
+    } catch (err) {
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError]);
 
-  // Update an existing board
-  const updateExistingBoard = useCallback(
-    async (boardId, boardData) => {
-      if (!token || !boardId?.trim() || !boardData?.name?.trim()) {
-        setError(
-          !token
-            ? ERROR_MESSAGES.AUTH_REQUIRED
-            : !boardId
-            ? ERROR_MESSAGES.BOARD_ID_MISSING
-            : ERROR_MESSAGES.BOARD_NAME_MISSING
-        );
-        return null;
-      }
+  const updateExistingBoard = useCallback(async (boardId, boardData) => {
+    if (!token || !boardId?.trim() || !boardData?.name?.trim()) {
+      return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !boardId ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.BOARD_NAME_MISSING);
+    }
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const { board_id, ...updateData } = boardData;
-        const updatedBoard = await updateBoard(boardId, updateData, token);
-        if (!updatedBoard) throw new Error('Failed to update board');
-        setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
-        setBoardItem((prev) => (prev?.board_id === boardId ? updatedBoard : prev));
-        boardCache.clear();
-        return updatedBoard;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError]
-  );
+    try {
+      const { board_id, ...updateData } = boardData;
+      const updatedBoard = await updateBoard(boardId, updateData, token);
+      if (!updatedBoard) throw new Error('Failed to update board');
+      setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
+      setBoardItem((prev) => (prev?.board_id === boardId ? updatedBoard : prev));
+      boardCache.clear();
+      return Promise.resolve(updatedBoard);
+    } catch (err) {
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError]);
 
-  // Update board status
-  const updateBoardStatusById = useCallback(
-    async (boardId, statusData) => {
-      if (!token || !boardId?.trim() || !statusData) {
-        setError(
-          !token
-            ? ERROR_MESSAGES.AUTH_REQUIRED
-            : !boardId
-            ? ERROR_MESSAGES.BOARD_ID_MISSING
-            : ERROR_MESSAGES.STATUS_DATA_MISSING
-        );
-        return null;
-      }
+  const updateBoardStatusById = useCallback(async (boardId, statusData) => {
+    if (!token || !boardId?.trim() || !statusData) {
+      return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !boardId ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.STATUS_DATA_MISSING);
+    }
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const updatedBoard = await updateBoardStatus(boardId, statusData, token);
-        if (!updatedBoard) throw new Error('Failed to update board status');
-        setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
-        setBoardItem((prev) => (prev?.board_id === boardId ? updatedBoard : prev));
-        boardCache.clear();
-        return updatedBoard;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError]
-  );
+    try {
+      const updatedBoard = await updateBoardStatus(boardId, statusData, token);
+      if (!updatedBoard) throw new Error('Failed to update board status');
+      setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
+      setBoardItem((prev) => (prev?.board_id === boardId ? updatedBoard : prev));
+      boardCache.clear();
+      return Promise.resolve(updatedBoard);
+    } catch (err) {
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError]);
 
-  // Delete a board
-  const deleteExistingBoard = useCallback(
-    async (boardId) => {
-      if (!token || !boardId?.trim()) {
-        setError(token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
-        return null;
-      }
+  const deleteExistingBoard = useCallback(async (boardId) => {
+    if (!token || !boardId?.trim()) {
+      return handleError(new Error(), token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
+    }
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        await deleteBoard(boardId, token);
-        setBoards((prev) => prev.filter((b) => b.board_id !== boardId));
-        setBoardItem((prev) => (prev?.board_id === boardId ? null : prev));
-        boardCache.clear();
-        return true;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError]
-  );
+    try {
+      await deleteBoard(boardId, token);
+      setBoards((prev) => prev.filter((b) => b.board_id !== boardId));
+      setBoardItem((prev) => (prev?.board_id === boardId ? null : prev));
+      boardCache.clear();
+      return Promise.resolve(true);
+    } catch (err) {
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError]);
 
-  // Add a member to a board
-  const addMemberToBoard = useCallback(
-    async (boardId, { username, role = 'viewer' }) => {
-      if (!token || !boardId?.trim() || !username?.trim()) {
-        setError(
-          !token
-            ? ERROR_MESSAGES.AUTH_REQUIRED
-            : !boardId
-            ? ERROR_MESSAGES.BOARD_ID_MISSING
-            : ERROR_MESSAGES.USERNAME_MISSING
-        );
-        return null;
-      }
+  const addMemberToBoard = useCallback(async (boardId, { username, role = 'viewer' }) => {
+    if (!token || !boardId?.trim() || !username?.trim()) {
+      return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !boardId ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.USERNAME_MISSING);
+    }
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const board = await addMember(boardId, { username, role }, token);
-        if (!board) throw new Error('Failed to add member');
-        setMembers(normalizeMembers(board.members));
-        setBoardItem((prev) => (prev?.board_id === boardId ? board : prev));
-        setBoards((prev) => prev.map((b) => (b.board_id === boardId ? board : b)));
-        boardCache.clear();
-        return board;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError, normalizeMembers]
-  );
+    try {
+      const updatedBoard = await addMember(boardId, { username, role }, token);
+      if (!updatedBoard) throw new Error('Failed to add member');
+      setMembers(normalizeMembers(updatedBoard.members));
+      setBoardItem((prev) => (prev?.board_id === boardId ? updatedBoard : prev));
+      setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
+      boardCache.clear();
+      return Promise.resolve(updatedBoard);
+    } catch (err) {
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError, normalizeMembers]);
 
-  // Remove a member from a board
-  const removeMemberFromBoard = useCallback(
-    async (boardId, username) => {
-      if (!token || !boardId?.trim() || !username?.trim()) {
-        setError(
-          !token
-            ? ERROR_MESSAGES.AUTH_REQUIRED
-            : !boardId
-            ? ERROR_MESSAGES.BOARD_ID_MISSING
-            : ERROR_MESSAGES.USERNAME_MISSING
-        );
-        return null;
-      }
+  const removeMemberFromBoard = useCallback(async (boardId, username) => {
+    if (!token || !boardId?.trim() || !username?.trim()) {
+      return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !boardId ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.USERNAME_MISSING);
+    }
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const board = await removeMember(boardId, username, token);
-        if (!board) throw new Error('Failed to remove member');
-        setMembers(normalizeMembers(board.members));
-        setBoardItem((prev) => (prev?.board_id === boardId ? board : prev));
-        setBoards((prev) => prev.map((b) => (b.board_id === boardId ? board : b)));
-        boardCache.clear();
-        return board;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError, normalizeMembers]
-  );
+    try {
+      const updatedBoard = await removeMember(boardId, username, token);
+      if (!updatedBoard) throw new Error('Failed to remove member');
+      setMembers(normalizeMembers(updatedBoard.members));
+      setBoardItem((prev) => (prev?.board_id === boardId ? updatedBoard : prev));
+      setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
+      boardCache.clear();
+      return Promise.resolve(updatedBoard);
+    } catch (err) {
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError, normalizeMembers]);
 
-  // Update a member's role in a board
-  const updateMemberRole = useCallback(
-    async (boardId, username, role) => {
-      if (!token || !boardId?.trim() || !username?.trim() || !role?.trim()) {
-        setError(
-          !token
-            ? ERROR_MESSAGES.AUTH_REQUIRED
-            : !boardId
-            ? ERROR_MESSAGES.BOARD_ID_MISSING
-            : !username
-            ? ERROR_MESSAGES.USERNAME_MISSING
-            : ERROR_MESSAGES.ROLE_MISSING
-        );
-        return null;
-      }
+  const updateMemberRole = useCallback(async (boardId, username, role) => {
+    if (!token || !boardId?.trim() || !username?.trim() || !role?.trim()) {
+      return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !boardId ? ERROR_MESSAGES.BOARD_ID_MISSING : !username ? ERROR_MESSAGES.USERNAME_MISSING : ERROR_MESSAGES.ROLE_MISSING);
+    }
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const board = await updateMember(boardId, username, { role }, token);
-        if (!board) throw new Error('Failed to update member role');
-        setMembers(normalizeMembers(board.members));
-        setBoardItem((prev) => (prev?.board_id === boardId ? board : prev));
-        setBoards((prev) => prev.map((b) => (b.board_id === boardId ? board : b)));
-        boardCache.clear();
-        return board;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError, normalizeMembers]
-  );
+    try {
+      const updatedBoard = await updateMember(boardId, username, { role }, token);
+      if (!updatedBoard) throw new Error('Failed to update member role');
+      setMembers(normalizeMembers(updatedBoard.members));
+      setBoardItem((prev) => (prev?.board_id === boardId ? updatedBoard : prev));
+      setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
+      boardCache.clear();
+      return Promise.resolve(updatedBoard);
+    } catch (err) {
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError, normalizeMembers]);
 
-  // Fetch board members list
-  const fetchBoardMembersList = useCallback(
-    async (boardId, signal) => {
-      if (!token || !boardId?.trim()) {
-        setError(token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
-        return null;
-      }
+  const toggleFavoriteBoard = useCallback(async (boardId, isFavorited) => {
+    if (!token || !boardId?.trim()) {
+      return handleError(new Error(), token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
+    }
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const data = await fetchBoardMembers(boardId, token, signal);
-        if (!data) throw new Error('No members data received');
-        setMembers(normalizeMembers(data.members));
-        return data;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError, normalizeMembers]
-  );
+    try {
+      const updatedBoard = isFavorited ? await unfavoriteBoard(boardId, token) : await favoriteBoard(boardId, token);
+      if (!updatedBoard) throw new Error('Failed to toggle favorite status');
+      setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
+      setBoardItem((prev) => (prev?.board_id === boardId ? updatedBoard : prev));
+      boardCache.clear();
+      return Promise.resolve(updatedBoard);
+    } catch (err) {
+      return handleError(err, ERROR_MESSAGES.GENERIC);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, handleError]);
 
-  // Toggle favorite status for a board
-  const toggleFavoriteBoard = useCallback(
-    async (boardId, isFavorited) => {
-      if (!token || !boardId?.trim()) {
-        setError(token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
-        return null;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const updatedBoard = isFavorited
-          ? await unfavoriteBoard(boardId, token)
-          : await favoriteBoard(boardId, token);
-        if (!updatedBoard) throw new Error('Failed to toggle favorite status');
-        setBoards((prev) => prev.map((b) => (b.board_id === boardId ? updatedBoard : b)));
-        setBoardItem((prev) => (prev?.board_id === boardId ? updatedBoard : prev));
-        boardCache.clear();
-        return updatedBoard;
-      } catch (err) {
-        return handleError(err, ERROR_MESSAGES.GENERIC);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token, handleError]
-  );
-
-  // Handle token change and initial fetch
   useEffect(() => {
-    if (!token) {
-      cleanupAbortControllers();
+    if (!token || skipInitialFetch) {
       resetState();
       return;
     }
 
-    const controller = createAbortController();
-    debouncedFetchBoardsList({}, controller.signal).catch((err) => {
-      if (err.name !== 'AbortError') {
-        console.error('Initial fetch boards error:', err);
+    const controller = new AbortController();
+    debouncedFetchBoardsList({}, controller.signal, false, (err, result) => {
+      if (err && err.name !== 'AbortError') {
+        setError(err.message || ERROR_MESSAGES.GENERIC);
       }
     });
 
     return () => {
-      cleanupAbortControllers();
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
-      }
+      controller.abort();
+      debouncedFetchBoardsList.cancel();
+      debouncedFetchBoardMembersList.cancel();
     };
-  }, [token, debouncedFetchBoardsList, resetState, createAbortController, cleanupAbortControllers]);
+  }, [token, skipInitialFetch, resetState, debouncedFetchBoardsList, debouncedFetchBoardMembersList]);
 
-  // Memoized return object
-  return useMemo(
-    () => ({
-      boards,
-      boardItem,
-      members,
-      pagination,
-      gateInfo,
-      classInfo,
-      loading,
-      error,
-      fetchBoardsList: debouncedFetchBoardsList,
-      fetchBoardsByGate: debouncedFetchBoardsByGate,
-      fetchBoardsByClass: debouncedFetchBoardsByClass,
-      fetchBoard,
-      createNewBoard,
-      createNewBoardInGate,
-      createNewBoardInClass,
-      createNewBoardInBoard,
-      updateExistingBoard,
-      updateBoardStatusById,
-      deleteExistingBoard,
-      addMemberToBoard,
-      removeMemberFromBoard,
-      updateMemberRole,
-      fetchBoardMembersList,
-      toggleFavoriteBoard,
-      resetState,
-    }),
-    [
-      boards,
-      boardItem,
-      members,
-      pagination,
-      gateInfo,
-      classInfo,
-      loading,
-      error,
-      debouncedFetchBoardsList,
-      debouncedFetchBoardsByGate,
-      debouncedFetchBoardsByClass,
-      fetchBoard,
-      createNewBoard,
-      createNewBoardInGate,
-      createNewBoardInClass,
-      createNewBoardInBoard,
-      updateExistingBoard,
-      updateBoardStatusById,
-      deleteExistingBoard,
-      addMemberToBoard,
-      removeMemberFromBoard,
-      updateMemberRole,
-      fetchBoardMembersList,
-      toggleFavoriteBoard,
-      resetState,
-    ]
-  );
+  return useMemo(() => ({
+    boards,
+    boardItem,
+    members,
+    pagination,
+    gateInfo,
+    classInfo,
+    loading,
+    error,
+    fetchBoardsList: debouncedFetchBoardsList,
+    fetchBoardsByGate: debouncedFetchBoardsByGate,
+    fetchBoardsByClass: debouncedFetchBoardsByClass,
+    fetchBoard,
+    createNewBoard,
+    createNewBoardInGate,
+    createNewBoardInClass,
+    createNewBoardInBoard,
+    updateExistingBoard,
+    updateBoardStatusById,
+    deleteExistingBoard,
+    addMemberToBoard,
+    removeMemberFromBoard,
+    updateMemberRole,
+    fetchBoardMembersList: debouncedFetchBoardMembersList,
+    toggleFavoriteBoard,
+    resetState,
+  }), [
+    boards,
+    boardItem,
+    members,
+    pagination,
+    gateInfo,
+    classInfo,
+    loading,
+    error,
+    debouncedFetchBoardsList,
+    debouncedFetchBoardsByGate,
+    debouncedFetchBoardsByClass,
+    fetchBoard,
+    createNewBoard,
+    createNewBoardInGate,
+    createNewBoardInClass,
+    createNewBoardInBoard,
+    updateExistingBoard,
+    updateBoardStatusById,
+    deleteExistingBoard,
+    addMemberToBoard,
+    removeMemberFromBoard,
+    updateMemberRole,
+    debouncedFetchBoardMembersList,
+    toggleFavoriteBoard,
+    resetState,
+  ]);
 };
 
 export default useBoards;

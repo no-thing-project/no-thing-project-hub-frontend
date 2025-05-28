@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Add } from '@mui/icons-material';
 import { debounce } from 'lodash';
 import PropTypes from 'prop-types';
@@ -17,15 +17,30 @@ import LoadingSkeleton from '../components/Common/LoadingSkeleton';
 import { filterEntities } from '../utils/filterUtils';
 import { DEFAULT_CLASS } from '../constants/default';
 import { CLASS_FILTER_OPTIONS } from '../constants/filterOptions';
-import { actionButtonStyles } from '../styles/BaseStyles';
-import { Button } from '@mui/material';
+
+const ErrorBoundary = ({ children }) => {
+  const [hasError, setHasError] = useState(false);
+
+  const handleError = useCallback((error, errorInfo) => {
+    console.error('ErrorBoundary caught:', error, errorInfo);
+    setHasError(true);
+  }, []);
+
+  if (hasError) {
+    return <div>Something went wrong. Please try again later.</div>;
+  }
+
+  return children;
+};
 
 const ClassesPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { showNotification } = useNotification();
   const { token, authData, handleLogout, isAuthenticated, loading: authLoading } = useAuth();
   const {
     classes,
+    pagination,
     fetchClassesList,
     createNewClass,
     updateExistingClass,
@@ -36,7 +51,7 @@ const ClassesPage = () => {
     toggleFavoriteClass,
     loading: classesLoading,
     error: classesError,
-  } = useClasses(token, handleLogout, navigate);
+  } = useClasses(token, handleLogout, navigate, false); // Enable initial fetch
   const { gates, fetchGatesList, loading: gatesLoading, error: gatesError } = useGates(token, handleLogout, navigate);
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -50,7 +65,17 @@ const ClassesPage = () => {
   const [quickFilter, setQuickFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const stableFetchClassesList = useMemo(() => [fetchClassesList], [fetchClassesList]);
+  const stableFetchClassesList = useMemo(
+    () => [
+      () =>
+        fetchClassesList({ page: 1, limit: pagination.limit }, null, false, (err) => {
+          if (err && err.name !== 'AbortError') {
+            showNotification(err.message || 'Failed to fetch classes', 'error');
+          }
+        }),
+    ],
+    [fetchClassesList, pagination.limit, showNotification]
+  );
 
   const { isLoading, actionLoading, setActionLoading } = useEntity(
     stableFetchClassesList,
@@ -82,14 +107,30 @@ const ClassesPage = () => {
   useEffect(() => {
     if (searchQuery || quickFilter !== 'all') {
       const controller = new AbortController();
-      fetchGatesList({ visibility: 'public' }, controller.signal).catch((err) => {
-        if (err.name !== 'CanceledError' && err.message !== 'canceled') {
-          console.error('Gates fetch error:', err);
+      fetchGatesList({ visibility: 'public' }, controller.signal, false, (err) => {
+        if (err && err.name !== 'AbortError') {
+          showNotification(err.message || 'Failed to fetch gates', 'error');
         }
       });
       return () => controller.abort();
     }
-  }, [searchQuery, quickFilter, fetchGatesList]);
+  }, [searchQuery, quickFilter, fetchGatesList, showNotification]);
+
+  const handleLoadMore = useCallback(() => {
+    if (classesLoading || !pagination.hasMore) return;
+    const controller = new AbortController();
+    fetchClassesList(
+      { visibility: quickFilter === 'all' ? undefined : quickFilter, page: pagination.page + 1 },
+      controller.signal,
+      true,
+      (err) => {
+        if (err && err.name !== 'AbortError') {
+          showNotification(err.message || 'Failed to load more classes', 'error');
+        }
+      }
+    );
+    return () => controller.abort();
+  }, [fetchClassesList, classesLoading, pagination.hasMore, pagination.page, quickFilter, showNotification]);
 
   const handleOpenCreate = useCallback(() => setCreateDialogOpen(true), []);
   const handleCancelCreate = useCallback(() => {
@@ -97,24 +138,30 @@ const ClassesPage = () => {
     setPopupClass(DEFAULT_CLASS);
   }, []);
 
-  const handleCreate = useCallback(async () => {
-    if (!popupClass.name?.trim()) {
-      showNotification('Class name is required!', 'error');
-      return;
-    }
-    setActionLoading(true);
-    try {
-      const createdClass = await createNewClass(popupClass);
-      setCreateDialogOpen(false);
-      setPopupClass(DEFAULT_CLASS);
-      showNotification('Class created successfully!', 'success');
-      navigate(`/class/${createdClass.class_id}`);
-    } catch (err) {
-      showNotification(err.message || 'Failed to create class', 'error');
-    } finally {
-      setActionLoading(false);
-    }
-  }, [popupClass, createNewClass, showNotification, navigate, setActionLoading]);
+  const handleCreate = useCallback(
+    async (gateId) => {
+      if (!popupClass.name?.trim()) {
+        showNotification('Class name is required!', 'error');
+        return;
+      }
+      setActionLoading(true);
+      try {
+        const createdClass = await createNewClass({
+          ...popupClass,
+          gate_id: gateId || popupClass.gate_id,
+        });
+        setCreateDialogOpen(false);
+        setPopupClass(DEFAULT_CLASS);
+        showNotification('Class created successfully!', 'success');
+        navigate(`/class/${createdClass.class_id}`);
+      } catch (err) {
+        showNotification(err.message || 'Failed to create class', 'error');
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [popupClass, createNewClass, navigate, showNotification, setActionLoading]
+  );
 
   const handleUpdate = useCallback(async () => {
     if (!editingClass?.name?.trim()) {
@@ -153,8 +200,8 @@ const ClassesPage = () => {
     async (classId, memberData) => {
       setActionLoading(true);
       try {
-        const classItem = classes?.find((c) => c.class_id === classId);
-        if (classItem?.members?.length >= classItem?.settings?.max_members) {
+        const cls = classes.find((c) => c.class_id === classId);
+        if (cls?.members?.length >= cls?.settings?.max_members) {
           showNotification('Maximum member limit reached!', 'error');
           return;
         }
@@ -166,7 +213,7 @@ const ClassesPage = () => {
         setActionLoading(false);
       }
     },
-    [addMemberToClass, classes, showNotification, setActionLoading]
+    [addMemberToClass, showNotification, classes, setActionLoading]
   );
 
   const handleRemoveMember = useCallback(
@@ -210,7 +257,7 @@ const ClassesPage = () => {
     showNotification('Members updated successfully!', 'success');
   }, [showNotification]);
 
-  const handleCancelMember = useCallback(() => {
+  const handleCancelMemberDialog = useCallback(() => {
     setMemberDialogOpen(false);
     setSelectedClassId(null);
   }, []);
@@ -219,16 +266,21 @@ const ClassesPage = () => {
     setQuickFilter('all');
     setSearchQuery('');
     debouncedSetSearchQuery.cancel();
-  }, [debouncedSetSearchQuery]);
+    fetchClassesList({ page: 1, reset: { visibility: true } }, null, false, (err) => {
+      if (err && err.name !== 'AbortError') {
+        showNotification(err.message || 'Failed to reset filters', 'error');
+      }
+    });
+  }, [debouncedSetSearchQuery, fetchClassesList, showNotification]);
 
   const headerData = useMemo(
     () => ({
       type: 'page',
       title: 'Classes',
       titleAriaLabel: 'Classes page',
-      shortDescription: 'Your Space for Focused Learning',
+      shortDescription: 'Organize Your Learning',
       tooltipDescription:
-        'Classes are dedicated spaces within gates for learning and collaboration. Create a class to share knowledge, work on projects, or dive into specific topics with your community.',
+        'Classes are focused groups within Gates for specific topics or discussions. Create or join a Class to dive into structured conversations.',
       actions: [
         {
           label: 'Create Class',
@@ -243,7 +295,7 @@ const ClassesPage = () => {
     [handleOpenCreate, actionLoading, classesLoading, gatesLoading]
   );
 
-  if (authLoading || isLoading || classesLoading || gatesLoading) {
+  if (authLoading || isLoading) {
     return (
       <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
         <LoadingSkeleton />
@@ -252,76 +304,80 @@ const ClassesPage = () => {
   }
 
   if (!isAuthenticated) {
-    navigate('/login', { state: { from: '/classes' } });
+    navigate('/login', { state: { from: location.pathname } });
     return null;
   }
 
   return (
-    <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
-      <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData} />
-      <EntityGrid
-        type="classes"
-        items={filteredClasses}
-        cardComponent={CardMain}
-        itemKey="class_id"
-        quickFilter={quickFilter}
-        setQuickFilter={setQuickFilter}
-        searchQuery={searchQuery}
-        setSearchQuery={debouncedSetSearchQuery}
-        filterOptions={CLASS_FILTER_OPTIONS}
-        onResetFilters={handleResetFilters}
-        handleFavorite={toggleFavoriteClass}
-        setEditingItem={(classItem) => {
-          setEditingClass(classItem);
-          setEditDialogOpen(true);
-        }}
-        setItemToDelete={setClassToDelete}
-        setDeleteDialogOpen={setDeleteDialogOpen}
-        handleManageMembers={handleOpenMemberDialog}
-        navigate={navigate}
-        currentUser={authData}
-        token={token}
-        onCreateNew={handleOpenCreate}
-        disabled={actionLoading || classesLoading || gatesLoading}
-      />
-      <EntityDialogs
-        type="classes"
-        createOpen={createDialogOpen}
-        editOpen={editDialogOpen}
-        deleteOpen={deleteDialogOpen}
-        memberOpen={memberDialogOpen}
-        item={popupClass}
-        setItem={setPopupClass}
-        editingItem={editingClass}
-        setEditingItem={setEditingClass}
-        itemToDelete={classToDelete}
-        setItemToDelete={setClassToDelete}
-        onSaveCreate={handleCreate}
-        onSaveEdit={handleUpdate}
-        onCancelCreate={handleCancelCreate}
-        onCancelEdit={() => {
-          setEditDialogOpen(false);
-          setEditingClass(null);
-        }}
-        onConfirmDelete={handleDelete}
-        onCloseDelete={() => {
-          setDeleteDialogOpen(false);
-          setClassToDelete(null);
-        }}
-        selectedId={selectedClassId}
-        members={classes?.find((c) => c.class_id === selectedClassId)?.members || []}
-        addMember={handleAddMember}
-        removeMember={handleRemoveMember}
-        updateMemberRole={handleUpdateMemberRole}
-        onSaveMembers={handleSaveMembers}
-        onCancelMembers={handleCancelMember}
-        disabled={actionLoading || classesLoading || gatesLoading}
-        loading={actionLoading}
-        token={token}
-        gates={gates}
-        classes={classes}
-      />
-    </AppLayout>
+    <ErrorBoundary>
+      <AppLayout currentUser={authData} onLogout={handleLogout} token={token}>
+        <ProfileHeader user={authData} isOwnProfile={true} headerData={headerData} />
+        <EntityGrid
+          type="classes"
+          items={filteredClasses}
+          cardComponent={CardMain}
+          itemKey="class_id"
+          quickFilter={quickFilter}
+          setQuickFilter={setQuickFilter}
+          searchQuery={searchQuery}
+          setSearchQuery={debouncedSetSearchQuery}
+          filterOptions={CLASS_FILTER_OPTIONS}
+          onResetFilters={handleResetFilters}
+          handleFavorite={toggleFavoriteClass}
+          setEditingItem={(item) => {
+            setEditingClass(item);
+            setEditDialogOpen(true);
+          }}
+          setItemToDelete={setClassToDelete}
+          setDeleteDialogOpen={setDeleteDialogOpen}
+          handleManageMembers={handleOpenMemberDialog}
+          navigate={navigate}
+          currentUser={authData}
+          token={token}
+          onCreateNew={handleOpenCreate}
+          loadMore={handleLoadMore}
+          hasMore={pagination.hasMore}
+          loading={classesLoading}
+          disabled={actionLoading || classesLoading || gatesLoading}
+        />
+        <EntityDialogs
+          type="classes"
+          createOpen={createDialogOpen}
+          editOpen={editDialogOpen}
+          deleteOpen={deleteDialogOpen}
+          memberOpen={memberDialogOpen}
+          item={popupClass}
+          setItem={setPopupClass}
+          editingItem={editingClass}
+          setEditingItem={setEditingClass}
+          itemToDelete={classToDelete}
+          setItemToDelete={setClassToDelete}
+          onSaveCreate={handleCreate}
+          onSaveEdit={handleUpdate}
+          onCancelCreate={handleCancelCreate}
+          onCancelEdit={() => {
+            setEditDialogOpen(false);
+            setEditingClass(null);
+          }}
+          onConfirmDelete={handleDelete}
+          onCloseDelete={() => {
+            setDeleteDialogOpen(false);
+            setClassToDelete(null);
+          }}
+          selectedId={selectedClassId}
+          members={classes.find((c) => c.class_id === selectedClassId)?.members || []}
+          addMember={handleAddMember}
+          removeMember={handleRemoveMember}
+          updateMemberRole={handleUpdateMemberRole}
+          onSaveMembers={handleSaveMembers}
+          onCancelMembers={handleCancelMemberDialog}
+          disabled={actionLoading || classesLoading}
+          loading={actionLoading}
+          token={token}
+          gates={gates}
+        />
+      </AppLayout>
+    </ErrorBoundary>
   );
 };
 
