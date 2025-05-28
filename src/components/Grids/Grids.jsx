@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, memo } from "react";
+import React, { memo } from "react";
 import { Box, Typography, Button, useTheme, CircularProgress } from "@mui/material";
 import { motion, AnimatePresence } from "framer-motion";
 import PropTypes from "prop-types";
@@ -23,8 +23,8 @@ const loaderVariants = {
 const VALID_GRID_TYPES = ["gates", "classes", "boards"];
 
 // Memoized CardWrapper to prevent re-rendering of existing items
-const CardWrapper = memo(({ item, itemKey, entityType, handleFavorite, setEditingItem, setItemToDelete, setDeleteDialogOpen, handleManageMembers, navigate, currentUser, token }) => (
-  <motion.div variants={itemVariants} role="gridcell">
+const CardWrapper = memo(({ item, itemKey, entityType, handleFavorite, setEditingItem, setItemToDelete, setDeleteDialogOpen, handleManageMembers, navigate, currentUser, token, isLastItem, lastItemRef }) => (
+  <motion.div variants={itemVariants} role="gridcell" ref={isLastItem ? lastItemRef : null}>
     <CardMain
       item={item}
       entityType={entityType}
@@ -53,6 +53,8 @@ CardWrapper.propTypes = {
   navigate: PropTypes.func.isRequired,
   currentUser: PropTypes.object,
   token: PropTypes.string,
+  isLastItem: PropTypes.bool,
+  lastItemRef: PropTypes.func,
 };
 
 const Grids = ({
@@ -69,56 +71,11 @@ const Grids = ({
   currentUser,
   token,
   onCreateNew,
-  loadMore,
+  lastItemRef,
   hasMore,
   loading,
 }) => {
   const theme = useTheme();
-  const observerRef = useRef(null);
-  const loadMoreRef = useRef(null);
-  const containerRef = useRef(null);
-
-  // Set up IntersectionObserver for infinite scroll
-  useEffect(() => {
-    if (!hasMore || loading) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          loadMore();
-        }
-      },
-      { threshold: 0.6 } // Slightly increased for smoother triggering
-    );
-
-    if (loadMoreRef.current) {
-      observer.observe(loadMoreRef.current);
-    }
-
-    observerRef.current = observer;
-
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
-    };
-  }, [loadMore, hasMore, loading]);
-
-  // Auto-load more if container is smaller than viewport
-  useEffect(() => {
-    if (!hasMore || loading) return;
-
-    const checkContainerHeight = () => {
-      const container = containerRef.current;
-      if (container && container.scrollHeight <= window.innerHeight + 100) {
-        loadMore();
-      }
-    };
-
-    checkContainerHeight();
-    window.addEventListener("resize", checkContainerHeight);
-    return () => window.removeEventListener("resize", checkContainerHeight);
-  }, [loadMore, hasMore, loading, items]);
 
   // Validate gridType
   if (!VALID_GRID_TYPES.includes(gridType)) {
@@ -228,7 +185,6 @@ const Grids = ({
           transition={{}}
           role="grid"
           aria-label={`${gridType} grid`}
-          ref={containerRef}
         >
           <Box
             sx={{
@@ -242,7 +198,7 @@ const Grids = ({
             }}
           >
             <AnimatePresence initial={false}>
-              {items.map((item) => (
+              {items.map((item, index) => (
                 <CardWrapper
                   key={item[itemKey]} // Stable key to prevent re-rendering
                   item={item}
@@ -256,6 +212,8 @@ const Grids = ({
                   navigate={navigate}
                   currentUser={currentUser}
                   token={token}
+                  isLastItem={hasMore && index === items.length - 1}
+                  lastItemRef={lastItemRef}
                 />
               ))}
             </AnimatePresence>
@@ -270,41 +228,19 @@ const Grids = ({
             }}
             aria-live="polite"
           >
-            {hasMore ? (
+            {hasMore && loading && (
               <motion.div
                 variants={loaderVariants}
                 initial="hidden"
                 animate="visible"
-                ref={loadMoreRef}
               >
-                {loading ? (
-                  <CircularProgress size={24} color="primary" aria-label="Loading more items" />
-                ) : (
-                  <>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Scroll to load more...
-                    </Typography>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={loadMore}
-                      sx={{
-                        fontSize: "0.875rem",
-                        textTransform: "none",
-                      }}
-                      aria-label={`Load more ${gridType}`}
-                    >
-                      Show More
-                    </Button>
-                  </>
-                )}
+                <CircularProgress size={24} color="primary" aria-label="Loading more items" />
               </motion.div>
-            ) : (
-              items.length > 0 && (
-                <Typography variant="body2" color="text.secondary">
-                  No more {gridType} to load.
-                </Typography>
-              )
+            )}
+            {!hasMore && items.length > 0 && (
+              <Typography variant="body2" color="text.secondary">
+                No more {gridType} to load.
+              </Typography>
             )}
           </Box>
         </motion.section>
@@ -332,7 +268,7 @@ Grids.propTypes = {
   }),
   token: PropTypes.string,
   onCreateNew: PropTypes.func,
-  loadMore: PropTypes.func,
+  lastItemRef: PropTypes.func,
   hasMore: PropTypes.bool,
   loading: PropTypes.bool,
 };
@@ -343,7 +279,7 @@ Grids.defaultProps = {
   setItemToDelete: () => {},
   setDeleteDialogOpen: () => {},
   handleManageMembers: () => {},
-  loadMore: () => {},
+  lastItemRef: () => {},
   hasMore: false,
   loading: false,
 };

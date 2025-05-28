@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { Add } from '@mui/icons-material';
@@ -62,6 +62,32 @@ const GatesPage = () => {
   const [quickFilter, setQuickFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const observer = useRef();
+  const lastGateElementRef = useCallback(
+    (node) => {
+      if (gatesLoading || !pagination.hasMore) return;
+      if (observer.current) observer.current.disconnect();
+      observer.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && pagination.hasMore) {
+          const controller = new AbortController();
+          fetchGatesList(
+            { page: pagination.page + 1, limit: pagination.limit },
+            controller.signal,
+            true,
+            (err) => {
+              if (err && err.name !== 'AbortError') {
+                showNotification(err.message || 'Failed to load more gates', 'error');
+              }
+            }
+          );
+          return () => controller.abort();
+        }
+      });
+      if (node) observer.current.observe(node);
+    },
+    [gatesLoading, pagination.hasMore, pagination.page, pagination.limit, fetchGatesList, showNotification]
+  );
+
   const stableFetchGatesList = useMemo(
     () => [
       () =>
@@ -95,17 +121,6 @@ const GatesPage = () => {
     () => filterEntities(gates, 'gates', quickFilter, searchQuery),
     [gates, quickFilter, searchQuery]
   );
-
-  const handleLoadMore = useCallback(() => {
-    if (gatesLoading || !pagination.hasMore) return;
-    const controller = new AbortController();
-    fetchGatesList({ page: pagination.page + 1, limit: pagination.limit }, controller.signal, true, (err) => {
-      if (err && err.name !== 'AbortError') {
-        showNotification(err.message || 'Failed to load more gates', 'error');
-      }
-    });
-    return () => controller.abort();
-  }, [fetchGatesList, gatesLoading, pagination.hasMore, pagination.page, pagination.limit, showNotification]);
 
   const handleOpenCreate = useCallback(() => setCreateDialogOpen(true), []);
   const handleCancelCreate = useCallback(() => {
@@ -304,7 +319,7 @@ const GatesPage = () => {
           currentUser={authData}
           token={token}
           onCreateNew={handleOpenCreate}
-          loadMore={handleLoadMore}
+          lastItemRef={lastGateElementRef}
           hasMore={pagination.hasMore}
           loading={gatesLoading}
           disabled={actionLoading || gatesLoading}

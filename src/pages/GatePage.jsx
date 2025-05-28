@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Add, Public, Lock, People, Forum, Star } from '@mui/icons-material';
 import PropTypes from 'prop-types';
@@ -57,6 +57,7 @@ const GatePage = () => {
   } = useGates(token, handleLogout, navigate, true);
   const {
     classes: classesList,
+    pagination,
     fetchClassesByGate,
     createNewClass,
     updateExistingClass,
@@ -84,6 +85,33 @@ const GatePage = () => {
   const [quickFilter, setQuickFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const observer = useRef();
+  const lastClassElementRef = useCallback(
+    (node) => {
+      if (classesLoading || !pagination.hasMore) return;
+      if (observer.current) observer.current.disconnect();
+      observer.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && pagination.hasMore) {
+          const controller = new AbortController();
+          fetchClassesByGate(
+            gate_id,
+            { visibility: quickFilter === 'all' ? undefined : quickFilter, page: pagination.page + 1 },
+            controller.signal,
+            true,
+            (err) => {
+              if (err && err.name !== 'AbortError') {
+                showNotification(err.message || 'Failed to load more classes', 'error');
+              }
+            }
+          );
+          return () => controller.abort();
+        }
+      });
+      if (node) observer.current.observe(node);
+    },
+    [classesLoading, pagination.hasMore, pagination.page, quickFilter, gate_id, fetchClassesByGate, showNotification]
+  );
+
   const debouncedSetSearchQuery = useMemo(
     () => debounce((value) => setSearchQuery(value), 300),
     []
@@ -91,32 +119,35 @@ const GatePage = () => {
 
   const fetchFunctions = useMemo(
     () => [
-      (signal) => fetchGate(gate_id, signal, (err) => {
-        if (err && err.name !== 'AbortError') {
-          showNotification(err.message || 'Failed to fetch gate', 'error');
-        }
-      }),
-      (signal) => fetchGateMembersList(gate_id, signal, (err) => {
-        if (err && err.name !== 'AbortError') {
-          showNotification(err.message || 'Failed to fetch gate members', 'error');
-        }
-      }),
-      (signal) => fetchClassesByGate(gate_id, {}, signal, false, (err) => {
-        if (err && err.name !== 'AbortError') {
-          showNotification(err.message || 'Failed to fetch classes', 'error');
-        }
-      }),
+      (signal) =>
+        fetchGate(gate_id, signal, (err) => {
+          if (err && err.name !== 'AbortError') {
+            showNotification(err.message || 'Failed to fetch gate', 'error');
+          }
+        }),
+      (signal) =>
+        fetchGateMembersList(gate_id, signal, (err) => {
+          if (err && err.name !== 'AbortError') {
+            showNotification(err.message || 'Failed to fetch gate members', 'error');
+          }
+        }),
+      (signal) =>
+        fetchClassesByGate(
+          gate_id,
+          { page: 1, limit: pagination.limit },
+          signal,
+          false,
+          (err) => {
+            if (err && err.name !== 'AbortError') {
+              showNotification(err.message || 'Failed to fetch classes', 'error');
+            }
+          }
+        ),
     ],
-    [fetchGate, fetchGateMembersList, fetchClassesByGate, gate_id, showNotification]
+    [fetchGate, fetchGateMembersList, fetchClassesByGate, gate_id, pagination.limit, showNotification]
   );
 
-  const { isLoading, actionLoading, setActionLoading } = useEntity(
-    fetchFunctions,
-    token,
-    handleLogout,
-    navigate,
-    'gate'
-  );
+  const { isLoading, actionLoading, setActionLoading } = useEntity(fetchFunctions, token, handleLogout, navigate, 'gate');
 
   useEffect(() => {
     if (!gate_id?.trim()) {
@@ -350,7 +381,7 @@ const GatePage = () => {
     setSearchQuery('');
     debouncedSetSearchQuery.cancel();
     const controller = new AbortController();
-    fetchClassesByGate(gate_id, {}, controller.signal, false, (err) => {
+    fetchClassesByGate(gate_id, { page: 1, reset: { visibility: true } }, controller.signal, false, (err) => {
       if (err && err.name !== 'AbortError') {
         showNotification(err.message || 'Failed to reset filters', 'error');
       }
@@ -512,6 +543,9 @@ const GatePage = () => {
           currentUser={authData}
           token={token}
           onCreateNew={canCreateClass ? handleOpenCreateClass : null}
+          lastItemRef={lastClassElementRef}
+          hasMore={pagination.hasMore}
+          loading={classesLoading}
           disabled={actionLoading || gatesLoading || classesLoading}
         />
         <EntityDialogs

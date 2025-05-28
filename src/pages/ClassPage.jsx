@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Add, Public, Lock, People, Forum, Star, Home } from '@mui/icons-material';
 import PropTypes from 'prop-types';
@@ -58,6 +58,7 @@ const ClassPage = () => {
   } = useClasses(token, handleLogout, navigate, true);
   const {
     boards,
+    pagination,
     fetchBoardsByClass,
     createNewBoard,
     updateExistingBoard,
@@ -91,6 +92,33 @@ const ClassPage = () => {
   const [quickFilter, setQuickFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const observer = useRef();
+  const lastBoardElementRef = useCallback(
+    (node) => {
+      if (boardsLoading || !pagination.hasMore) return;
+      if (observer.current) observer.current.disconnect();
+      observer.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && pagination.hasMore) {
+          const controller = new AbortController();
+          fetchBoardsByClass(
+            class_id,
+            { visibility: quickFilter === 'all' ? undefined : quickFilter, page: pagination.page + 1 },
+            controller.signal,
+            true,
+            (err) => {
+              if (err && err.name !== 'AbortError') {
+                showNotification(err.message || 'Failed to load more boards', 'error');
+              }
+            }
+          );
+          return () => controller.abort();
+        }
+      });
+      if (node) observer.current.observe(node);
+    },
+    [boardsLoading, pagination.hasMore, pagination.page, quickFilter, class_id, fetchBoardsByClass, showNotification]
+  );
+
   const debouncedSetSearchQuery = useMemo(
     () => debounce((value) => setSearchQuery(value), 300),
     []
@@ -98,37 +126,41 @@ const ClassPage = () => {
 
   const fetchFunctions = useMemo(
     () => [
-      (signal) => fetchClass(class_id, signal, (err) => {
-        if (err && err.name !== 'AbortError') {
-          showNotification(err.message || 'Failed to fetch class', 'error');
-        }
-      }),
-      (signal) => fetchClassMembersList(class_id, signal, (err) => {
-        if (err && err.name !== 'AbortError') {
-          showNotification(err.message || 'Failed to fetch class members', 'error');
-        }
-      }),
-      (signal) => fetchBoardsByClass(class_id, {}, signal, false, (err) => {
-        if (err && err.name !== 'AbortError') {
-          showNotification(err.message || 'Failed to fetch boards', 'error');
-        }
-      }),
-      (signal) => fetchGatesList({ visibility: 'public' }, signal, false, (err) => {
-        if (err && err.name !== 'AbortError') {
-          showNotification(err.message || 'Failed to fetch gates', 'error');
-        }
-      }),
+      (signal) =>
+        fetchClass(class_id, signal, (err) => {
+          if (err && err.name !== 'AbortError') {
+            showNotification(err.message || 'Failed to fetch class', 'error');
+          }
+        }),
+      (signal) =>
+        fetchClassMembersList(class_id, signal, (err) => {
+          if (err && err.name !== 'AbortError') {
+            showNotification(err.message || 'Failed to fetch class members', 'error');
+          }
+        }),
+      (signal) =>
+        fetchBoardsByClass(
+          class_id,
+          { page: 1, limit: pagination.limit },
+          signal,
+          false,
+          (err) => {
+            if (err && err.name !== 'AbortError') {
+              showNotification(err.message || 'Failed to fetch boards', 'error');
+            }
+          }
+        ),
+      (signal) =>
+        fetchGatesList({ visibility: 'public' }, signal, false, (err) => {
+          if (err && err.name !== 'AbortError') {
+            showNotification(err.message || 'Failed to fetch gates', 'error');
+          }
+        }),
     ],
-    [fetchClass, fetchClassMembersList, fetchBoardsByClass, fetchGatesList, class_id, showNotification]
+    [fetchClass, fetchClassMembersList, fetchBoardsByClass, fetchGatesList, class_id, pagination.limit, showNotification]
   );
 
-  const { isLoading, actionLoading, setActionLoading } = useEntity(
-    fetchFunctions,
-    token,
-    handleLogout,
-    navigate,
-    'class'
-  );
+  const { isLoading, actionLoading, setActionLoading } = useEntity(fetchFunctions, token, handleLogout, navigate, 'class');
 
   useEffect(() => {
     if (!class_id?.trim()) {
@@ -147,7 +179,6 @@ const ClassPage = () => {
   }, [classError, boardsError, gatesError, showNotification]);
 
   useEffect(() => {
-    // Close dialogs if their respective editing items are null
     if (!editingClass && editClassDialogOpen) {
       setEditClassDialogOpen(false);
     }
@@ -364,7 +395,7 @@ const ClassPage = () => {
     setSearchQuery('');
     debouncedSetSearchQuery.cancel();
     const controller = new AbortController();
-    fetchBoardsByClass(class_id, {}, controller.signal, false, (err) => {
+    fetchBoardsByClass(class_id, { page: 1, reset: { visibility: true } }, controller.signal, false, (err) => {
       if (err && err.name !== 'AbortError') {
         showNotification(err.message || 'Failed to reset filters', 'error');
       }
@@ -547,6 +578,9 @@ const ClassPage = () => {
           currentUser={authData}
           token={token}
           onCreateNew={canCreateBoard ? handleOpenCreateBoard : null}
+          lastItemRef={lastBoardElementRef}
+          hasMore={pagination.hasMore}
+          loading={boardsLoading}
           disabled={actionLoading || classesLoading || boardsLoading}
         />
         <EntityDialogs

@@ -1,10 +1,9 @@
-import React, { useMemo, useCallback } from 'react';
-import { Box, Button } from '@mui/material';
-import { Add } from '@mui/icons-material';
+import React from 'react';
+import { Box, CircularProgress } from '@mui/material';
 import PropTypes from 'prop-types';
 import Filters from '../Filters/Filters';
 import Grids from '../Grids/Grids';
-import { containerStyles, gridStyles, actionButtonStyles } from '../../styles/BaseStyles';
+import { containerStyles } from '../../styles/BaseStyles';
 
 const EntityGrid = ({
   type,
@@ -28,6 +27,9 @@ const EntityGrid = ({
   onCreateNew,
   disabled,
   profileHeader,
+  lastItemRef,
+  hasMore,
+  loading,
 }) => {
   return (
     <Box sx={{ ...containerStyles, maxWidth: '1500px', mx: 'auto' }}>
@@ -55,7 +57,15 @@ const EntityGrid = ({
         currentUser={currentUser}
         token={token}
         onCreateNew={onCreateNew}
+        disabled={disabled}
+        lastItemRef={lastItemRef}
+        hasMore={hasMore}
       />
+      {loading && hasMore && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+          <CircularProgress aria-label="Loading more items" />
+        </Box>
+      )}
     </Box>
   );
 };
@@ -84,9 +94,12 @@ EntityGrid.propTypes = {
   navigate: PropTypes.func.isRequired,
   currentUser: PropTypes.object,
   token: PropTypes.string,
-  onCreateNew: PropTypes.func.isRequired,
+  onCreateNew: PropTypes.func,
   disabled: PropTypes.bool,
-  profileHeader: PropTypes.node.isRequired,
+  profileHeader: PropTypes.node,
+  lastItemRef: PropTypes.func,
+  hasMore: PropTypes.bool,
+  loading: PropTypes.bool,
 };
 
 export default React.memo(EntityGrid);

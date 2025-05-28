@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Add } from '@mui/icons-material';
 import { debounce } from 'lodash';
@@ -51,7 +51,7 @@ const ClassesPage = () => {
     toggleFavoriteClass,
     loading: classesLoading,
     error: classesError,
-  } = useClasses(token, handleLogout, navigate, false); // Enable initial fetch
+  } = useClasses(token, handleLogout, navigate, false);
   const { gates, fetchGatesList, loading: gatesLoading, error: gatesError } = useGates(token, handleLogout, navigate);
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -64,6 +64,32 @@ const ClassesPage = () => {
   const [popupClass, setPopupClass] = useState(DEFAULT_CLASS);
   const [quickFilter, setQuickFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const observer = useRef();
+  const lastClassElementRef = useCallback(
+    (node) => {
+      if (classesLoading || !pagination.hasMore) return;
+      if (observer.current) observer.current.disconnect();
+      observer.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && pagination.hasMore) {
+          const controller = new AbortController();
+          fetchClassesList(
+            { visibility: quickFilter === 'all' ? undefined : quickFilter, page: pagination.page + 1 },
+            controller.signal,
+            true,
+            (err) => {
+              if (err && err.name !== 'AbortError') {
+                showNotification(err.message || 'Failed to load more classes', 'error');
+              }
+            }
+          );
+          return () => controller.abort();
+        }
+      });
+      if (node) observer.current.observe(node);
+    },
+    [classesLoading, pagination.hasMore, pagination.page, quickFilter, fetchClassesList, showNotification]
+  );
 
   const stableFetchClassesList = useMemo(
     () => [
@@ -115,22 +141,6 @@ const ClassesPage = () => {
       return () => controller.abort();
     }
   }, [searchQuery, quickFilter, fetchGatesList, showNotification]);
-
-  const handleLoadMore = useCallback(() => {
-    if (classesLoading || !pagination.hasMore) return;
-    const controller = new AbortController();
-    fetchClassesList(
-      { visibility: quickFilter === 'all' ? undefined : quickFilter, page: pagination.page + 1 },
-      controller.signal,
-      true,
-      (err) => {
-        if (err && err.name !== 'AbortError') {
-          showNotification(err.message || 'Failed to load more classes', 'error');
-        }
-      }
-    );
-    return () => controller.abort();
-  }, [fetchClassesList, classesLoading, pagination.hasMore, pagination.page, quickFilter, showNotification]);
 
   const handleOpenCreate = useCallback(() => setCreateDialogOpen(true), []);
   const handleCancelCreate = useCallback(() => {
@@ -335,7 +345,7 @@ const ClassesPage = () => {
           currentUser={authData}
           token={token}
           onCreateNew={handleOpenCreate}
-          loadMore={handleLoadMore}
+          lastItemRef={lastClassElementRef}
           hasMore={pagination.hasMore}
           loading={classesLoading}
           disabled={actionLoading || classesLoading || gatesLoading}

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Add } from '@mui/icons-material';
 import { debounce } from 'lodash';
@@ -53,7 +53,7 @@ const BoardsPage = () => {
     toggleFavoriteBoard,
     loading: boardsLoading,
     error: boardsError,
-  } = useBoards(token, handleLogout, navigate, false); // Enable initial fetch
+  } = useBoards(token, handleLogout, navigate, false);
   const { classes, fetchClassesList, loading: classesLoading, error: classesError } = useClasses(
     token,
     handleLogout,
@@ -77,6 +77,32 @@ const BoardsPage = () => {
   const [popupBoard, setPopupBoard] = useState(DEFAULT_BOARD);
   const [quickFilter, setQuickFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const observer = useRef();
+  const lastBoardElementRef = useCallback(
+    (node) => {
+      if (boardsLoading || !pagination.hasMore) return;
+      if (observer.current) observer.current.disconnect();
+      observer.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && pagination.hasMore) {
+          const controller = new AbortController();
+          fetchBoardsList(
+            { visibility: quickFilter === 'all' ? undefined : quickFilter, page: pagination.page + 1 },
+            controller.signal,
+            true,
+            (err) => {
+              if (err && err.name !== 'AbortError') {
+                showNotification(err.message || 'Failed to load more boards', 'error');
+              }
+            }
+          );
+          return () => controller.abort();
+        }
+      });
+      if (node) observer.current.observe(node);
+    },
+    [boardsLoading, pagination.hasMore, pagination.page, quickFilter, fetchBoardsList, showNotification]
+  );
 
   const stableFetchBoardsList = useMemo(
     () => [
@@ -154,22 +180,6 @@ const BoardsPage = () => {
       return () => controller.abort();
     }
   }, [searchQuery, quickFilter, fetchClassesList, fetchGatesList, showNotification]);
-
-  const handleLoadMore = useCallback(() => {
-    if (boardsLoading || !pagination.hasMore) return;
-    const controller = new AbortController();
-    fetchBoardsList(
-      { visibility: quickFilter === 'all' ? undefined : quickFilter, page: pagination.page + 1 },
-      controller.signal,
-      true,
-      (err) => {
-        if (err && err.name !== 'AbortError') {
-          showNotification(err.message || 'Failed to load more boards', 'error');
-        }
-      }
-    );
-    return () => controller.abort();
-  }, [fetchBoardsList, boardsLoading, pagination.hasMore, pagination.page, quickFilter, showNotification]);
 
   const handleOpenCreate = useCallback(() => setCreateDialogOpen(true), []);
   const handleCancelCreate = useCallback(() => {
@@ -383,7 +393,7 @@ const BoardsPage = () => {
           currentUser={authData}
           token={token}
           onCreateNew={handleOpenCreate}
-          loadMore={handleLoadMore}
+          lastItemRef={lastBoardElementRef}
           hasMore={pagination.hasMore}
           loading={boardsLoading}
           disabled={actionLoading || boardsLoading || classesLoading || gatesLoading}
