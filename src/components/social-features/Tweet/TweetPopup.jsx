@@ -17,6 +17,9 @@ import {
   Menu,
   MenuItem,
   useMediaQuery,
+  Card,
+  CardMedia,
+  CardContent,
 } from '@mui/material';
 import { Mic, Videocam, Stop, Schedule, Pause, Delete, PlayArrow, Close, AttachFile } from '@mui/icons-material';
 import { motion } from 'framer-motion';
@@ -26,6 +29,9 @@ import { useDrag } from '@use-gesture/react';
 import TweetPopupStyles from './TweetPopupStyles';
 import { useFileUpload } from '../../../hooks/useFileUpload';
 import { SUPPORTED_MIME_TYPES } from '../../../constants/validations';
+import axios from 'axios';
+import URLParse from 'url-parse';
+import { Link } from 'react-router-dom';
 
 const MAX_TWEET_LENGTH = 1000;
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -53,6 +59,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose, parentTweet, onBoardUpdate }) => 
   const videoPreviewRef = useRef(null);
   const recordingTimerRef = useRef(null);
   const longPressTimerRef = useRef(null);
+  const [linkPreview, setLinkPreview] = useState(null);
   const { files, handleFileChange, removeFile, cleanup, fileUrlsRef } = useFileUpload();
   const isMobile = useMediaQuery((theme) => theme.breakpoints.down('sm'));
 
@@ -101,6 +108,114 @@ const TweetPopup = ({ x, y, onSubmit, onClose, parentTweet, onBoardUpdate }) => 
       }
     };
   }, [recording, recordingType]);
+
+  useEffect(() => {
+    const fetchLinkPreview = async () => {
+      const urlRegex = /(https?:\/\/[^\s]+)/;
+      const urlMatch = form.draft.match(urlRegex);
+      if (!urlMatch) {
+        setLinkPreview(null);
+        return;
+      }
+      const url = urlMatch[0];
+      try {
+        let previewData = {};
+        if (url.includes('youtube.com') || url.includes('youtu.be')) {
+          const videoId = extractYouTubeId(url);
+          const response = await axios.get(
+            `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`
+          );
+          previewData = {
+            url,
+            type: 'youtube',
+            title: response.data.title,
+            description: response.data.author_name,
+            thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+          };
+        } else if (url.includes('spotify.com')) {
+          const response = await axios.get(
+            `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`
+          );
+          previewData = {
+            url,
+            type: 'spotify',
+            title: response.data.title,
+            description: response.data.provider_name,
+            thumbnail: response.data.thumbnail_url,
+          };
+        } else if (url.includes('soundcloud.com')) {
+          const response = await axios.get(
+            `https://soundcloud.com/oembed?url=${encodeURIComponent(url)}&format=json`
+          );
+          previewData = {
+            url,
+            type: 'soundcloud',
+            title: response.data.title,
+            description: response.data.author_name,
+            thumbnail: response.data.thumbnail_url,
+          };
+        } else {
+          const response = await axios.get(
+            `https://api.microlink.io?url=${encodeURIComponent(url)}`
+          );
+          previewData = {
+            url,
+            type: 'generic',
+            title: response.data.data.title,
+            description: response.data.data.description,
+            thumbnail: response.data.data.image?.url,
+          };
+        }
+        setLinkPreview(previewData);
+      } catch (error) {
+        console.error(`Failed to fetch preview for ${url}:`, error);
+        setLinkPreview(null);
+      }
+    };
+
+    const debounce = setTimeout(() => {
+      fetchLinkPreview();
+    }, 500);
+
+    return () => clearTimeout(debounce);
+  }, [form.draft]);
+
+  const extractYouTubeId = (url) => {
+    const parsed = new URLParse(url);
+    if (parsed.hostname.includes('youtu.be')) {
+      return parsed.pathname.slice(1);
+    }
+    return parsed.query.split('v=')[1]?.split('&')[0];
+  };
+
+  const renderLinkPreview = useMemo(() => {
+    if (!linkPreview) return null;
+    return (
+      <Card sx={TweetPopupStyles.popupLinkPreviewCard}>
+        {linkPreview.thumbnail && (
+          <CardMedia
+            component="img"
+            image={linkPreview.thumbnail}
+            alt={linkPreview.title}
+            sx={TweetPopupStyles.popupLinkPreviewImage}
+          />
+        )}
+        <CardContent sx={TweetPopupStyles.popupLinkPreviewContent}>
+          <Typography variant="subtitle2" sx={TweetPopupStyles.popupLinkPreviewTitle}>
+            <Link href={linkPreview.url} target="_blank" rel="noopener">
+              {linkPreview.title || linkPreview.url}
+            </Link>
+          </Typography>
+          {linkPreview.description && (
+            <Typography variant="caption" sx={TweetPopupStyles.popupLinkPreviewDescription}>
+              {linkPreview.description}
+            </Typography>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }, [linkPreview]);
+
 
   const startRecording = useCallback(
     async (type) => {
@@ -425,72 +540,74 @@ const TweetPopup = ({ x, y, onSubmit, onClose, parentTweet, onBoardUpdate }) => 
 
   const renderInputBar = useMemo(() => {
     return (
-      <Box
-        sx={{
-          ...TweetPopupStyles.popupInputBar,
-          position: 'static',
-          zIndex: 'auto',
-          gap: 1,
-        }}
-      >
-        <input
-          type="file"
-          accept={SUPPORTED_MIME_TYPES.join(',')}
-          multiple
-          onChange={handleFileInputChange}
-          style={{ display: 'none' }}
-          ref={fileInputRef}
-          disabled={loading || recording}
-        />
-        <Tooltip title="Upload Media" placement="top">
-          <IconButton
-            onClick={() => fileInputRef.current.click()}
-            sx={TweetPopupStyles.popupMediaButton(false)}
-            aria-label="Upload media"
-            disabled={loading || recording}
-          >
-            <AttachFile fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Box sx={{ position: 'relative', flex: 1 }}>
-          <TextField
-            placeholder={parentTweet ? 'Write your reply...' : "What's on your mind?"}
-            value={form.draft}
-            onChange={(e) => setForm((prev) => ({ ...prev, draft: e.target.value }))}
-            onKeyPress={handleKeyPress}
-            autoFocus
-            fullWidth
-            multiline
-            maxRows={4}
-            variant="outlined"
-            sx={{
-              ...TweetPopupStyles.popupTextField,
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '12px',
-                padding: '6px 12px',
-                minHeight: '32px',
-                fontSize: '0.875rem',
-              },
-            }}
-            inputProps={{ maxLength: MAX_TWEET_LENGTH }}
-            aria-label={parentTweet ? 'Reply content' : 'Tweet content'}
-            disabled={loading}
-          />
-          <Typography
-            variant="caption"
-            sx={{
-              ...TweetPopupStyles.popupCharCount(form.draft.length > MAX_TWEET_LENGTH),
-              position: 'absolute',
-              right: '8px',
-              bottom: '4px',
-              fontSize: '0.75rem',
-            }}
-            aria-live="polite"
-          >
-            {form.draft.length}/{MAX_TWEET_LENGTH}
-          </Typography>
-        </Box>
-        <motion.div
+        <Box
+          sx={{
+            ...TweetPopupStyles.popupInputBar,
+            position: 'static',
+            zIndex: 'auto',
+            gap: 1,
+            flexDirection: 'column',
+          }}
+        >
+          <Box sx={{ display: 'flex', gap: 1, width: '100%' }}>
+            <input
+              type="file"
+              accept={SUPPORTED_MIME_TYPES.join(',')}
+              multiple
+              onChange={handleFileInputChange}
+              style={{ display: 'none' }}
+              ref={fileInputRef}
+              disabled={loading || recording}
+            />
+            <Tooltip title="Upload Media" placement="top">
+              <IconButton
+                onClick={() => fileInputRef.current.click()}
+                sx={TweetPopupStyles.popupMediaButton(false)}
+                aria-label="Upload media"
+                disabled={loading || recording}
+              >
+                <AttachFile fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Box sx={{ position: 'relative', flex: 1 }}>
+              <TextField
+                placeholder={parentTweet ? 'Write your reply...' : "What's on your mind?"}
+                value={form.draft}
+                onChange={(e) => setForm((prev) => ({ ...prev, draft: e.target.value }))}
+                onKeyPress={handleKeyPress}
+                autoFocus
+                fullWidth
+                multiline
+                maxRows={4}
+                variant="outlined"
+                sx={{
+                  ...TweetPopupStyles.popupTextField,
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: '12px',
+                    padding: '6px 12px',
+                    minHeight: '32px',
+                    fontSize: '0.875rem',
+                  },
+                }}
+                inputProps={{ maxLength: MAX_TWEET_LENGTH }}
+                aria-label={parentTweet ? 'Reply content' : 'Tweet content'}
+                disabled={loading}
+              />
+              <Typography
+                variant="caption"
+                sx={{
+                  ...TweetPopupStyles.popupCharCount(form.draft.length > MAX_TWEET_LENGTH),
+                  position: 'absolute',
+                  right: '8px',
+                  bottom: '4px',
+                  fontSize: '0.75rem',
+                }}
+                aria-live="polite"
+              >
+                {form.draft.length}/{MAX_TWEET_LENGTH}
+              </Typography>
+            </Box>
+            <motion.div
           key={recordingType || recordingMode}
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -633,7 +750,9 @@ const TweetPopup = ({ x, y, onSubmit, onClose, parentTweet, onBoardUpdate }) => 
             Schedule Post
           </MenuItem>
         </Menu>
-      </Box>
+        </Box>
+          {renderLinkPreview}
+        </Box>
     );
   }, [
     recordingType,

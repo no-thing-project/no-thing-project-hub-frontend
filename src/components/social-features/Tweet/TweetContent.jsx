@@ -17,6 +17,9 @@ import {
   List,
   ListItemButton,
   ListItemText,
+  Card,
+  CardMedia,
+  CardContent,
 } from '@mui/material';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
@@ -31,6 +34,11 @@ import Emoji from 'react-emoji-render';
 import { formatDistanceToNow, format, isValid, parseISO } from 'date-fns';
 import TweetContentStyles from './TweetContentStyles';
 import ModalStyles from './ModalStyles';
+import URLParse from 'url-parse';
+import ReactPlayer from 'react-player';
+import { LazyLoadComponent } from 'react-lazy-load-image-component';
+import axios from 'axios';
+import { PlayArrow } from '@mui/icons-material';
 
 const MAX_TWEET_LENGTH = 1000;
 
@@ -185,6 +193,8 @@ const TweetContent = ({
   const [openMediaDialog, setOpenMediaDialog] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [timestamp, setTimestamp] = useState('');
+  const [linkPreviews, setLinkPreviews] = useState([]);
+  const [playingMedia, setPlayingMedia] = useState(null);
 
   // Notify Board.js of modal state changes
   useEffect(() => {
@@ -252,6 +262,140 @@ const TweetContent = ({
       return () => clearTimeout(timer);
     }
   }, [tweet.stats?.like_count]);
+
+  useEffect(() => {
+    const fetchLinkPreviews = async () => {
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const urls = tweet.content?.value.match(urlRegex) || [];
+      const previews = [];
+
+      for (const url of urls) {
+        try {
+          let previewData = {};
+          if (url.includes('youtube.com') || url.includes('youtu.be')) {
+            const videoId = extractYouTubeId(url);
+            const response = await axios.get(
+              `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`
+            );
+            previewData = {
+              url,
+              type: 'youtube',
+              title: response.data.title,
+              description: response.data.author_name,
+              thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+              embedUrl: `https://www.youtube.com/embed/${videoId}`,
+            };
+          } else if (url.includes('spotify.com')) {
+            const response = await axios.get(
+              `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`
+            );
+            previewData = {
+              url,
+              type: 'spotify',
+              title: response.data.title,
+              description: response.data.provider_name,
+              thumbnail: response.data.thumbnail_url,
+              embedUrl: response.data.html.match(/src="([^"]+)"/)?.[1],
+            };
+          } else if (url.includes('soundcloud.com')) {
+            const response = await axios.get(
+              `https://soundcloud.com/oembed?url=${encodeURIComponent(url)}&format=json`
+            );
+            previewData = {
+              url,
+              type: 'soundcloud',
+              title: response.data.title,
+              description: response.data.author_name,
+              thumbnail: response.data.thumbnail_url,
+              embedUrl: response.data.html.match(/src="([^"]+)"/)?.[1],
+            };
+          } else {
+            // Generic link preview using Open Graph
+            const response = await axios.get(
+              `https://api.microlink.io?url=${encodeURIComponent(url)}`
+            );
+            previewData = {
+              url,
+              type: 'generic',
+              title: response.data.data.title,
+              description: response.data.data.description,
+              thumbnail: response.data.data.image?.url,
+            };
+          }
+          previews.push(previewData);
+        } catch (error) {
+          console.error(`Failed to fetch preview for ${url}:`, error);
+        }
+      }
+      setLinkPreviews(previews);
+    };
+
+    if (tweet.content?.value) {
+      fetchLinkPreviews();
+    }
+  }, [tweet.content?.value]);
+
+  const extractYouTubeId = (url) => {
+    const parsed = new URLParse(url);
+    if (parsed.hostname.includes('youtu.be')) {
+      return parsed.pathname.slice(1);
+    }
+    return parsed.query.split('v=')[1]?.split('&')[0];
+  };
+
+  const renderLinkPreview = useCallback(
+    (preview) => (
+      <Card sx={TweetContentStyles.linkPreviewCard} key={preview.url}>
+        {preview.thumbnail && (
+          <CardMedia
+            component="img"
+            image={preview.thumbnail}
+            alt={preview.title}
+            sx={TweetContentStyles.linkPreviewImage}
+          />
+        )}
+        <CardContent sx={TweetContentStyles.linkPreviewContent}>
+          <Typography variant="subtitle2" sx={TweetContentStyles.linkPreviewTitle}>
+            <Link href={preview.url} target="_blank" rel="noopener">
+              {preview.title || preview.url}
+            </Link>
+          </Typography>
+          {preview.description && (
+            <Typography variant="caption" sx={TweetContentStyles.linkPreviewDescription}>
+              {preview.description}
+            </Typography>
+          )}
+          {preview.embedUrl && (
+            <IconButton
+              onClick={() => setPlayingMedia(playingMedia === preview.url ? null : preview.url)}
+              sx={TweetContentStyles.linkPreviewPlayButton}
+              aria-label={`Play ${preview.type} content`}
+            >
+              <PlayArrow />
+            </IconButton>
+          )}
+        </CardContent>
+        {playingMedia === preview.url && preview.embedUrl && (
+          <Box sx={TweetContentStyles.linkPreviewPlayer}>
+            <LazyLoadComponent>
+              <ReactPlayer
+                url={preview.embedUrl}
+                width="100%"
+                height="200px"
+                controls
+                playing
+                config={{
+                  youtube: { playerVars: { modestbranding: 1 } },
+                  soundcloud: { options: { visual: true } },
+                }}
+              />
+            </LazyLoadComponent>
+          </Box>
+        )}
+      </Card>
+    ),
+    [playingMedia]
+  );
 
   const handleMouseEnter = useCallback(() => {
     if (openOptionsDialog || openMediaDialog) return; // Prevent hover when dialogs are open
@@ -447,6 +591,7 @@ const TweetContent = ({
     );
   }, [tweet.content?.metadata?.files, handleOpenMediaDialog]);
 
+
   const renderContent = useMemo(() => {
     const hasText = !!tweet.content?.value;
     return (
@@ -454,14 +599,18 @@ const TweetContent = ({
         {hasText && (
           <Box>
             <Typography
-              sx={TweetContentStyles.contentText(!!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles)}
+              sx={TweetContentStyles.contentText(
+                !!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles || linkPreviews.length
+              )}
             >
               <Emoji text={previewText + (!isExpanded && remainderText ? '...' : '')} />
             </Typography>
             {remainderText && (
               <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                 <Typography
-                  sx={TweetContentStyles.contentText(!!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles)}
+                  sx={TweetContentStyles.contentText(
+                    !!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles || linkPreviews.length
+                  )}
                 >
                   <Emoji text={remainderText} />
                 </Typography>
@@ -480,9 +629,57 @@ const TweetContent = ({
         {renderVideos}
         {renderAudio}
         {renderOtherFiles}
+        {linkPreviews.map(renderLinkPreview)}
       </motion.div>
     );
-  }, [previewText, remainderText, isExpanded, renderImages, renderVideos, renderAudio, renderOtherFiles, handleToggleExpand]);
+  }, [
+    previewText,
+    remainderText,
+    isExpanded,
+    renderImages,
+    renderVideos,
+    renderAudio,
+    renderOtherFiles,
+    linkPreviews,
+    handleToggleExpand,
+    renderLinkPreview,
+  ]);
+  // const renderContent = useMemo(() => {
+  //   const hasText = !!tweet.content?.value;
+  //   return (
+  //     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+  //       {hasText && (
+  //         <Box>
+  //           <Typography
+  //             sx={TweetContentStyles.contentText(!!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles)}
+  //           >
+  //             <Emoji text={previewText + (!isExpanded && remainderText ? '...' : '')} />
+  //           </Typography>
+  //           {remainderText && (
+  //             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+  //               <Typography
+  //                 sx={TweetContentStyles.contentText(!!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles)}
+  //               >
+  //                 <Emoji text={remainderText} />
+  //               </Typography>
+  //             </Collapse>
+  //           )}
+  //           {remainderText && (
+  //             <ViewAllButton
+  //               label={isExpanded ? 'Show less' : 'Read more'}
+  //               onClick={handleToggleExpand}
+  //               sx={TweetContentStyles.readMoreButton}
+  //             />
+  //           )}
+  //         </Box>
+  //       )}
+  //       {renderImages}
+  //       {renderVideos}
+  //       {renderAudio}
+  //       {renderOtherFiles}
+  //     </motion.div>
+  //   );
+  // }, [previewText, remainderText, isExpanded, renderImages, renderVideos, renderAudio, renderOtherFiles, handleToggleExpand]);
 
   const mediaDialogContent = useMemo(() => {
     const files = tweet.content?.metadata?.files || [];

@@ -976,7 +976,6 @@ const Board = ({
                 }}
                 disabled={isLoading || isOverlayOpen || page <= 1}
               >
-                Previous
               </Button>
             </Tooltip>
             <Tooltip title="Next page">
@@ -987,13 +986,12 @@ const Board = ({
                 aria-label="Next page of tweets"
                 sx={{
                   ...BoardStyles.boardViewToggleButton,
-                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  fontSize: { xs: '0.75rem', sm: '0.8rem' },
                   padding: { xs: '4px 8px', sm: '6px 16px' },
                   pointerEvents: 'auto',
                 }}
                 disabled={isLoading || isOverlayOpen || !pagination.hasMore}
               >
-                Next
               </Button>
             </Tooltip>
             {!isListView && (
