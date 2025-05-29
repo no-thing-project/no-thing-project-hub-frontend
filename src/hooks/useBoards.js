@@ -43,7 +43,7 @@ const CONFIG = {
   MAX_CACHE_SIZE: 10,
   CACHE_EXPIRY_MS: 30 * 60 * 1000, // 30 minutes
   DEBOUNCE_MS: 300,
-  DEFAULT_LIMIT: 20,
+  DEFAULT_LIMIT: 50,
   CACHE_VERSION: 'v1',
 };
 
@@ -96,7 +96,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
   const [pagination, setPagination] = useState({ page: 1, limit: CONFIG.DEFAULT_LIMIT, total: 0, hasMore: true });
   const [gateInfo, setGateInfo] = useState(null);
   const [classInfo, setClassInfo] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const handleError = useCallback((err, message) => {
@@ -148,8 +147,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       setClassInfo(null);
       return Promise.resolve(cachedData);
     }
-
-    setLoading(true);
     setError(null);
 
     try {
@@ -170,8 +167,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
     } catch (err) {
       if (err.name === 'AbortError') return Promise.resolve(null);
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError]);
 
@@ -200,7 +195,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(cachedData);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -221,8 +215,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
     } catch (err) {
       if (err.name === 'AbortError') return Promise.resolve(null);
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError]);
 
@@ -251,7 +243,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(cachedData);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -272,8 +263,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
     } catch (err) {
       if (err.name === 'AbortError') return Promise.resolve(null);
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError]);
 
@@ -299,7 +288,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(cachedData);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -312,8 +300,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
     } catch (err) {
       if (err.name === 'AbortError') return Promise.resolve(null);
       return handleError(err, ERROR_MESSAGES.BOARD_NOT_FOUND);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError, normalizeMembers]);
 
@@ -322,7 +308,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return handleError(new Error(), token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -333,8 +318,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
     } catch (err) {
       if (err.name === 'AbortError') return Promise.resolve(null);
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError, normalizeMembers]);
 
@@ -351,7 +334,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return handleError(new Error(), token ? ERROR_MESSAGES.BOARD_NAME_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -381,8 +363,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(newBoard);
     } catch (err) {
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError]);
 
@@ -391,7 +371,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !gateId ? ERROR_MESSAGES.GATE_ID_MISSING : ERROR_MESSAGES.BOARD_NAME_MISSING);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -402,8 +381,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(newBoard);
     } catch (err) {
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError]);
 
@@ -412,7 +389,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !classId ? ERROR_MESSAGES.CLASS_ID_MISSING : ERROR_MESSAGES.BOARD_NAME_MISSING);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -424,8 +400,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(newBoard);
     } catch (err) {
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError]);
 
@@ -434,7 +408,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !parentBoardId ? ERROR_MESSAGES.PARENT_BOARD_ID_MISSING : ERROR_MESSAGES.BOARD_NAME_MISSING);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -445,8 +418,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(newBoard);
     } catch (err) {
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError]);
 
@@ -455,7 +426,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !boardId ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.BOARD_NAME_MISSING);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -468,8 +438,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(updatedBoard);
     } catch (err) {
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError]);
 
@@ -478,7 +446,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !boardId ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.STATUS_DATA_MISSING);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -490,8 +457,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(updatedBoard);
     } catch (err) {
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError]);
 
@@ -500,7 +465,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return handleError(new Error(), token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -511,8 +475,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(true);
     } catch (err) {
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError]);
 
@@ -521,7 +483,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !boardId ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.USERNAME_MISSING);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -534,8 +495,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(updatedBoard);
     } catch (err) {
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError, normalizeMembers]);
 
@@ -544,7 +503,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !boardId ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.USERNAME_MISSING);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -557,8 +515,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(updatedBoard);
     } catch (err) {
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError, normalizeMembers]);
 
@@ -567,7 +523,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return handleError(new Error(), !token ? ERROR_MESSAGES.AUTH_REQUIRED : !boardId ? ERROR_MESSAGES.BOARD_ID_MISSING : !username ? ERROR_MESSAGES.USERNAME_MISSING : ERROR_MESSAGES.ROLE_MISSING);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -580,8 +535,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(updatedBoard);
     } catch (err) {
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError, normalizeMembers]);
 
@@ -590,7 +543,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return handleError(new Error(), token ? ERROR_MESSAGES.BOARD_ID_MISSING : ERROR_MESSAGES.AUTH_REQUIRED);
     }
 
-    setLoading(true);
     setError(null);
 
     try {
@@ -602,8 +554,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
       return Promise.resolve(updatedBoard);
     } catch (err) {
       return handleError(err, ERROR_MESSAGES.GENERIC);
-    } finally {
-      setLoading(false);
     }
   }, [token, handleError]);
 
@@ -634,7 +584,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
     pagination,
     gateInfo,
     classInfo,
-    loading,
     error,
     fetchBoardsList: debouncedFetchBoardsList,
     fetchBoardsByGate: debouncedFetchBoardsByGate,
@@ -660,7 +609,6 @@ export const useBoards = (token, onLogout, navigate, skipInitialFetch = false) =
     pagination,
     gateInfo,
     classInfo,
-    loading,
     error,
     debouncedFetchBoardsList,
     debouncedFetchBoardsByGate,

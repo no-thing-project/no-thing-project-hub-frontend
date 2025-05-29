@@ -23,7 +23,7 @@ import {
 } from '@mui/material';
 import { AnimatePresence, motion } from 'framer-motion';
 import PropTypes from 'prop-types';
-import { RestartAlt, Add, ArrowBack, Remove, ViewList, ViewModule, Refresh, ArrowLeft, ArrowRight } from '@mui/icons-material';
+import { RestartAlt, Add, ArrowBack, Remove, ViewList, ViewModule, Refresh, ArrowLeft, ArrowRight, ArrowRightTwoTone, ArrowCircleRight, ArrowCircleLeft } from '@mui/icons-material';
 import BoardStyles from './BoardStyles';
 import { BOARD_SIZE, useBoardInteraction } from '../../../hooks/useBoard';
 import LoadingSpinner from '../../Layout/LoadingSpinner';
@@ -225,6 +225,7 @@ const Board = ({
         if (isFetching.current) return;
         isFetching.current = true;
         try {
+          setTweets([]); // Clear tweets before refresh
           await new Promise((resolve, reject) => {
             fetchTweetsList({ page: 1, limit: 20 }, null, false, (err, result) => {
               if (err) reject(err);
@@ -242,7 +243,7 @@ const Board = ({
           isFetching.current = false;
         }
       }, 1000),
-    [fetchTweetsList, showNotification, centerBoard]
+    [fetchTweetsList, showNotification, centerBoard, setTweets]
   );
 
   useEffect(() => {
@@ -590,6 +591,7 @@ const Board = ({
     if (isFetching.current || page <= 1) return;
     isFetching.current = true;
     try {
+      setTweets([]);
       await new Promise((resolve, reject) => {
         fetchTweetsList({ page: page - 1, limit: 20 }, null, false, (err, result) => {
           if (err) reject(err);
@@ -605,12 +607,13 @@ const Board = ({
     } finally {
       isFetching.current = false;
     }
-  }, [fetchTweetsList, page, showNotification, centerBoard]);
+  }, [fetchTweetsList, page, showNotification, centerBoard, setTweets]);
 
   const handleNextPage = useCallback(async () => {
     if (isFetching.current || !pagination.hasMore) return;
     isFetching.current = true;
     try {
+      setTweets([]); // Clear tweets before fetching
       await new Promise((resolve, reject) => {
         fetchTweetsList({ page: page + 1, limit: 20 }, null, false, (err, result) => {
           if (err) reject(err);
@@ -626,7 +629,7 @@ const Board = ({
     } finally {
       isFetching.current = false;
     }
-  }, [fetchTweetsList, page, pagination.hasMore, showNotification, centerBoard]);
+  }, [fetchTweetsList, page, pagination.hasMore, showNotification, centerBoard, setTweets]);
 
   const getRelatedTweetIds = useCallback(
     (tweetId) => {
@@ -725,14 +728,36 @@ const Board = ({
         />
       );
 
+      // Animation variants for tweets
+      const tweetVariants = {
+        initial: {
+          opacity: 0,
+          x: Math.random() * 50 - 25, // Random slide-in from left/right
+          y: Math.random() * 50 - 25, // Random slide-in from top/bottom
+        },
+        animate: {
+          opacity: 1,
+          x: 0,
+          y: 0,
+          transition: { duration: 0.3, ease: 'easeOut' },
+        },
+        exit: {
+          opacity: 0,
+          x: Math.random() * 100 - 50, // Random scatter on exit
+          y: Math.random() * 100 - 50, // Random scatter on exit
+          transition: { duration: 0.3, ease: 'easeIn' },
+        },
+      };
+
       if (isListView) {
         return (
           <motion.div
             key={`tweet-${tweet.tweet_id}`}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            variants={tweetVariants}
+            initial="initial"
+            animate="animate"
             transition={{ duration: 0.3 }}
+            exit="exit"
             sx={BoardStyles.boardListViewTweet(tweet.parent_tweet_id)}
           >
             {tweetContent}
@@ -752,7 +777,14 @@ const Board = ({
           userRole={userRole}
           scale={scale}
         >
-          {tweetContent}
+          <motion.div
+            variants={tweetVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+          >
+            {tweetContent}
+          </motion.div>
         </DraggableTweet>
       );
     },
@@ -937,7 +969,7 @@ const Board = ({
             <Tooltip title={isListView ? 'Switch to board view' : 'Switch to list view'}>
               <Button
                 variant="contained"
-                startIcon={isListView ? <ViewModule /> : <ViewList />}
+                // startIcon={isListView ? <ViewModule /> : <ViewList />}
                 onClick={handleViewToggle}
                 aria-label={isListView ? 'Show as board' : 'Show as list'}
                 sx={{
@@ -963,10 +995,9 @@ const Board = ({
               </IconButton>
             </Tooltip>
             <Tooltip title="Previous page">
-              <Button
-                variant="contained"
-                startIcon={<ArrowLeft />}
+              <IconButton
                 onClick={handlePrevPage}
+                size="small"
                 aria-label="Previous page of tweets"
                 sx={{
                   ...BoardStyles.boardViewToggleButton,
@@ -974,25 +1005,26 @@ const Board = ({
                   padding: { xs: '4px 8px', sm: '6px 16px' },
                   pointerEvents: 'auto',
                 }}
-                disabled={isLoading || isOverlayOpen || page <= 1}
-              >
-              </Button>
+              disabled={isLoading || isOverlayOpen || page <= 1}
+                >
+                  <ArrowCircleLeft fontSize="small" />
+              </IconButton>
             </Tooltip>
             <Tooltip title="Next page">
-              <Button
-                variant="contained"
-                startIcon={<ArrowRight />}
+            <IconButton
                 onClick={handleNextPage}
+                size="small"
                 aria-label="Next page of tweets"
                 sx={{
                   ...BoardStyles.boardViewToggleButton,
-                  fontSize: { xs: '0.75rem', sm: '0.8rem' },
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
                   padding: { xs: '4px 8px', sm: '6px 16px' },
                   pointerEvents: 'auto',
                 }}
                 disabled={isLoading || isOverlayOpen || !pagination.hasMore}
-              >
-              </Button>
+                >
+                  <ArrowCircleRight fontSize="small" />
+              </IconButton>
             </Tooltip>
             {!isListView && (
               <>
