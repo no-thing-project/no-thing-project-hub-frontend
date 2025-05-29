@@ -1,5 +1,9 @@
-import { useState, useCallback, useRef, useMemo } from 'react';
-import ReactDOM from 'react-dom';
+/**
+ * @module useTweets
+ * @description React hook for managing tweets with caching and debounced API calls.
+ */
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import debounce from 'lodash/debounce';
 import {
   fetchTweetsApi,
   createTweetApi,
@@ -15,29 +19,94 @@ import {
 } from '../api/tweetsApi';
 import { normalizeTweet } from '../utils/tweetUtils';
 
-export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
-  const [tweetsMap, setTweetsMap] = useState(new Map());
+// Constants
+const ERROR_MESSAGES = {
+  AUTH_REQUIRED: 'Authentication required.',
+  BOARD_ID_MISSING: 'Board ID is missing.',
+  TWEET_ID_MISSING: 'Tweet ID is missing.',
+  CONTENT_MISSING: 'Tweet must have text or files.',
+  POSITION_INVALID: 'Valid position (x, y) is required.',
+  TARGET_BOARD_ID_MISSING: 'Target board ID is missing.',
+  REMINDER_INVALID: 'Invalid reminder data.',
+  SHARE_PLATFORM_MISSING: 'Share platform is missing.',
+  FILE_UPLOAD_FAILED: 'Failed to upload file.',
+  GENERIC: 'An error occurred.',
+};
+
+const CONFIG = {
+  MAX_CACHE_SIZE: 10,
+  CACHE_EXPIRY_MS: 30 * 60 * 1000, // 30 minutes
+  DEBOUNCE_MS: 300,
+  DEFAULT_LIMIT: 20,
+  CACHE_VERSION: 'v1',
+};
+
+// LRU Cache implementation
+class LRUCache {
+  constructor(capacity) {
+    this.capacity = capacity;
+    this.cache = new Map();
+  }
+
+  get(key) {
+    if (!this.cache.has(key)) return null;
+    const { value, timestamp } = this.cache.get(key);
+    if (Date.now() - timestamp > CONFIG.CACHE_EXPIRY_MS) {
+      this.cache.delete(key);
+      return null;
+    }
+    this.cache.delete(key);
+    this.cache.set(key, { value, timestamp });
+    return value;
+  }
+
+  set(key, value) {
+    if (this.cache.size >= this.capacity) {
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(key, { value, timestamp: Date.now() });
+  }
+
+  clear() {
+    this.cache.clear();
+  }
+}
+
+const tweetCache = new LRUCache(CONFIG.MAX_CACHE_SIZE);
+
+/**
+ * Hook for managing tweets.
+ * @param {string|null} token - Authentication token.
+ * @param {string|null} boardId - ID of the board.
+ * @param {object} currentUser - Current user data.
+ * @param {function} onLogout - Logout callback.
+ * @param {function} navigate - Navigation callback.
+ * @param {boolean} skipInitialFetch - Skip initial tweets fetch.
+ * @returns {object} Tweet management functions and state.
+ */
+export const useTweets = (token, boardId, currentUser, onLogout, navigate, skipInitialFetch = false) => {
+  const [tweets, setTweets] = useState([]);
   const [tweet, setTweet] = useState(null);
-  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0 });
+  const [pagination, setPagination] = useState({ page: 1, limit: CONFIG.DEFAULT_LIMIT, total: 0, hasMore: true });
   const [boardInfo, setBoardInfo] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const lastValidTweets = useRef(new Map());
   const abortControllerRef = useRef(null);
 
-  const handleAuthError = useCallback((err) => {
-    if (err.name === 'AbortError') return;
-    ReactDOM.unstable_batchedUpdates(() => {
-      setError('Session expired. Please log in again.');
-      showLoginPrompt();
-    });
-  }, [onLogout]);
-
-  const showLoginPrompt = useCallback(() => {
-    // Implement a UI prompt (e.g., modal) to re-authenticate
-    console.log('Show login prompt');
-  }, []);
-
+  const handleError = useCallback(
+    (err, message) => {
+      if (err.name === 'AbortError') return Promise.resolve(null);
+      const status = err.status || 500;
+      if (status === 401 || status === 403) {
+        onLogout('Session expired. Please log in again.');
+        navigate('/login');
+      }
+      const errorMessage = message || err.message || ERROR_MESSAGES.GENERIC;
+      setError(errorMessage);
+      return Promise.reject(new Error(errorMessage));
+    },
+    [onLogout, navigate]
+  );
 
   const uploadFileToS3 = useCallback(
     async (file, token, onProgress) => {
@@ -77,68 +146,70 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
           xhr.send(file);
         });
       } catch (err) {
-        throw new Error(`Failed to upload file: ${err.message}`);
+        return handleError(err, ERROR_MESSAGES.FILE_UPLOAD_FAILED);
       }
     },
-    []
+    [handleError]
   );
 
-  const updateTweet = useCallback((tweetId, tweet, isNew = false) => {
-    ReactDOM.unstable_batchedUpdates(() => {
-      setTweetsMap((prev) => {
-        const newMap = new Map(prev);
-        if (tweet === null) {
-          newMap.delete(tweetId);
-        } else {
-          newMap.set(tweetId, tweet);
-        }
-        return newMap;
-      });
-      if (isNew) {
-        setPagination((prev) => ({ ...prev, total: prev.total + 1 }));
-      }
-    });
-  }, []);
+  const fetchTweetsList = useCallback(
+    async (filters = {}, signal, append = false) => {
+      if (!token) return handleError(new Error(), ERROR_MESSAGES.AUTH_REQUIRED);
+      if (!boardId?.trim()) return handleError(new Error(), ERROR_MESSAGES.BOARD_ID_MISSING);
 
-  const fetchTweets = useCallback(
-    async (options = {}, signal) => {
-      if (!boardId) {
-        setError('Board ID is required to fetch tweets');
-        return [];
+      const { page = 1, limit = CONFIG.DEFAULT_LIMIT } = filters;
+      const cacheKey = `${CONFIG.CACHE_VERSION}:tweets:${boardId}:${JSON.stringify({ ...filters, page, limit })}`;
+      const cachedData = tweetCache.get(cacheKey);
+
+      if (cachedData && !append) {
+        setTweets(cachedData.tweets || []);
+        setPagination(cachedData.pagination || { page, limit, total: 0, hasMore: true });
+        setBoardInfo(cachedData.board || null);
+        return Promise.resolve(cachedData);
       }
 
+      setError(null);
+
+      try {
         abortControllerRef.current?.abort();
         abortControllerRef.current = new AbortController();
         const effectiveSignal = signal || abortControllerRef.current.signal;
 
-        try {
-          const data = await fetchTweetsApi(boardId, token, { ...options, limit: options.limit || 20 }, effectiveSignal);
-          const normalizedTweets = data.tweets.map((tweet) => ({
-            ...normalizeTweet(tweet, currentUser),
-            children: tweet.children?.map((child) => normalizeTweet(child, currentUser)) || [],
-          }));
+        const data = await fetchTweetsApi(boardId, token, { ...filters, page, limit }, effectiveSignal);
+        if (!data) throw new Error('No data received');
 
-          const newMap = new Map();
-          normalizedTweets.forEach((t) => newMap.set(t.tweet_id, t));
+        const normalizedTweets = data.tweets.map((tweet) => ({
+          ...normalizeTweet(tweet, currentUser),
+          children: tweet.children?.map((child) => normalizeTweet(child, currentUser)) || [],
+        }));
 
-          ReactDOM.unstable_batchedUpdates(() => {
-            setTweetsMap(newMap);
-            lastValidTweets.current = new Map(newMap);
-            setBoardInfo(data.board);
-            setPagination({
-              page: data.pagination.page,
-              limit: data.pagination.limit,
-              total: data.pagination.total,
-            });
-          });
-          return normalizedTweets;
-        } catch (err) {
-          handleAuthError(err);
-          return Array.from(lastValidTweets.current.values());
-        }
+        setTweets((prev) => (append ? [...prev, ...normalizedTweets] : normalizedTweets));
+        setPagination({
+          page: data.pagination?.page || page,
+          limit: data.pagination?.limit || limit,
+          total: data.pagination?.total || 0,
+          hasMore: normalizedTweets.length === limit,
+        });
+        setBoardInfo(data.board || null);
+
+        const cacheData = { tweets: normalizedTweets, pagination: data.pagination, board: data.board };
+        tweetCache.set(cacheKey, cacheData);
+        return Promise.resolve(cacheData);
+      } catch (err) {
+        if (err.name === 'AbortError') return Promise.resolve(null);
+        return handleError(err, ERROR_MESSAGES.GENERIC);
+      }
     },
-    [boardId, token, currentUser.anonymous_id, currentUser.username, handleAuthError]
+    [token, boardId, currentUser, handleError]
   );
+
+  const debouncedFetchTweetsList = useMemo(() => {
+    return debounce((filters, signal, append, callback) => {
+      fetchTweetsList(filters, signal, append)
+        .then((result) => callback(null, result))
+        .catch((err) => callback(err, null));
+    }, CONFIG.DEBOUNCE_MS);
+  }, [fetchTweetsList]);
 
   const createNewTweet = useCallback(
     async (
@@ -153,18 +224,12 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
       files = [],
       onProgress
     ) => {
-      if (!boardId) {
-        setError('Board ID is required');
-        return null;
-      }
-      if (isNaN(x) || isNaN(y)) {
-        setError('Valid position is required');
-        return null;
-      }
-      if (!content?.value && !files.length) {
-        setError('Tweet must have text or files');
-        return null;
-      }
+      if (!token) return handleError(new Error(), ERROR_MESSAGES.AUTH_REQUIRED);
+      if (!boardId?.trim()) return handleError(new Error(), ERROR_MESSAGES.BOARD_ID_MISSING);
+      if (isNaN(x) || isNaN(y)) return handleError(new Error(), ERROR_MESSAGES.POSITION_INVALID);
+      if (!content?.value?.trim() && !files.length) return handleError(new Error(), ERROR_MESSAGES.CONTENT_MISSING);
+
+      setError(null);
 
       const contentObj = {
         type: files.length ? files[0].type?.split('/')[0] || 'image' : content.type || 'text',
@@ -200,102 +265,90 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         children: [],
       };
 
-      updateTweet(optimisticTweet.tweet_id, optimisticTweet, true);
+      setTweets((prev) => [...prev, optimisticTweet]);
 
-        try {
-          const uploadedFiles = await Promise.all(
-            files.map((file) => uploadFileToS3(file, token, (progress) => onProgress?.(progress / files.length)))
+      try {
+        const uploadedFiles = await Promise.all(
+          files.map((file) => uploadFileToS3(file, token, (progress) => onProgress?.(progress / files.length)))
+        );
+
+        const finalContent = {
+          ...contentObj,
+          type: uploadedFiles.length ? uploadedFiles[0].contentType.split('/')[0] : contentObj.type,
+          metadata: {
+            ...contentObj.metadata,
+            files: uploadedFiles,
+          },
+        };
+
+        const createdTweet = await createTweetApi(
+          boardId,
+          finalContent,
+          x,
+          y,
+          parentTweetId,
+          isAnonymous,
+          currentUser.anonymous_id,
+          status,
+          scheduledAt,
+          reminder?.schedule ? reminder : null,
+          uploadedFiles,
+          token
+        );
+
+        const normalizedTweet = normalizeTweet(
+          { ...createdTweet, position: createdTweet.position || { x, y } },
+          currentUser
+        );
+
+        setTweets((prev) =>
+          prev.map((t) => (t.tweet_id === optimisticTweet.tweet_id ? normalizedTweet : t))
+        );
+        setPagination((prev) => ({ ...prev, total: prev.total + 1 }));
+
+        if (parentTweetId) {
+          setTweets((prev) =>
+            prev.map((t) =>
+              t.tweet_id === parentTweetId
+                ? {
+                    ...t,
+                    child_tweet_ids: [...(t.child_tweet_ids || []), normalizedTweet.tweet_id],
+                    children: [...(t.children || []), normalizedTweet],
+                    stats: { ...t.stats, comment_count: (t.stats.comment_count || 0) + 1 },
+                  }
+                : t
+            )
           );
-
-          const finalContent = {
-            ...contentObj,
-            type: uploadedFiles.length ? uploadedFiles[0].contentType.split('/')[0] : contentObj.type,
-            metadata: {
-              ...contentObj.metadata,
-              files: uploadedFiles,
-            },
-          };
-
-          const createdTweet = await createTweetApi(
-            boardId,
-            finalContent,
-            x,
-            y,
-            parentTweetId,
-            isAnonymous,
-            currentUser.anonymous_id,
-            status,
-            scheduledAt,
-            reminder?.schedule ? reminder : null,
-            uploadedFiles,
-            token
-          );
-
-          const normalizedTweet = normalizeTweet(
-            { ...createdTweet, position: createdTweet.position || { x, y } },
-            currentUser
-          );
-
-          if (!normalizedTweet.tweet_id) {
-            throw new Error('Invalid tweet ID from server');
-          }
-
-          ReactDOM.unstable_batchedUpdates(() => {
-            updateTweet(optimisticTweet.tweet_id, null);
-            updateTweet(normalizedTweet.tweet_id, normalizedTweet, true);
-            if (parentTweetId) {
-              setTweetsMap((prev) => {
-                const newMap = new Map(prev);
-                const parentTweet = newMap.get(parentTweetId);
-                if (parentTweet) {
-                  newMap.set(parentTweetId, {
-                    ...parentTweet,
-                    child_tweet_ids: [...(parentTweet.child_tweet_ids || []), normalizedTweet.tweet_id],
-                    children: [...(parentTweet.children || []), normalizedTweet],
-                    stats: { ...parentTweet.stats, comment_count: (parentTweet.stats.comment_count || 0) + 1 },
-                  });
-                }
-                return newMap;
-              });
-            }
-          });
-
-          return normalizedTweet;
-        } catch (err) {
-          ReactDOM.unstable_batchedUpdates(() => {
-            updateTweet(optimisticTweet.tweet_id, null);
-            setPagination((prev) => ({ ...prev, total: prev.total - 1 }));
-          });
-          handleAuthError(err);
-          throw err;
         }
+
+        tweetCache.clear();
+        return Promise.resolve(normalizedTweet);
+      } catch (err) {
+        setTweets((prev) => prev.filter((t) => t.tweet_id !== optimisticTweet.tweet_id));
+        setPagination((prev) => ({ ...prev, total: prev.total - 1 }));
+        return handleError(err, ERROR_MESSAGES.GENERIC);
+      }
     },
-    [boardId, token, currentUser.anonymous_id, currentUser.username, handleAuthError, uploadFileToS3, updateTweet]
+    [token, boardId, currentUser, handleError, uploadFileToS3]
   );
 
   const updateExistingTweet = useCallback(
     async (tweetId, updates, files = [], onProgress) => {
-      if (!boardId || !tweetId) {
-        setError('Board ID and Tweet ID are required');
-        return null;
-      }
-      const currentTweet = tweetsMap.get(tweetId);
-      if (!currentTweet) {
-        setError('Tweet not found');
-        return null;
-      }
-      if (!updates || Object.keys(updates).length === 0) {
-        setError('At least one update field is required');
-        return null;
-      }
-      if (updates.content && !updates.content.value && !files.length && !currentTweet.content.metadata.files.length) {
-        setError('Content must have text or files');
-        return null;
+      if (!token) return handleError(new Error(), ERROR_MESSAGES.AUTH_REQUIRED);
+      if (!boardId?.trim()) return handleError(new Error(), ERROR_MESSAGES.BOARD_ID_MISSING);
+      if (!tweetId?.trim()) return handleError(new Error(), ERROR_MESSAGES.TWEET_ID_MISSING);
+      if (!updates || !Object.keys(updates).length) return handleError(new Error(), 'At least one update field is required');
+
+      const currentTweet = tweets.find((t) => t.tweet_id === tweetId);
+      if (!currentTweet) return handleError(new Error(), 'Tweet not found');
+
+      if (updates.content && !updates.content.value?.trim() && !files.length && !currentTweet.content.metadata.files.length) {
+        return handleError(new Error(), ERROR_MESSAGES.CONTENT_MISSING);
       }
       if (updates.position && (isNaN(updates.position.x) || isNaN(updates.position.y))) {
-        setError('Valid position is required');
-        return null;
+        return handleError(new Error(), ERROR_MESSAGES.POSITION_INVALID);
       }
+      setError(null);
 
       const contentObj = updates.content
         ? {
@@ -328,71 +381,59 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         updated_at: new Date().toISOString(),
       };
 
-      updateTweet(tweetId, optimisticTweet);
+      setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? optimisticTweet : t)));
 
-        try {
-          const uploadedFiles = await Promise.all(
-            files.map((file) => uploadFileToS3(file, token, (progress) => onProgress?.(progress / files.length)))
-          );
+      try {
+        const uploadedFiles = await Promise.all(
+          files.map((file) => uploadFileToS3(file, token, (progress) => onProgress?.(progress / files.length)))
+        );
 
-          const finalUpdates = {
-            ...updates,
-            content: updates.content
-              ? {
-                  ...contentObj,
-                  type: uploadedFiles.length
-                    ? uploadedFiles[0].contentType.split('/')[0]
-                    : contentObj.type,
-                  metadata: {
-                    ...contentObj.metadata,
-                    files: [...contentObj.metadata.files, ...uploadedFiles],
-                  },
-                }
-              : undefined,
-            position: updates.position ? { x: updates.position.x, y: updates.position.y } : undefined,
-            status: updates.status,
-            scheduled_at: updates.scheduled_at !== undefined ? updates.scheduled_at : undefined,
-            reminder: updates.reminder
-              ? { ...updates.reminder, enabled: !!updates.reminder.schedule }
-              : undefined,
-          };
+        const finalUpdates = {
+          ...updates,
+          content: updates.content
+            ? {
+                ...contentObj,
+                type: uploadedFiles.length ? uploadedFiles[0].contentType.split('/')[0] : contentObj.type,
+                metadata: {
+                  ...contentObj.metadata,
+                  files: [...contentObj.metadata.files, ...uploadedFiles],
+                },
+              }
+            : undefined,
+          position: updates.position ? { x: updates.position.x, y: updates.position.y } : undefined,
+          status: updates.status,
+          scheduled_at: updates.scheduled_at !== undefined ? updates.scheduled_at : undefined,
+          reminder: updates.reminder ? { ...updates.reminder, enabled: !!updates.reminder.schedule } : undefined,
+        };
 
-          Object.keys(finalUpdates).forEach((key) => finalUpdates[key] === undefined && delete finalUpdates[key]);
+        Object.keys(finalUpdates).forEach((key) => finalUpdates[key] === undefined && delete finalUpdates[key]);
 
-          const updatedTweet = await updateTweetApi(boardId, tweetId, finalUpdates, token);
+        const updatedTweet = await updateTweetApi(boardId, tweetId, finalUpdates, token);
+        const normalizedTweet = normalizeTweet(
+          { ...updatedTweet, position: updatedTweet.position || currentTweet.position },
+          currentUser
+        );
 
-          const normalizedTweet = normalizeTweet(
-            { ...updatedTweet, position: updatedTweet.position || currentTweet.position },
-            currentUser
-          );
-
-          if (!normalizedTweet.tweet_id) {
-            throw new Error('Failed to update tweet: Invalid tweet ID');
-          }
-
-          updateTweet(tweetId, normalizedTweet);
-          return normalizedTweet;
-        } catch (err) {
-          updateTweet(tweetId, currentTweet);
-          handleAuthError(err);
-          throw err;
-        }
+        setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? normalizedTweet : t)));
+        tweetCache.clear();
+        return Promise.resolve(normalizedTweet);
+      } catch (err) {
+        setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? currentTweet : t)));
+        return handleError(err, ERROR_MESSAGES.GENERIC);
+      }
     },
-    [boardId, token, currentUser.anonymous_id, currentUser.username, handleAuthError, tweetsMap, uploadFileToS3, updateTweet]
+    [token, boardId, currentUser, handleError, tweets, uploadFileToS3]
   );
 
   const toggleLikeTweet = useCallback(
     async (tweetId, isLiked) => {
-      if (!tweetId) {
-        setError('Tweet ID is required');
-        return null;
-      }
+      if (!token) return handleError(new Error(), ERROR_MESSAGES.AUTH_REQUIRED);
+      if (!tweetId?.trim()) return handleError(new Error(), ERROR_MESSAGES.TWEET_ID_MISSING);
 
-      const currentTweet = tweetsMap.get(tweetId);
-      if (!currentTweet) {
-        setError('Tweet not found');
-        return null;
-      }
+      const currentTweet = tweets.find((t) => t.tweet_id === tweetId);
+      if (!currentTweet) return handleError(new Error(), 'Tweet not found');
+
+      setError(null);
 
       const optimisticTweet = {
         ...currentTweet,
@@ -406,301 +447,246 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         is_liked: !isLiked,
       };
 
-      updateTweet(tweetId, optimisticTweet);
+      setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? optimisticTweet : t)));
 
-        try {
-          const updatedTweet = await toggleLikeApi(tweetId, isLiked, token);
-          const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
+      try {
+        const updatedTweet = await toggleLikeApi(tweetId, isLiked, token);
+        const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
 
-          if (!normalizedTweet.tweet_id) {
-            throw new Error('Failed to toggle like: Invalid tweet ID');
-          }
-
-          updateTweet(tweetId, normalizedTweet);
-          return normalizedTweet;
-        } catch (err) {
-          updateTweet(tweetId, currentTweet);
-          handleAuthError(err);
-          throw err;
-        }
+        setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? normalizedTweet : t)));
+        tweetCache.clear();
+        return Promise.resolve(normalizedTweet);
+      } catch (err) {
+        setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? currentTweet : t)));
+        return handleError(err, ERROR_MESSAGES.GENERIC);
+      }
     },
-    [boardId, token, currentUser.anonymous_id, currentUser.username, handleAuthError, tweetsMap, updateTweet]
+    [token, currentUser, handleError, tweets]
   );
 
   const deleteExistingTweet = useCallback(
     async (tweetId) => {
-      if (!boardId || !tweetId) {
-        setError('Board ID and Tweet ID are required');
-        return false;
-      }
+      if (!token) return handleError(new Error(), ERROR_MESSAGES.AUTH_REQUIRED);
+      if (!boardId?.trim()) return handleError(new Error(), ERROR_MESSAGES.BOARD_ID_MISSING);
+      if (!tweetId?.trim()) return handleError(new Error(), ERROR_MESSAGES.TWEET_ID_MISSING);
 
-      const currentTweet = tweetsMap.get(tweetId);
-      if (!currentTweet) {
-        setError('Tweet not found');
-        return false;
-      }
+      const currentTweet = tweets.find((t) => t.tweet_id === tweetId);
+      if (!currentTweet) return handleError(new Error(), 'Tweet not found');
+
+      setError(null);
 
       const childTweetIds = currentTweet.child_tweet_ids || [];
       const parentTweetId = currentTweet.parent_tweet_id;
 
-      ReactDOM.unstable_batchedUpdates(() => {
-        setTweetsMap((prev) => {
-          const newMap = new Map(prev);
-          newMap.delete(tweetId);
-          childTweetIds.forEach((id) => newMap.delete(id));
-          if (parentTweetId) {
-            const parentTweet = newMap.get(parentTweetId);
-            if (parentTweet) {
-              newMap.set(parentTweetId, {
-                ...parentTweet,
-                child_tweet_ids: parentTweet.child_tweet_ids.filter((id) => id !== tweetId),
-                children: parentTweet.children.filter((c) => c.tweet_id !== tweetId),
-                stats: { ...parentTweet.stats, comment_count: (parentTweet.stats.comment_count || 0) - 1 },
-              });
-            }
-          }
-          return newMap;
-        });
-        setPagination((prev) => ({
-          ...prev,
-          total: prev.total - (1 + childTweetIds.length),
-        }));
-        setTweet(null);
-      });
-
-        try {
-          await deleteTweetApi(boardId, tweetId, token);
-          lastValidTweets.current = new Map(tweetsMap);
-          return true;
-        } catch (err) {
-          ReactDOM.unstable_batchedUpdates(() => {
-            setTweetsMap((prev) => {
-              const newMap = new Map(prev);
-              newMap.set(tweetId, currentTweet);
-              childTweetIds.forEach((id) => {
-                const childTweet = lastValidTweets.current.get(id);
-                if (childTweet) newMap.set(id, childTweet);
-              });
-              if (parentTweetId) {
-                const parentTweet = newMap.get(parentTweetId);
-                if (parentTweet) {
-                  newMap.set(parentTweetId, {
-                    ...parentTweet,
-                    child_tweet_ids: [...parentTweet.child_tweet_ids, tweetId],
-                    children: [...parentTweet.children, currentTweet],
-                    stats: { ...parentTweet.stats, comment_count: (parentTweet.stats.comment_count || 0) + 1 },
-                  });
+      setTweets((prev) =>
+        prev
+          .filter((t) => t.tweet_id !== tweetId && !childTweetIds.includes(t.tweet_id))
+          .map((t) =>
+            t.tweet_id === parentTweetId
+              ? {
+                  ...t,
+                  child_tweet_ids: t.child_tweet_ids.filter((id) => id !== tweetId),
+                  children: t.children.filter((c) => c.tweet_id !== tweetId),
+                  stats: { ...t.stats, comment_count: (t.stats.comment_count || 0) - 1 },
                 }
+              : t
+          )
+      );
+      setPagination((prev) => ({ ...prev, total: prev.total - (1 + childTweetIds.length) }));
+      setTweet((prev) => (prev?.tweet_id === tweetId ? null : prev));
+
+      try {
+        await deleteTweetApi(boardId, tweetId, token);
+        tweetCache.clear();
+        return Promise.resolve(true);
+      } catch (err) {
+        setTweets((prev) => [
+          ...prev,
+          currentTweet,
+          ...childTweetIds.map((id) => tweets.find((t) => t.tweet_id === id)).filter(Boolean),
+        ].map((t) =>
+          t.tweet_id === parentTweetId
+            ? {
+                ...t,
+                child_tweet_ids: [...t.child_tweet_ids, tweetId],
+                children: [...t.children, currentTweet],
+                stats: { ...t.stats, comment_count: (t.stats.comment_count || 0) + 1 },
               }
-              return newMap;
-            });
-            setPagination((prev) => ({
-              ...prev,
-              total: prev.total + (1 + childTweetIds.length),
-            }));
-          });
-          handleAuthError(err);
-          throw err;
-        }
+            : t
+        ));
+        setPagination((prev) => ({ ...prev, total: prev.total + (1 + childTweetIds.length) }));
+        return handleError(err, ERROR_MESSAGES.GENERIC);
+      }
     },
-    [boardId, token, currentUser.anonymous_id, currentUser.username, handleAuthError, tweetsMap, updateTweet]
+    [token, boardId, handleError, tweets]
   );
 
   const moveTweet = useCallback(
     async (tweetId, targetBoardId) => {
-      if (!boardId || !tweetId || !targetBoardId) {
-        setError('Board ID, Tweet ID, and Target Board ID are required');
-        return null;
-      }
+      if (!token) return handleError(new Error(), ERROR_MESSAGES.AUTH_REQUIRED);
+      if (!boardId?.trim()) return handleError(new Error(), ERROR_MESSAGES.BOARD_ID_MISSING);
+      if (!tweetId?.trim()) return handleError(new Error(), ERROR_MESSAGES.TWEET_ID_MISSING);
+      if (!targetBoardId?.trim()) return handleError(new Error(), ERROR_MESSAGES.TARGET_BOARD_ID_MISSING);
 
-      const movedTweet = tweetsMap.get(tweetId);
-      if (!movedTweet) {
-        setError('Tweet not found');
-        return null;
-      }
+      const currentTweet = tweets.find((t) => t.tweet_id === tweetId);
+      if (!currentTweet) return handleError(new Error(), 'Tweet not found');
 
-      const parentTweetId = movedTweet.parent_tweet_id;
+      setError(null);
 
-      ReactDOM.unstable_batchedUpdates(() => {
-        setTweetsMap((prev) => {
-          const newMap = new Map(prev);
-          newMap.delete(tweetId);
-          if (parentTweetId) {
-            const parentTweet = newMap.get(parentTweetId);
-            if (parentTweet) {
-              newMap.set(parentTweetId, {
-                ...parentTweet,
-                child_tweet_ids: parentTweet.child_tweet_ids.filter((id) => id !== tweetId),
-                children: parentTweet.children.filter((c) => c.tweet_id !== tweetId),
-                stats: { ...parentTweet.stats, comment_count: (parentTweet.stats.comment_count || 0) - 1 },
-              });
-            }
-          }
-          return newMap;
-        });
-        setPagination((prev) => ({
-          ...prev,
-          total: prev.total - 1,
-        }));
-      });
+      const parentTweetId = currentTweet.parent_tweet_id;
 
-        try {
-          const updatedTweet = await moveTweetApi(tweetId, targetBoardId, token);
-          const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
-
-          if (!normalizedTweet.tweet_id) {
-            throw new Error('Failed to move tweet: Invalid tweet ID');
-          }
-
-          ReactDOM.unstable_batchedUpdates(() => {
-            lastValidTweets.current = new Map(tweetsMap);
-            setTweet(normalizedTweet);
-          });
-          return normalizedTweet;
-        } catch (err) {
-          ReactDOM.unstable_batchedUpdates(() => {
-            setTweetsMap((prev) => {
-              const newMap = new Map(prev);
-              newMap.set(tweetId, movedTweet);
-              if (parentTweetId) {
-                const parentTweet = newMap.get(parentTweetId);
-                if (parentTweet) {
-                  newMap.set(parentTweetId, {
-                    ...parentTweet,
-                    child_tweet_ids: [...parentTweet.child_tweet_ids, tweetId],
-                    children: [...parentTweet.children, movedTweet],
-                    stats: { ...parentTweet.stats, comment_count: (parentTweet.stats.comment_count || 0) + 1 },
-                  });
+      setTweets((prev) =>
+        prev
+          .filter((t) => t.tweet_id !== tweetId)
+          .map((t) =>
+            t.tweet_id === parentTweetId
+              ? {
+                  ...t,
+                  child_tweet_ids: t.child_tweet_ids.filter((id) => id !== tweetId),
+                  children: t.children.filter((c) => c.tweet_id !== tweetId),
+                  stats: { ...t.stats, comment_count: (t.stats.comment_count || 0) - 1 },
                 }
+              : t
+          )
+      );
+      setPagination((prev) => ({ ...prev, total: prev.total - 1 }));
+
+      try {
+        const updatedTweet = await moveTweetApi(tweetId, targetBoardId, token);
+        const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
+
+        setTweet(normalizedTweet);
+        tweetCache.clear();
+        return Promise.resolve(normalizedTweet);
+      } catch (err) {
+        setTweets((prev) => [
+          ...prev,
+          currentTweet,
+        ].map((t) =>
+          t.tweet_id === parentTweetId
+            ? {
+                ...t,
+                child_tweet_ids: [...t.child_tweet_ids, tweetId],
+                children: [...t.children, currentTweet],
+                stats: { ...t.stats, comment_count: (t.stats.comment_count || 0) + 1 },
               }
-              return newMap;
-            });
-            setPagination((prev) => ({
-              ...prev,
-              total: prev.total + 1,
-            }));
-          });
-          handleAuthError(err);
-          throw err;
-        }
+            : t
+        ));
+        setPagination((prev) => ({ ...prev, total: prev.total + 1 }));
+        return handleError(err, ERROR_MESSAGES.GENERIC);
+      }
     },
-    [boardId, token, currentUser.anonymous_id, currentUser.username, handleAuthError, tweetsMap, updateTweet]
+    [token, boardId, currentUser, handleError, tweets]
   );
 
   const pinTweet = useCallback(
     async (tweetId) => {
-      if (!boardId || !tweetId) {
-        setError('Board ID and Tweet ID are required');
-        return null;
+      if (!token) return handleError(new Error(), ERROR_MESSAGES.AUTH_REQUIRED);
+      if (!boardId?.trim()) return handleError(new Error(), ERROR_MESSAGES.BOARD_ID_MISSING);
+      if (!tweetId?.trim()) return handleError(new Error(), ERROR_MESSAGES.TWEET_ID_MISSING);
+
+      const currentTweet = tweets.find((t) => t.tweet_id === tweetId);
+      if (!currentTweet) return handleError(new Error(), 'Tweet not found');
+
+      setError(null);
+
+      setTweets((prev) =>
+        prev.map((t) => (t.tweet_id === tweetId ? { ...t, is_pinned: true } : t))
+      );
+
+      try {
+        const updatedTweet = await pinTweetApi(boardId, tweetId, token);
+        const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
+
+        setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? normalizedTweet : t)));
+        tweetCache.clear();
+        return Promise.resolve(normalizedTweet);
+      } catch (err) {
+        setTweets((prev) =>
+          prev.map((t) => (t.tweet_id === tweetId ? { ...t, is_pinned: false } : t))
+        );
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       }
-
-      const currentTweet = tweetsMap.get(tweetId);
-      if (!currentTweet) {
-        setError('Tweet not found');
-        return null;
-      }
-
-      updateTweet(tweetId, { ...currentTweet, is_pinned: true });
-
-        try {
-          const updatedTweet = await pinTweetApi(boardId, tweetId, token);
-          const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
-
-          if (!normalizedTweet.tweet_id) {
-            throw new Error('Failed to pin tweet: Invalid tweet ID');
-          }
-
-          updateTweet(tweetId, normalizedTweet);
-          return normalizedTweet;
-        } catch (err) {
-          updateTweet(tweetId, currentTweet);
-          handleAuthError(err);
-          throw err;
-        }
     },
-    [boardId, token, currentUser.anonymous_id, currentUser.username, handleAuthError, tweetsMap, updateTweet]
+    [token, boardId, currentUser, handleError, tweets]
   );
 
   const unpinTweet = useCallback(
     async (tweetId) => {
-      if (!boardId || !tweetId) {
-        setError('Board ID and Tweet ID are required');
-        return null;
+      if (!token) return handleError(new Error(), ERROR_MESSAGES.AUTH_REQUIRED);
+      if (!boardId?.trim()) return handleError(new Error(), ERROR_MESSAGES.BOARD_ID_MISSING);
+      if (!tweetId?.trim()) return handleError(new Error(), ERROR_MESSAGES.TWEET_ID_MISSING);
+
+      const currentTweet = tweets.find((t) => t.tweet_id === tweetId);
+      if (!currentTweet) return handleError(new Error(), 'Tweet not found');
+
+      setError(null);
+
+      setTweets((prev) =>
+        prev.map((t) => (t.tweet_id === tweetId ? { ...t, is_pinned: false } : t))
+      );
+
+      try {
+        const updatedTweet = await unpinTweetApi(boardId, tweetId, token);
+        const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
+
+        setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? normalizedTweet : t)));
+        tweetCache.clear();
+        return Promise.resolve(normalizedTweet);
+      } catch (err) {
+        setTweets((prev) =>
+          prev.map((t) => (t.tweet_id === tweetId ? { ...t, is_pinned: true } : t))
+        );
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       }
-
-      const currentTweet = tweetsMap.get(tweetId);
-      if (!currentTweet) {
-        setError('Tweet not found');
-        return null;
-      }
-
-      updateTweet(tweetId, { ...currentTweet, is_pinned: false });
-
-        try {
-          const updatedTweet = await unpinTweetApi(boardId, tweetId, token);
-          const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
-
-          if (!normalizedTweet.tweet_id) {
-            throw new Error('Failed to unpin tweet: Invalid tweet ID');
-          }
-
-          updateTweet(tweetId, normalizedTweet);
-          return normalizedTweet;
-        } catch (err) {
-          updateTweet(tweetId, currentTweet);
-          handleAuthError(err);
-          throw err;
-        }
     },
-    [boardId, token, currentUser.anonymous_id, currentUser.username, handleAuthError, tweetsMap, updateTweet]
+    [token, boardId, currentUser, handleError, tweets]
   );
 
   const setReminder = useCallback(
     async (tweetId, reminder) => {
-      if (!boardId || !tweetId) {
-        setError('Board ID and Tweet ID are required');
-        return null;
+      if (!token) return handleError(new Error(), ERROR_MESSAGES.AUTH_REQUIRED);
+      if (!boardId?.trim()) return handleError(new Error(), ERROR_MESSAGES.BOARD_ID_MISSING);
+      if (!tweetId?.trim()) return handleError(new Error(), ERROR_MESSAGES.TWEET_ID_MISSING);
+      if (!reminder?.schedule) return handleError(new Error(), ERROR_MESSAGES.REMINDER_INVALID);
+
+      const currentTweet = tweets.find((t) => t.tweet_id === tweetId);
+      if (!currentTweet) return handleError(new Error(), 'Tweet not found');
+
+      setError(null);
+
+      setTweets((prev) =>
+        prev.map((t) => (t.tweet_id === tweetId ? { ...t, reminder: { ...reminder, enabled: true } } : t))
+      );
+
+      try {
+        const updatedTweet = await setReminderApi(boardId, tweetId, reminder, token);
+        const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
+
+        setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? normalizedTweet : t)));
+        tweetCache.clear();
+        return Promise.resolve(normalizedTweet);
+      } catch (err) {
+        setTweets((prev) =>
+          prev.map((t) => (t.tweet_id === tweetId ? { ...t, reminder: currentTweet.reminder } : t))
+        );
+        return handleError(err, ERROR_MESSAGES.GENERIC);
       }
-
-      const currentTweet = tweetsMap.get(tweetId);
-      if (!currentTweet) {
-        setError('Tweet not found');
-        return null;
-      }
-
-      updateTweet(tweetId, { ...currentTweet, reminder: { ...reminder, enabled: true } });
-
-        try {
-          const updatedTweet = await setReminderApi(boardId, tweetId, reminder, token);
-          const normalizedTweet = normalizeTweet(updatedTweet, currentUser);
-
-          if (!normalizedTweet.tweet_id) {
-            throw new Error('Failed to set reminder: Invalid tweet ID');
-          }
-
-          updateTweet(tweetId, normalizedTweet);
-          return normalizedTweet;
-        } catch (err) {
-          updateTweet(tweetId, currentTweet);
-          handleAuthError(err);
-          throw err;
-        }
     },
-    [boardId, token, currentUser.anonymous_id, currentUser.username, handleAuthError, tweetsMap, updateTweet]
+    [token, boardId, currentUser, handleError, tweets]
   );
 
   const shareTweet = useCallback(
     async (tweetId, sharedTo) => {
-      if (!boardId || !tweetId) {
-        setError('Board ID and Tweet ID are required');
-        return null;
-      }
+      if (!token) return handleError(new Error(), ERROR_MESSAGES.AUTH_REQUIRED);
+      if (!boardId?.trim()) return handleError(new Error(), ERROR_MESSAGES.BOARD_ID_MISSING);
+      if (!tweetId?.trim()) return handleError(new Error(), ERROR_MESSAGES.TWEET_ID_MISSING);
+      if (!sharedTo?.trim()) return handleError(new Error(), ERROR_MESSAGES.SHARE_PLATFORM_MISSING);
 
-      const currentTweet = tweetsMap.get(tweetId);
-      if (!currentTweet) {
-        setError('Tweet not found');
-        return null;
-      }
+      const currentTweet = tweets.find((t) => t.tweet_id === tweetId);
+      if (!currentTweet) return handleError(new Error(), 'Tweet not found');
+
+      setError(null);
 
       const optimisticTweet = {
         ...currentTweet,
@@ -717,49 +703,91 @@ export const useTweets = (token, boardId, currentUser, onLogout, navigate) => {
         },
       };
 
-      updateTweet(tweetId, optimisticTweet);
+      setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? optimisticTweet : t)));
 
-        try {
-          const sharedTweet = await shareTweetApi(boardId, tweetId, sharedTo, token);
-          const normalizedTweet = normalizeTweet(sharedTweet, currentUser);
+      try {
+        const sharedTweet = await shareTweetApi(boardId, tweetId, sharedTo, token);
+        const normalizedTweet = normalizeTweet(sharedTweet, currentUser);
 
-          if (!normalizedTweet.tweet_id) {
-            throw new Error('Failed to share tweet: Invalid tweet ID');
-          }
-
-          updateTweet(tweetId, normalizedTweet);
-          return normalizedTweet;
-        } catch (err) {
-          updateTweet(tweetId, currentTweet);
-          handleAuthError(err);
-          throw err;
-        }
+        setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? normalizedTweet : t)));
+        tweetCache.clear();
+        return Promise.resolve(normalizedTweet);
+      } catch (err) {
+        setTweets((prev) => prev.map((t) => (t.tweet_id === tweetId ? currentTweet : t)));
+        return handleError(err, ERROR_MESSAGES.GENERIC);
+      }
     },
-    [boardId, token, currentUser.anonymous_id, currentUser.username, handleAuthError, tweetsMap, updateTweet]
+    [token, boardId, currentUser, handleError, tweets]
   );
 
-  const tweets = useMemo(() => Array.from(tweetsMap.values()), [tweetsMap]);
-  const pinnedTweets = useMemo(() => tweets.filter((t) => t.is_pinned), [tweets]);
+  const resetState = useCallback(() => {
+    setTweets([]);
+    setTweet(null);
+    setPagination({ page: 1, limit: CONFIG.DEFAULT_LIMIT, total: 0, hasMore: true });
+    setBoardInfo(null);
+    setError(null);
+    tweetCache.clear();
+  }, []);
 
-  return {
-    tweets,
-    updateTweet,
-    tweet,
-    setTweet,
-    pagination,
-    boardInfo,
-    loading,
-    error,
-    pinnedTweets,
-    fetchTweets,
-    createNewTweet,
-    updateExistingTweet,
-    toggleLikeTweet,
-    deleteExistingTweet,
-    moveTweet,
-    pinTweet,
-    unpinTweet,
-    setReminder,
-    shareTweet,
-  };
+  useEffect(() => {
+    if (!token || !boardId || skipInitialFetch) {
+      resetState();
+      return;
+    }
+
+    const controller = new AbortController();
+    debouncedFetchTweetsList({}, controller.signal, false, (err, result) => {
+      if (err && err.name !== 'AbortError') {
+        setError(err.message || ERROR_MESSAGES.GENERIC);
+      }
+    });
+
+    return () => {
+      controller.abort();
+      debouncedFetchTweetsList.cancel();
+    };
+  }, [token, boardId, skipInitialFetch, resetState, debouncedFetchTweetsList]);
+
+  return useMemo(
+    () => ({
+      tweets,
+      tweet,
+      setTweet,
+      setTweets,
+      pagination,
+      boardInfo,
+      error,
+      fetchTweetsList: debouncedFetchTweetsList,
+      createNewTweet,
+      updateExistingTweet,
+      toggleLikeTweet,
+      deleteExistingTweet,
+      moveTweet,
+      pinTweet,
+      unpinTweet,
+      setReminder,
+      shareTweet,
+      resetState,
+    }),
+    [
+      tweets,
+      tweet,
+      pagination,
+      boardInfo,
+      error,
+      debouncedFetchTweetsList,
+      createNewTweet,
+      updateExistingTweet,
+      toggleLikeTweet,
+      deleteExistingTweet,
+      moveTweet,
+      pinTweet,
+      unpinTweet,
+      setReminder,
+      shareTweet,
+      resetState,
+    ]
+  );
 };
+
+export default useTweets;

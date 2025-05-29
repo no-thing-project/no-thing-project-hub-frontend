@@ -1,3 +1,7 @@
+/**
+ * @module Board
+ * @description Component for displaying and interacting with a board of tweets.
+ */
 import React, { useRef, useState, useEffect, useCallback, useMemo, memo, useReducer } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -19,7 +23,7 @@ import {
 } from '@mui/material';
 import { AnimatePresence, motion } from 'framer-motion';
 import PropTypes from 'prop-types';
-import { RestartAlt, Add, ArrowBack, Remove, ViewList, ViewModule, Refresh } from '@mui/icons-material';
+import { RestartAlt, Add, ArrowBack, Remove, ViewList, ViewModule, Refresh, ArrowLeft, ArrowRight } from '@mui/icons-material';
 import BoardStyles from './BoardStyles';
 import { BOARD_SIZE, useBoardInteraction } from '../../../hooks/useBoard';
 import LoadingSpinner from '../../Layout/LoadingSpinner';
@@ -39,7 +43,7 @@ const Z_INDEX = {
   TWEET: 99,
   POPUP: 100,
   MODAL: 110,
-  OVERLAY: 109, // New z-index for the overlay, below modals but above tweets
+  OVERLAY: 109,
 };
 
 // Reducer for tweet popup state
@@ -146,10 +150,8 @@ const Board = ({
   const [boards, setBoards] = useState(availableBoards);
   const [isSaving, setIsSaving] = useState(false);
   const [highlightedTweetId, setHighlightedTweetId] = useState(null);
-  // New state to track open modals for blocking interactions
   const openModals = useRef(new Set());
 
-  // Split reducers for better state isolation
   const [popupState, dispatchPopup] = useReducer(popupReducer, {
     visible: false,
     x: 0,
@@ -165,12 +167,10 @@ const Board = ({
     selectedBoardId: '',
   });
 
-  // New: Track whether any modal or popup is open
   const isOverlayOpen = useMemo(() => {
     return popupState.visible || !!editModalState.tweet || openModals.current.size > 0;
   }, [popupState.visible, editModalState.tweet]);
 
-  // New: Callback to handle modal state changes from TweetContent
   const handleModalStateChange = useCallback((tweetId, isOpen) => {
     if (isOpen) {
       openModals.current.add(tweetId);
@@ -181,10 +181,14 @@ const Board = ({
 
   const {
     tweets,
-    updateTweet,
+    tweet,
+    setTweet,
+    setTweets,
+    pagination,
+    boardInfo,
     loading: isLoading,
     error,
-    fetchTweets,
+    fetchTweetsList,
     createNewTweet,
     updateExistingTweet,
     toggleLikeTweet,
@@ -192,7 +196,9 @@ const Board = ({
     moveTweet,
     pinTweet,
     unpinTweet,
-    pagination,
+    setReminder,
+    shareTweet,
+    resetState,
   } = useTweets(token, boardId, currentUser, onLogout, navigate);
 
   const { fetchBoardsList } = useBoards(token, onLogout, navigate);
@@ -210,18 +216,21 @@ const Board = ({
     handleTouchEnd: originalHandleTouchEnd,
   } = useBoardInteraction(boardMainRef);
 
-  // Permissions
   const permissions = usePermissions(userRole, currentUser);
   const tweetPermissionsMap = usePermissions(userRole, currentUser, null, tweets);
 
-  // Debounced refresh function
   const debouncedRefresh = useMemo(
     () =>
       debounce(async () => {
         if (isFetching.current) return;
         isFetching.current = true;
         try {
-          await fetchTweets({ page: 1, limit: 20 });
+          await new Promise((resolve, reject) => {
+            fetchTweetsList({ page: 1, limit: 20 }, null, false, (err, result) => {
+              if (err) reject(err);
+              else resolve(result);
+            });
+          });
           setPage(1);
           centerBoard();
           showNotification('Board refreshed successfully!', 'success');
@@ -233,10 +242,9 @@ const Board = ({
           isFetching.current = false;
         }
       }, 1000),
-    [fetchTweets, showNotification, centerBoard]
+    [fetchTweetsList, showNotification, centerBoard]
   );
 
-  // Initial fetch and centering
   useEffect(() => {
     if (!token || !boardId) return;
 
@@ -245,7 +253,13 @@ const Board = ({
       if (isFetching.current) return;
       isFetching.current = true;
       try {
-        await fetchTweets({ page: 1, limit: 20 }, controller.signal);
+        await new Promise((resolve, reject) => {
+          fetchTweetsList({ page: 1, limit: 20 }, controller.signal, false, (err, result) => {
+            if (err) reject(err);
+            else resolve(result);
+          });
+        });
+        setPage(1);
         centerBoard();
       } catch (err) {
         if (err.name !== 'AbortError') {
@@ -261,9 +275,8 @@ const Board = ({
       controller.abort();
       debouncedRefresh.cancel();
     };
-  }, [token, boardId, fetchTweets, showNotification, centerBoard, debouncedRefresh]);
+  }, [token, boardId, fetchTweetsList, showNotification, centerBoard, debouncedRefresh]);
 
-  // Fetch boards list for edit modal
   useEffect(() => {
     if (!editModalState.tweet || boards.length > 0 || !permissions.canMoveBoard) return;
 
@@ -284,7 +297,6 @@ const Board = ({
     return () => controller.abort();
   }, [editModalState.tweet, boards, fetchBoardsList, showNotification, permissions.canMoveBoard]);
 
-  // New: Block wheel events when any modal is open
   useEffect(() => {
     const handleWheel = (e) => {
       if (isOverlayOpen) {
@@ -299,15 +311,14 @@ const Board = ({
     async (tweet, optimisticUpdateFn, serverUpdateFn, rollbackFn, isNewTweet = false) => {
       const tweetId = tweet.tweet_id;
       try {
-        optimisticUpdateFn(tweetId, tweets);
+        setTweets((prev) => optimisticUpdateFn(tweetId, prev));
         await serverUpdateFn();
-        // showNotification(isNewTweet ? 'Tweet created successfully!' : 'Tweet updated successfully!', 'success');
       } catch (err) {
-        rollbackFn(tweetId, tweets);
+        setTweets((prev) => rollbackFn(tweetId, prev));
         showNotification(err.message || (isNewTweet ? 'Failed to create tweet' : 'Failed to update tweet'), 'error');
       }
     },
-    [tweets, showNotification]
+    [showNotification, setTweets]
   );
 
   const handleTweetCreation = useCallback(
@@ -339,16 +350,15 @@ const Board = ({
         created_at: new Date().toISOString(),
         anonymous_id: currentUser.anonymous_id,
         username: currentUser.username,
-        stats: { like_count: 0 },
+        stats: { like_count: 0, view_count: 0, comment_count: 0, share_count: 0 },
         is_pinned: false,
         board_id: boardId,
+        children: [],
       };
 
       await handleOptimisticUpdate(
         optimisticTweet,
-        (tweetId, tweets) => {
-          updateTweet(tweetId, optimisticTweet, true);
-        },
+        (tweetId, tweets) => [...tweets, optimisticTweet],
         async () => {
           const newTweet = await createNewTweet(
             content,
@@ -362,17 +372,17 @@ const Board = ({
             files || [],
             onProgress
           );
-          updateTweet(tempTweetId, newTweet);
+          setTweets((prev) =>
+            prev.map((t) => (t.tweet_id === tempTweetId ? newTweet : t))
+          );
         },
-        (tweetId) => {
-          updateTweet(tweetId, null);
-        },
+        (tweetId, tweets) => tweets.filter((t) => t.tweet_id !== tweetId),
         true
       );
 
       dispatchPopup({ type: 'CLOSE_POPUP' });
     },
-    [permissions.canCreate, createNewTweet, popupState.replyTweet, showNotification, currentUser, boardId, updateTweet, handleOptimisticUpdate]
+    [permissions.canCreate, createNewTweet, popupState.replyTweet, showNotification, currentUser, boardId, handleOptimisticUpdate, setTweets]
   );
 
   const handleReply = useCallback(
@@ -400,7 +410,6 @@ const Board = ({
     [permissions.canCreate, showNotification]
   );
 
-  // Modified: Block mouse events when overlay is open
   const handleMouseDown = useCallback(
     (e) => {
       if (isOverlayOpen) {
@@ -432,11 +441,9 @@ const Board = ({
     [isOverlayOpen, originalHandleMouseUp, throttlePopup]
   );
 
-  // Modified: Block touch events when overlay is open
   const handleTouchStart = useCallback(
     (e) => {
       if (isOverlayOpen) {
-        // e.preventDefault();
         return;
       }
       originalHandleTouchStart(e);
@@ -487,21 +494,23 @@ const Board = ({
       }
       await handleOptimisticUpdate(
         tweet,
-        (tweetId, tweets) => {
-          updateTweet(tweetId, { ...tweets.find((t) => t.tweet_id === tweetId), is_pinned: !tweet.is_pinned });
-        },
+        (tweetId, tweets) =>
+          tweets.map((t) =>
+            t.tweet_id === tweetId ? { ...t, is_pinned: !tweet.is_pinned } : t
+          ),
         async () => {
           const action = tweet.is_pinned ? unpinTweet : pinTweet;
           await action(tweet.tweet_id);
         },
-        (tweetId, tweets) => {
-          updateTweet(tweetId, { ...tweets.find((t) => t.tweet_id === tweetId), is_pinned: tweet.is_pinned });
-        },
+        (tweetId, tweets) =>
+          tweets.map((t) =>
+            t.tweet_id === tweetId ? { ...t, is_pinned: tweet.is_pinned } : t
+        ),
         false
       );
       showNotification(`Tweet ${tweet.is_pinned ? 'unpinned' : 'pinned'} successfully!`, 'success');
     },
-    [permissions.canPin, pinTweet, unpinTweet, showNotification, updateTweet, handleOptimisticUpdate]
+    [permissions.canPin, pinTweet, unpinTweet, showNotification, handleOptimisticUpdate]
   );
 
   const handleSaveEditedTweet = useCallback(
@@ -516,7 +525,7 @@ const Board = ({
         showNotification('Tweet content cannot be empty', 'error');
         return;
       }
-      if (editModalState.tweet.content.value.length > MAX_TWEET_LENGTH) {
+      if (editModalState.tweet.content?.value?.length > MAX_TWEET_LENGTH) {
         showNotification(`Tweet exceeds ${MAX_TWEET_LENGTH} character limit`, 'error');
         return;
       }
@@ -535,9 +544,8 @@ const Board = ({
 
       await handleOptimisticUpdate(
         updatedTweet,
-        (tweetId, tweets) => {
-          updateTweet(tweetId, updatedTweet);
-        },
+        (tweetId, tweets) =>
+          tweets.map((t) => (t.tweet_id === tweetId ? updatedTweet : t)),
         async () => {
           await updateExistingTweet(editModalState.tweet.tweet_id, {
             content: updatedTweet.content,
@@ -548,42 +556,87 @@ const Board = ({
             await moveTweet(editModalState.tweet.tweet_id, editModalState.selectedBoardId);
           }
         },
-        (tweetId, tweets) => {
-          updateTweet(tweetId, tweets.find((t) => t.tweet_id === tweetId));
-        },
+        (tweetId, tweets) => tweets,
         false
       );
 
       setIsSaving(false);
       dispatchEditModal({ type: 'CLEAR_EDIT_MODAL' });
     },
-    [editModalState, updateExistingTweet, moveTweet, showNotification, tweetPermissionsMap, updateTweet, handleOptimisticUpdate]
+    [editModalState, updateExistingTweet, moveTweet, showNotification, tweetPermissionsMap, handleOptimisticUpdate]
   );
 
   const handleLoadMore = useCallback(async () => {
-    if (isFetching.current || tweets.length >= pagination.total) return;
+    if (isFetching.current || !pagination.hasMore) return;
     isFetching.current = true;
     try {
-      await fetchTweets({ page: page + 1, limit: 20 });
+      await new Promise((resolve, reject) => {
+        fetchTweetsList({ page: page + 1, limit: 20 }, null, true, (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        });
+      });
       setPage((prev) => prev + 1);
     } catch (err) {
       if (err.name !== 'AbortError') {
-        showNotification('Failed to load more tweets', 'error');
+        showNotification(err.message || 'Failed to load more tweets', 'error');
       }
     } finally {
       isFetching.current = false;
     }
-  }, [fetchTweets, page, tweets, pagination, showNotification]);
+  }, [fetchTweetsList, page, pagination.hasMore, showNotification]);
+
+  const handlePrevPage = useCallback(async () => {
+    if (isFetching.current || page <= 1) return;
+    isFetching.current = true;
+    try {
+      await new Promise((resolve, reject) => {
+        fetchTweetsList({ page: page - 1, limit: 20 }, null, false, (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        });
+      });
+      setPage((prev) => prev - 1);
+      centerBoard();
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        showNotification(err.message || 'Failed to load previous page', 'error');
+      }
+    } finally {
+      isFetching.current = false;
+    }
+  }, [fetchTweetsList, page, showNotification, centerBoard]);
+
+  const handleNextPage = useCallback(async () => {
+    if (isFetching.current || !pagination.hasMore) return;
+    isFetching.current = true;
+    try {
+      await new Promise((resolve, reject) => {
+        fetchTweetsList({ page: page + 1, limit: 20 }, null, false, (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        });
+      });
+      setPage((prev) => prev + 1);
+      centerBoard();
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        showNotification(err.message || 'Failed to load next page', 'error');
+      }
+    } finally {
+      isFetching.current = false;
+    }
+  }, [fetchTweetsList, page, pagination.hasMore, showNotification, centerBoard]);
 
   const getRelatedTweetIds = useCallback(
     (tweetId) => {
-      const relatedIds = new Set([tweetId]);
+      const tweetIds = new Set([tweetId]);
       const tweet = tweets.find((t) => t.tweet_id === tweetId);
       if (tweet) {
-        if (tweet.parent_tweet_id) relatedIds.add(tweet.parent_tweet_id);
-        tweet.child_tweet_ids?.forEach((id) => relatedIds.add(id));
+        if (tweet.parent_tweet_id) tweetIds.add(tweet.parent_tweet_id);
+        tweet.child_tweet_ids?.forEach((id) => tweetIds.add(id));
       }
-      return Array.from(relatedIds);
+      return Array.from(tweetIds);
     },
     [tweets]
   );
@@ -634,7 +687,7 @@ const Board = ({
       availableBoards: editModalState.tweet?.availableBoards || boards,
       boardId,
       isListView,
-      onModalStateChange: handleModalStateChange, // New: Pass modal state change handler
+      onModalStateChange: handleModalStateChange,
     }),
     [
       currentUser,
@@ -663,7 +716,7 @@ const Board = ({
           {...tweetProps}
           isParentHighlighted={relatedTweetIds.includes(tweet.tweet_id)}
           replyCount={replyCount}
-          parentTweetText={
+          parentTweet={
             tweet.parent_tweet_id
               ? tweets.find((t) => t.tweet_id === tweet.parent_tweet_id)?.content?.value || null
               : null
@@ -697,7 +750,7 @@ const Board = ({
           }}
           currentUser={currentUser}
           userRole={userRole}
-          scale={scale} // Додаємо scale
+          scale={scale}
         >
           {tweetContent}
         </DraggableTweet>
@@ -746,7 +799,6 @@ const Board = ({
       }}
     >
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-        {/* New: Overlay to block interactions when modals are open */}
         {isOverlayOpen && (
           <Box
             sx={{
@@ -755,11 +807,11 @@ const Board = ({
               left: 0,
               right: 0,
               bottom: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.1)', // Dimmed background
+              backgroundColor: 'rgba(0, 0, 0, 0.1)',
               zIndex: Z_INDEX.OVERLAY,
-              pointerEvents: 'auto', // Capture all events
+              pointerEvents: 'auto',
             }}
-            onClick={(e) => e.stopPropagation()} // Prevent clicks from reaching the board
+            onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.preventDefault()}
             onTouchStart={(e) => e.preventDefault()}
             aria-hidden="true"
@@ -767,13 +819,13 @@ const Board = ({
         )}
 
         <Box sx={BoardStyles.boardBackButtonContainer}>
-          <Tooltip title="Go back">
+          <Tooltip title="Go back to">
             <IconButton
               onClick={() => navigate(-1)}
-              aria-label="Go back to previous page"
+              aria-label="Previous page"
               sx={BoardStyles.boardBackButton}
             >
-              <ArrowBack fontSize="inherit" />
+              <ArrowBack />
             </IconButton>
           </Tooltip>
         </Box>
@@ -782,11 +834,11 @@ const Board = ({
           ref={boardMainRef}
           sx={{
             ...BoardStyles.boardMain(isListView, dragging),
-            touchAction: isOverlayOpen ? 'none' : 'auto', // Disable touch when overlay is open
+            touchAction: isOverlayOpen ? 'none' : 'auto',
             userSelect: 'none',
             height: '100%',
             width: '100%',
-            overflowY: isListView && !isOverlayOpen ? 'auto' : 'hidden', // Disable scroll when overlay is open
+            overflowY: isListView && !isOverlayOpen ? 'auto' : 'hidden',
           }}
           onMouseDown={isListView ? undefined : handleMouseDown}
           onMouseMove={isListView ? undefined : handleMouseMove}
@@ -828,7 +880,7 @@ const Board = ({
                         onClick={handleLoadMore}
                         sx={{ mt: 2, alignSelf: 'center' }}
                         aria-label="Load more tweets"
-                        disabled={isLoading || isOverlayOpen} // Disable when overlay is open
+                        disabled={isLoading || isOverlayOpen}
                       >
                         Load More
                       </Button>
@@ -879,7 +931,7 @@ const Board = ({
               display: 'flex',
               flexDirection: 'column',
               gap: { xs: 0.5, sm: 1 },
-              pointerEvents: isOverlayOpen ? 'none' : 'auto', // Disable controls when overlay is open
+              pointerEvents: isOverlayOpen ? 'none' : 'auto',
             }}
           >
             <Tooltip title={isListView ? 'Switch to board view' : 'Switch to list view'}>
@@ -909,6 +961,40 @@ const Board = ({
               >
                 <Refresh fontSize="small" />
               </IconButton>
+            </Tooltip>
+            <Tooltip title="Previous page">
+              <Button
+                variant="contained"
+                startIcon={<ArrowLeft />}
+                onClick={handlePrevPage}
+                aria-label="Previous page of tweets"
+                sx={{
+                  ...BoardStyles.boardViewToggleButton,
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  padding: { xs: '4px 8px', sm: '6px 16px' },
+                  pointerEvents: 'auto',
+                }}
+                disabled={isLoading || isOverlayOpen || page <= 1}
+              >
+                Previous
+              </Button>
+            </Tooltip>
+            <Tooltip title="Next page">
+              <Button
+                variant="contained"
+                startIcon={<ArrowRight />}
+                onClick={handleNextPage}
+                aria-label="Next page of tweets"
+                sx={{
+                  ...BoardStyles.boardViewToggleButton,
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  padding: { xs: '4px 8px', sm: '6px 16px' },
+                  pointerEvents: 'auto',
+                }}
+                disabled={isLoading || isOverlayOpen || !pagination.hasMore}
+              >
+                Next
+              </Button>
             </Tooltip>
             {!isListView && (
               <>
