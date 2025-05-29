@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, memo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, memo, useEffect, useDeferredValue } from 'react';
 import {
   Paper,
   Typography,
@@ -17,9 +17,6 @@ import {
   List,
   ListItemButton,
   ListItemText,
-  Card,
-  CardMedia,
-  CardContent,
 } from '@mui/material';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
@@ -34,11 +31,7 @@ import Emoji from 'react-emoji-render';
 import { formatDistanceToNow, format, isValid, parseISO } from 'date-fns';
 import TweetContentStyles from './TweetContentStyles';
 import ModalStyles from './ModalStyles';
-import URLParse from 'url-parse';
-import ReactPlayer from 'react-player';
-import { LazyLoadComponent } from 'react-lazy-load-image-component';
-import axios from 'axios';
-import { PlayArrow } from '@mui/icons-material';
+import LinkPreview from './LinkPreview';
 
 const MAX_TWEET_LENGTH = 1000;
 
@@ -191,16 +184,17 @@ const TweetContent = ({
   const [hovered, setHovered] = useState(false);
   const [openOptionsDialog, setOpenOptionsDialog] = useState(false);
   const [openMediaDialog, setOpenMediaDialog] = useState(false);
+  const [openLinkModal, setOpenLinkModal] = useState(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [timestamp, setTimestamp] = useState('');
-  const [linkPreviews, setLinkPreviews] = useState([]);
-  const [playingMedia, setPlayingMedia] = useState(null);
+  const [transformedText, setTransformedText] = useState(tweet.content?.value || '');
+  const deferredContent = useDeferredValue(tweet.content?.value || '');
 
   // Notify Board.js of modal state changes
   useEffect(() => {
-    onModalStateChange?.(tweet.tweet_id, openOptionsDialog || openMediaDialog);
+    onModalStateChange?.(tweet.tweet_id, openOptionsDialog || openMediaDialog || !!openLinkModal);
     return () => onModalStateChange?.(tweet.tweet_id, false);
-  }, [openOptionsDialog, openMediaDialog, tweet.tweet_id, onModalStateChange]);
+  }, [openOptionsDialog, openMediaDialog, openLinkModal, tweet.tweet_id, onModalStateChange]);
 
   // Timestamp update logic
   useEffect(() => {
@@ -250,7 +244,6 @@ const TweetContent = ({
   const resolvedParentTweetText = tweet.parent_tweet_id
     ? parentTweetText || getParentTweetText?.(tweet.parent_tweet_id) || 'Parent tweet not found'
     : null;
-  // Excerpt first 10 words of parent tweet for quote display
   const parentExcerpt = resolvedParentTweetText
     ? resolvedParentTweetText.split(/\s+/).slice(0, 10).join(' ') + '...'
     : null;
@@ -263,155 +256,21 @@ const TweetContent = ({
     }
   }, [tweet.stats?.like_count]);
 
-  useEffect(() => {
-    const fetchLinkPreviews = async () => {
-      const urlRegex = /(https?:\/\/[^\s]+)/g;
-      const urls = tweet.content?.value.match(urlRegex) || [];
-      const previews = [];
-
-      for (const url of urls) {
-        try {
-          let previewData = {};
-          if (url.includes('youtube.com') || url.includes('youtu.be')) {
-            const videoId = extractYouTubeId(url);
-            const response = await axios.get(
-              `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`
-            );
-            previewData = {
-              url,
-              type: 'youtube',
-              title: response.data.title,
-              description: response.data.author_name,
-              thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-              embedUrl: `https://www.youtube.com/embed/${videoId}`,
-            };
-          } else if (url.includes('spotify.com')) {
-            const response = await axios.get(
-              `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`
-            );
-            previewData = {
-              url,
-              type: 'spotify',
-              title: response.data.title,
-              description: response.data.provider_name,
-              thumbnail: response.data.thumbnail_url,
-              embedUrl: response.data.html.match(/src="([^"]+)"/)?.[1],
-            };
-          } else if (url.includes('soundcloud.com')) {
-            const response = await axios.get(
-              `https://soundcloud.com/oembed?url=${encodeURIComponent(url)}&format=json`
-            );
-            previewData = {
-              url,
-              type: 'soundcloud',
-              title: response.data.title,
-              description: response.data.author_name,
-              thumbnail: response.data.thumbnail_url,
-              embedUrl: response.data.html.match(/src="([^"]+)"/)?.[1],
-            };
-          } else {
-            // Generic link preview using Open Graph
-            const response = await axios.get(
-              `https://api.microlink.io?url=${encodeURIComponent(url)}`
-            );
-            previewData = {
-              url,
-              type: 'generic',
-              title: response.data.data.title,
-              description: response.data.data.description,
-              thumbnail: response.data.data.image?.url,
-            };
-          }
-          previews.push(previewData);
-        } catch (error) {
-          console.error(`Failed to fetch preview for ${url}:`, error);
-        }
-      }
-      setLinkPreviews(previews);
-    };
-
-    if (tweet.content?.value) {
-      fetchLinkPreviews();
-    }
-  }, [tweet.content?.value]);
-
-  const extractYouTubeId = (url) => {
-    const parsed = new URLParse(url);
-    if (parsed.hostname.includes('youtu.be')) {
-      return parsed.pathname.slice(1);
-    }
-    return parsed.query.split('v=')[1]?.split('&')[0];
-  };
-
-  const renderLinkPreview = useCallback(
-    (preview) => (
-      <Card sx={TweetContentStyles.linkPreviewCard} key={preview.url}>
-        {preview.thumbnail && (
-          <CardMedia
-            component="img"
-            image={preview.thumbnail}
-            alt={preview.title}
-            sx={TweetContentStyles.linkPreviewImage}
-          />
-        )}
-        <CardContent sx={TweetContentStyles.linkPreviewContent}>
-          <Typography variant="subtitle2" sx={TweetContentStyles.linkPreviewTitle}>
-            <Link href={preview.url} target="_blank" rel="noopener">
-              {preview.title || preview.url}
-            </Link>
-          </Typography>
-          {preview.description && (
-            <Typography variant="caption" sx={TweetContentStyles.linkPreviewDescription}>
-              {preview.description}
-            </Typography>
-          )}
-          {preview.embedUrl && (
-            <IconButton
-              onClick={() => setPlayingMedia(playingMedia === preview.url ? null : preview.url)}
-              sx={TweetContentStyles.linkPreviewPlayButton}
-              aria-label={`Play ${preview.type} content`}
-            >
-              <PlayArrow />
-            </IconButton>
-          )}
-        </CardContent>
-        {playingMedia === preview.url && preview.embedUrl && (
-          <Box sx={TweetContentStyles.linkPreviewPlayer}>
-            <LazyLoadComponent>
-              <ReactPlayer
-                url={preview.embedUrl}
-                width="100%"
-                height="200px"
-                controls
-                playing
-                config={{
-                  youtube: { playerVars: { modestbranding: 1 } },
-                  soundcloud: { options: { visual: true } },
-                }}
-              />
-            </LazyLoadComponent>
-          </Box>
-        )}
-      </Card>
-    ),
-    [playingMedia]
-  );
-
   const handleMouseEnter = useCallback(() => {
-    if (openOptionsDialog || openMediaDialog) return; // Prevent hover when dialogs are open
+    if (openOptionsDialog || openMediaDialog || openLinkModal) return;
     setHovered(true);
     if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
       onReplyHover(tweet.tweet_id);
     }
-  }, [onReplyHover, tweet.tweet_id, tweet.parent_tweet_id, tweet.child_tweet_ids, openOptionsDialog, openMediaDialog]);
+  }, [onReplyHover, tweet.tweet_id, tweet.parent_tweet_id, tweet.child_tweet_ids, openOptionsDialog, openMediaDialog, openLinkModal]);
 
   const handleMouseLeave = useCallback(() => {
-    if (openOptionsDialog || openMediaDialog) return; // Prevent hover state change when dialogs are open
+    if (openOptionsDialog || openMediaDialog || openLinkModal) return;
     setHovered(false);
     if ((tweet.parent_tweet_id || tweet.child_tweet_ids?.length > 0) && onReplyHover) {
       onReplyHover(null);
     }
-  }, [onReplyHover, tweet.parent_tweet_id, tweet.child_tweet_ids, openOptionsDialog, openMediaDialog]);
+  }, [onReplyHover, tweet.parent_tweet_id, tweet.child_tweet_ids, openOptionsDialog, openMediaDialog, openLinkModal]);
 
   const handleOpenOptionsDialog = useCallback(() => {
     setOpenOptionsDialog(true);
@@ -427,6 +286,14 @@ const TweetContent = ({
 
   const handleCloseMediaDialog = useCallback(() => {
     setOpenMediaDialog(false);
+  }, []);
+
+  const handleOpenLinkModal = useCallback((url, type) => {
+    setOpenLinkModal({ url: url.url, type });
+  }, []);
+
+  const handleCloseLinkModal = useCallback(() => {
+    setOpenLinkModal(null);
   }, []);
 
   const handleEdit = useCallback(() => {
@@ -449,7 +316,7 @@ const TweetContent = ({
   }, []);
 
   const { previewText, remainderText } = useMemo(() => {
-    const text = tweet.content?.value || '';
+    const text = transformedText || '';
     const PREVIEW_LEN = 200;
     if (text.length <= PREVIEW_LEN) {
       return { previewText: text, remainderText: '' };
@@ -460,19 +327,19 @@ const TweetContent = ({
       previewText: cutoff.slice(0, lastSpace),
       remainderText: text.slice(lastSpace),
     };
-  }, [tweet.content?.value]);
+  }, [transformedText]);
 
   const fullDate = useMemo(() => {
     if (!tweet.created_at) return '';
     const createdAt = parseISO(tweet.created_at);
-    return isValid(createdAt) ? format(createdAt, 'PPPPpp') : ''; // e.g., "Monday, May 26, 2025 at 8:04 PM"
+    return isValid(createdAt) ? format(createdAt, 'PPPPpp') : '';
   }, [tweet.created_at]);
 
   const renderImages = useMemo(() => {
     const imageFiles = tweet.content?.metadata?.files?.filter((f) => f.contentType?.startsWith('image')) || [];
     if (!imageFiles.length) return null;
     return (
-      <Box sx={{ ...TweetContentStyles.imageContainer(!!tweet.content?.value), display: 'flex', justifyContent: 'center' }} role="region" aria-label="Images">
+      <Box sx={{ ...TweetContentStyles.imageContainer(!!transformedText), display: 'flex', justifyContent: 'center' }} role="region" aria-label="Images">
         <Grid container spacing={1} sx={{ maxWidth: '100%' }}>
           {imageFiles.slice(0, 4).map((file, index) => (
             <Grid
@@ -514,7 +381,7 @@ const TweetContent = ({
     if (!videoFiles.length) return null;
     return (
       <Box
-        sx={{ ...TweetContentStyles.videoContainer(!!tweet.content?.value || renderImages), display: 'flex', justifyContent: 'center' }}
+        sx={{ ...TweetContentStyles.videoContainer(!!transformedText || renderImages), display: 'flex', justifyContent: 'center' }}
         role="region"
         aria-label="Videos"
       >
@@ -548,7 +415,7 @@ const TweetContent = ({
     return (
       <Box
         sx={{
-          ...TweetContentStyles.audioContainer(!!tweet.content?.value || renderImages || renderVideos),
+          ...TweetContentStyles.audioContainer(!!transformedText || renderImages || renderVideos),
           display: 'flex',
           justifyContent: 'center',
         }}
@@ -576,7 +443,7 @@ const TweetContent = ({
     ) || [];
     if (!otherFiles.length) return null;
     return (
-      <Box sx={{ ...TweetContentStyles.otherFilesContainer(!!tweet.content?.value), maxWidth: '100%' }} role="region" aria-label="Files">
+      <Box sx={{ ...TweetContentStyles.otherFilesContainer(!!transformedText), maxWidth: '100%' }} role="region" aria-label="Files">
         {otherFiles.slice(0, 2).map((file, idx) => (
           <FileItem file={file} index={idx} key={file.fileKey || `other-${idx}`} />
         ))}
@@ -591,16 +458,15 @@ const TweetContent = ({
     );
   }, [tweet.content?.metadata?.files, handleOpenMediaDialog]);
 
-
   const renderContent = useMemo(() => {
-    const hasText = !!tweet.content?.value;
+    const hasText = !!transformedText;
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
         {hasText && (
           <Box>
             <Typography
               sx={TweetContentStyles.contentText(
-                !!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles || linkPreviews.length
+                !!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles
               )}
             >
               <Emoji text={previewText + (!isExpanded && remainderText ? '...' : '')} />
@@ -609,7 +475,7 @@ const TweetContent = ({
               <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                 <Typography
                   sx={TweetContentStyles.contentText(
-                    !!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles || linkPreviews.length
+                    !!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles
                   )}
                 >
                   <Emoji text={remainderText} />
@@ -629,10 +495,15 @@ const TweetContent = ({
         {renderVideos}
         {renderAudio}
         {renderOtherFiles}
-        {linkPreviews.map(renderLinkPreview)}
+        <LinkPreview
+          content={deferredContent}
+          onTextTransform={setTransformedText}
+          onPlayClick={handleOpenLinkModal}
+        />
       </motion.div>
     );
   }, [
+    transformedText,
     previewText,
     remainderText,
     isExpanded,
@@ -640,46 +511,10 @@ const TweetContent = ({
     renderVideos,
     renderAudio,
     renderOtherFiles,
-    linkPreviews,
     handleToggleExpand,
-    renderLinkPreview,
+    deferredContent,
+    handleOpenLinkModal,
   ]);
-  // const renderContent = useMemo(() => {
-  //   const hasText = !!tweet.content?.value;
-  //   return (
-  //     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-  //       {hasText && (
-  //         <Box>
-  //           <Typography
-  //             sx={TweetContentStyles.contentText(!!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles)}
-  //           >
-  //             <Emoji text={previewText + (!isExpanded && remainderText ? '...' : '')} />
-  //           </Typography>
-  //           {remainderText && (
-  //             <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-  //               <Typography
-  //                 sx={TweetContentStyles.contentText(!!renderImages || !!renderVideos || !!renderAudio || !!renderOtherFiles)}
-  //               >
-  //                 <Emoji text={remainderText} />
-  //               </Typography>
-  //             </Collapse>
-  //           )}
-  //           {remainderText && (
-  //             <ViewAllButton
-  //               label={isExpanded ? 'Show less' : 'Read more'}
-  //               onClick={handleToggleExpand}
-  //               sx={TweetContentStyles.readMoreButton}
-  //             />
-  //           )}
-  //         </Box>
-  //       )}
-  //       {renderImages}
-  //       {renderVideos}
-  //       {renderAudio}
-  //       {renderOtherFiles}
-  //     </motion.div>
-  //   );
-  // }, [previewText, remainderText, isExpanded, renderImages, renderVideos, renderAudio, renderOtherFiles, handleToggleExpand]);
 
   const mediaDialogContent = useMemo(() => {
     const files = tweet.content?.metadata?.files || [];
@@ -762,6 +597,58 @@ const TweetContent = ({
     </DialogContent>
   ), [handleEdit, handlePin, handleDelete, tweet.is_pinned]);
 
+  const linkModalContent = useMemo(() => {
+    if (!openLinkModal) return null;
+    return (
+      <Dialog
+        open={!!openLinkModal}
+        onClose={handleCloseLinkModal}
+        maxWidth="sm"
+        fullWidth
+        TransitionComponent={Fade}
+        transitionDuration={500}
+        aria-labelledby="link-modal-title"
+        aria-describedby="link-modal-description"
+        PaperProps={{
+          sx: {
+            ...ModalStyles.optionsDialogContainer,
+            zIndex: 110,
+          },
+          onClick: (e) => e.stopPropagation(),
+          onMouseDown: (e) => e.stopPropagation(),
+          onTouchStart: (e) => e.stopPropagation(),
+        }}
+      >
+        <DialogTitle id="link-modal-title" sx={ModalStyles.optionsDialogTitle}>
+          View Content
+        </DialogTitle>
+        <DialogContent sx={ModalStyles.optionsDialogContent}>
+          <Typography id="link-modal-description" variant="body1" gutterBottom>
+            This content cannot be embedded directly. Visit the link below to view it:
+          </Typography>
+          <Link
+            href={openLinkModal.url}
+            target="_blank"
+            rel="noopener"
+            sx={{ wordBreak: 'break-all' }}
+            aria-label={`Open ${openLinkModal.type} content in a new tab`}
+          >
+            {openLinkModal.url}
+          </Link>
+        </DialogContent>
+        <DialogActions sx={ModalStyles.dialogActions}>
+          <IconButton
+            onClick={handleCloseLinkModal}
+            sx={ModalStyles.dialogCloseButton}
+            aria-label="Close link modal"
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogActions>
+      </Dialog>
+    );
+  }, [openLinkModal, handleCloseLinkModal]);
+
   if (error) {
     return (
       <Paper sx={TweetContentStyles.tweetCard(false, isListView)} role="article">
@@ -803,7 +690,7 @@ const TweetContent = ({
         sx={{
           ...TweetContentStyles.tweetCard(tweet.is_pinned, isListView),
           ...TweetContentStyles.tweetHighlight(hovered || isRelated || isParentHighlighted),
-          pointerEvents: openOptionsDialog || openMediaDialog ? 'none' : 'auto', // Disable interactions when dialogs are open
+          pointerEvents: openOptionsDialog || openMediaDialog || openLinkModal ? 'none' : 'auto',
         }}
         role="article"
         aria-labelledby={`tweet-title-${tweet.tweet_id}`}
@@ -869,7 +756,7 @@ const TweetContent = ({
                 onClick={() => onLike(tweet.tweet_id, isLiked)}
                 aria-label={isLiked ? 'Unlike tweet' : 'Like tweet'}
                 sx={TweetContentStyles.likeButton}
-                disabled={openOptionsDialog || openMediaDialog} // Disable when dialogs are open
+                disabled={openOptionsDialog || openMediaDialog || openLinkModal}
               >
                 <ThumbUpIcon sx={TweetContentStyles.likeIcon(isLiked)} />
               </IconButton>
@@ -886,7 +773,7 @@ const TweetContent = ({
                 onClick={() => onReply(tweet)}
                 aria-label="Reply to tweet"
                 sx={TweetContentStyles.replyButton}
-                disabled={openOptionsDialog || openMediaDialog} // Disable when dialogs are open
+                disabled={openOptionsDialog || openMediaDialog || openLinkModal}
               >
                 <ChatBubbleOutlineIcon sx={TweetContentStyles.replyIcon} />
               </IconButton>
@@ -908,7 +795,7 @@ const TweetContent = ({
                 className="tweet-menu"
                 aria-label="Tweet options"
                 sx={TweetContentStyles.menuButton}
-                disabled={openOptionsDialog || openMediaDialog} // Disable when dialogs are open
+                disabled={openOptionsDialog || openMediaDialog || openLinkModal}
               >
                 <MoreVertIcon sx={TweetContentStyles.menuIcon} />
               </IconButton>
@@ -927,12 +814,12 @@ const TweetContent = ({
         transitionDuration={500}
         aria-labelledby="media-dialog-title"
         aria-describedby="media-dialog-description"
-        PaperProps={{ 
-          sx: { 
-            ...ModalStyles.mediaDialogContainer, 
-            zIndex: 110, // Align with Z_INDEX.MODAL from Board.js
+        PaperProps={{
+          sx: {
+            ...ModalStyles.mediaDialogContainer,
+            zIndex: 110,
           },
-          onClick: (e) => e.stopPropagation(), // Prevent clicks from reaching the board
+          onClick: (e) => e.stopPropagation(),
           onMouseDown: (e) => e.stopPropagation(),
           onTouchStart: (e) => e.stopPropagation(),
         }}
@@ -966,12 +853,12 @@ const TweetContent = ({
         transitionDuration={500}
         aria-labelledby="options-dialog-title"
         aria-describedby="options-dialog-description"
-        PaperProps={{ 
-          sx: { 
-            ...ModalStyles.optionsDialogContainer, 
-            zIndex: 110, // Align with Z_INDEX.MODAL from Board.js
+        PaperProps={{
+          sx: {
+            ...ModalStyles.optionsDialogContainer,
+            zIndex: 110,
           },
-          onClick: (e) => e.stopPropagation(), // Prevent clicks from reaching the board
+          onClick: (e) => e.stopPropagation(),
           onMouseDown: (e) => e.stopPropagation(),
           onTouchStart: (e) => e.stopPropagation(),
         }}
@@ -995,6 +882,8 @@ const TweetContent = ({
           </IconButton>
         </DialogActions>
       </Dialog>
+
+      {linkModalContent}
     </motion.div>
   );
 };
