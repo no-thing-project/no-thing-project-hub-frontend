@@ -31,7 +31,7 @@ const AppContent = () => {
   const { showNotification } = useNotification();
 
   useEffect(() => {
-    if (!isAuthenticated && !["/login", "/reset-password"].includes(window.location.pathname) && !loading) {
+    if (!isAuthenticated && !["/reset-password"].includes(window.location.pathname) && !loading) {
       navigate("/login", { replace: true });
     }
   }, [isAuthenticated, loading, navigate, showNotification]);
