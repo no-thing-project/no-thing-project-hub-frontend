@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { HashRouter as Router, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { ThemeProvider } from "@mui/material";
 import theme from "./Theme";
 import LoadingSpinner from "./components/Layout/LoadingSpinner";
@@ -32,7 +32,6 @@ const AppContent = () => {
 
   useEffect(() => {
     if (!isAuthenticated && !["/login", "/reset-password"].includes(window.location.pathname) && !loading) {
-      showNotification("Please log in to continue.", "error");
       navigate("/login", { replace: true });
     }
   }, [isAuthenticated, loading, navigate, showNotification]);
