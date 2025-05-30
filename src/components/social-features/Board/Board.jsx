@@ -250,7 +250,7 @@ const Board = ({
     });
 
     // Handle new tweet
-    socket.on("tweetAdded", (newTweet) => {
+    socket.on("newTweet", (newTweet) => {
       newTweet.timestamp = newTweet.timestamp || new Date().toISOString();
       setTweets((prev) => {
         if (prev.some((t) => t.tweet_id === newTweet.tweet_id)) {
@@ -276,7 +276,7 @@ const Board = ({
     });
 
     // Handle tweet like
-    socket.on("tweetLiked", ({ tweet_id, like_data }) => {
+    socket.on("likeTweet", ({ tweet_id, like_data }) => {
       setTweets((prev) =>
         prev.map((tweet) =>
           tweet.tweet_id === tweet_id
@@ -292,7 +292,7 @@ const Board = ({
     });
 
     // Handle tweet dislike
-    socket.on("tweetDisliked", ({ tweet_id, user_id }) => {
+    socket.on("dislikeTweet", ({ tweet_id, user_id }) => {
       setTweets((prev) =>
         prev.map((tweet) =>
           tweet.tweet_id === tweet_id
@@ -319,7 +319,7 @@ const Board = ({
     });
 
     // Handle tweet move
-    socket.on("tweetMoved", ({ tweet_id, new_board_id }) => {
+    socket.on("moveTweet", ({ tweet_id, new_board_id }) => {
       if (new_board_id !== boardId) {
         setTweets((prev) => prev.filter((t) => t.tweet_id !== tweet_id));
       } else {
@@ -336,7 +336,7 @@ const Board = ({
     });
 
     // Handle tweet pin
-    socket.on("tweetPinned", ({ tweet_id }) => {
+    socket.on("pinTweet", ({ tweet_id }) => {
       setTweets((prev) =>
         prev.map((tweet) =>
           tweet.tweet_id === tweet_id
@@ -347,7 +347,7 @@ const Board = ({
     });
 
     // Handle tweet unpin
-    socket.on("tweetUnpinned", ({ tweet_id }) => {
+    socket.on("unpinTweet", ({ tweet_id }) => {
       setTweets((prev) =>
         prev.map((tweet) =>
           tweet.tweet_id === tweet_id
@@ -358,7 +358,7 @@ const Board = ({
     });
 
     // Handle tweet reminder set
-    socket.on("tweetReminderSet", ({ tweet_id, reminder }) => {
+    socket.on("setReminder", ({ tweet_id, reminder }) => {
       setTweets((prev) =>
         prev.map((tweet) =>
           tweet.tweet_id === tweet_id
@@ -388,7 +388,7 @@ const Board = ({
     });
 
     // Handle board updates
-    socket.on("boardUpdated", (updatedBoard) => {
+    socket.on("shareTweet", (updatedBoard) => {
       if (updatedBoard.board_id === boardId) {
         showNotification("Board updated", "success");
       }
@@ -1193,12 +1193,11 @@ const Board = ({
             </IconButton>
           </Tooltip>
         </Box>
-
         <Box
           sx={{
             position: "absolute",
-            top: 16,
-            left: 16,
+            top: 4,
+            right: 12,
             zIndex: 100,
             display: "flex",
             alignItems: "center",
