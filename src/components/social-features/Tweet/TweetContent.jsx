@@ -521,7 +521,7 @@ const TweetContent = ({
     return (
       <DialogContent sx={ModalStyles.mediaDialogContent}>
         {files.length === 0 && (
-          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+          <Typography variant="body2" sx={{ color: 'primary.main', fontStyle: 'italic',  fontSize: { xs: '0.7rem', sm: '0.8rem' }, m: 0 }}>
             No media available
           </Typography>
         )}
@@ -715,7 +715,7 @@ const TweetContent = ({
               <Typography variant="caption" sx={TweetContentStyles.replyToCaption}>
                 Replying to:
               </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic', m: 0 }}>
+              <Typography variant="body2" sx={{ color: 'primary.main', fontStyle: 'italic',  fontSize: { xs: '0.7rem', sm: '0.8rem' }, m: 0 }}>
                 {parentExcerpt}
               </Typography>
             </Box>
@@ -737,7 +737,7 @@ const TweetContent = ({
                 variant="caption"
                 component="time"
                 dateTime={tweet.created_at}
-                sx={{ color: 'text.secondary' }}
+                sx={TweetContentStyles.tweetAuthorTypography}
                 aria-label={`Posted on ${fullDate}`}
               >
                 {timestamp}

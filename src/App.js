@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect } from "react";
-import { HashRouter as Router, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { ThemeProvider } from "@mui/material";
 import theme from "./Theme";
 import LoadingSpinner from "./components/Layout/LoadingSpinner";
@@ -52,7 +52,10 @@ const AppContent = () => {
   return (
     <Suspense fallback={<LoadingSpinner />}>
       <Routes>
-        <Route path="/reset-password" element={<ResetPasswordForm theme={theme}  onLogin={handleLogin}  />} />
+        <Route
+          path="/reset-password"
+          element={isAuthenticated ? <Navigate to="/home" replace /> : <ResetPasswordForm theme={theme}  onLogin={handleLogin}/>}
+        />
         <Route
           path="/login"
           element={isAuthenticated ? <Navigate to="/home" replace /> : <LoginForm theme={theme}  onLogin={handleLogin}/>}
@@ -98,7 +101,7 @@ const AppContent = () => {
           element={<PrivateRoute isAuthenticated={isAuthenticated} element={<MessagesPage />} />}
         /> */}
         <Route path="/not-found" element={<NotFoundPage />} />
-        <Route path="*" element={<Navigate to="/not-found" replace />} />
+        {/* <Route path="*" element={<Navigate to="/not-found" replace />} /> */}
       </Routes>
     </Suspense>
   );
