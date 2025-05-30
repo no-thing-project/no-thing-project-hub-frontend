@@ -1,199 +1,116 @@
-//src/App.js (HUB FE)
-import React, { useState, useEffect, useCallback } from "react";
-import { HashRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import LoginForm from "./components/Login/LoginForm";
-import Board from "./components/Board/Board";
-import ResetPasswordForm from "./components/ResetPassword/ResetPasswordForm";
-import ProfilePage from "./components/Profile/ProfilePage";
-import "./index.css";
-import { createTheme, ThemeProvider } from "@mui/material";
-import axios from "axios";
-import config from "./config";
+import React, { lazy, Suspense, useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { ThemeProvider } from "@mui/material";
+import theme from "./Theme";
+import LoadingSpinner from "./components/Layout/LoadingSpinner";
+import useAuth from "./hooks/useAuth";
+import { NotificationProvider, useNotification } from "./context/NotificationContext";
 
-// Тема Material-UI
-const theme = createTheme({
-  palette: {
-    mode: "light",
-    primary: { main: "#212529" },
-    secondary: { main: "#343A40" },
-    background: { default: "#F0F2F5" },
-  },
-  typography: { fontFamily: "Roboto, sans-serif" },
-});
+// Lazy load pages
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const HomePage = lazy(() => import("./pages/HomePage"));
+const BoardsPage = lazy(() => import("./pages/BoardsPage"));
+const GatesPage = lazy(() => import("./pages/GatesPage"));
+const GatePage = lazy(() => import("./pages/GatePage"));
+const ClassesPage = lazy(() => import("./pages/ClassesPage"));
+const ClassPage = lazy(() => import("./pages/ClassPage"));
+const BoardPage = lazy(() => import("./pages/BoardPage"));
+const FriendsPage = lazy(() => import("./pages/FriendsPage"));
+// const MessagesPage = lazy(() => import("./pages/MessagesPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
+const LoginForm = lazy(() => import("./components/Forms/LoginForm/LoginForm"));
+const ResetPasswordForm = lazy(() => import("./components/Forms/ResetPasswordForm/ResetPasswordForm"));
 
-const decodeToken = (token) => {
-  try {
-    const base64Url = token.split(".")[1];
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-    return JSON.parse(jsonPayload);
-  } catch (e) {
-    console.error("Invalid token:", e);
-    return null;
-  }
+const PrivateRoute = ({ element, isAuthenticated }) => {
+  return isAuthenticated ? element : <Navigate to="/login" replace />;
 };
 
-// Компонент для захищених маршрутів
-const PrivateRoute = ({ element, isAuthenticated, redirectTo = "/login" }) =>
-  isAuthenticated ? element : <Navigate to={redirectTo} replace />;
+const AppContent = () => {
+  const navigate = useNavigate();
+  const { isAuthenticated, handleLogin, handleLogout, loading, error } = useAuth(navigate);
+  const { showNotification } = useNotification();
+
+  useEffect(() => {
+    if (!isAuthenticated && !["/login", "/reset-password"].includes(window.location.pathname) && !loading) {
+      showNotification("Please log in to continue.", "error");
+      navigate("/login", { replace: true });
+    }
+  }, [isAuthenticated, loading, navigate, showNotification]);
+
+  useEffect(() => {
+    if (error) {
+      showNotification(`Authentication Error: ${error}`, "error");
+      setTimeout(() => {
+        handleLogout("Please log in again.");
+      }, 2000);
+    }
+  }, [error, showNotification, handleLogout]);
+
+  if (loading) return <LoadingSpinner />;
+  if (error) return null; 
+
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <Routes>
+        <Route path="/reset-password" element={<ResetPasswordForm theme={theme}  onLogin={handleLogin}  />} />
+        <Route
+          path="/login"
+          element={isAuthenticated ? <Navigate to="/home" replace /> : <LoginForm theme={theme}  onLogin={handleLogin}/>}
+        />
+        <Route
+          path="/home"
+          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<HomePage />} />}
+        />
+        <Route
+          path="/profile/:anonymous_id"
+          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<ProfilePage />} />}
+        />
+        <Route
+          path="/boards"
+          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<BoardsPage />} />}
+        />
+        <Route
+          path="/board/:board_id"
+          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<BoardPage />} />}
+        />
+        <Route
+          path="/gates"
+          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<GatesPage />} />}
+        />
+        <Route
+          path="/gate/:gate_id"
+          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<GatePage />} />}
+        />
+        <Route
+          path="/classes"
+          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<ClassesPage />} />}
+        />
+        <Route
+          path="/class/:class_id"
+          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<ClassPage />} />}
+        />
+        <Route
+          path="/friends"
+          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<FriendsPage />} />}
+        />
+        {/* <Route
+          path="/messages"
+          element={<PrivateRoute isAuthenticated={isAuthenticated} element={<MessagesPage />} />}
+        /> */}
+        <Route path="/not-found" element={<NotFoundPage />} />
+        <Route path="*" element={<Navigate to="/not-found" replace />} />
+      </Routes>
+    </Suspense>
+  );
+};
 
 function App() {
-  const [token, setToken] = useState(() => localStorage.getItem("token") || null);
-  const [authData, setAuthData] = useState(() => {
-    const storedAuthData = localStorage.getItem("authData");
-    return storedAuthData ? JSON.parse(storedAuthData) : null;
-  });
-  const [boards, setBoards] = useState([]);
-
-  const handleLogout = useCallback((message) => {
-    setToken(null);
-    setAuthData(null);
-    setBoards([]);
-    localStorage.removeItem("token");
-    localStorage.removeItem("authData");
-    if (message) console.log(message);
-  }, []);
-
-  // Налаштування Axios із перехопленням помилок
-  useEffect(() => {
-    const axiosInterceptor = axios.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        if (error.response?.status === 401) {
-          handleLogout("Your session has expired. Please log in again.");
-        }
-        return Promise.reject(error);
-      }
-    );
-    return () => axios.interceptors.response.eject(axiosInterceptor);
-  }, [handleLogout]); // Додано handleLogout до залежностей
-
-  // Обробка логіну
-  const handleLogin = useCallback((token, authDataFromResponse) => {
-    console.log("handleLogin called with:", { token, authDataFromResponse });
-    setToken(token);
-    localStorage.setItem("token", token);
-
-    let normalizedAuthData;
-    if (authDataFromResponse) {
-      normalizedAuthData = {
-        user: {
-          id: authDataFromResponse.user_id,
-          email: authDataFromResponse.email,
-          username: authDataFromResponse.username,
-        },
-        ...authDataFromResponse,
-      };
-      console.log("Setting authData from response:", normalizedAuthData);
-    } else {
-      normalizedAuthData = decodeToken(token);
-      if (!normalizedAuthData) {
-        handleLogout("Invalid token detected.");
-        return;
-      }
-      console.log("Decoded token payload:", normalizedAuthData);
-    }
-
-    setAuthData(normalizedAuthData);
-    localStorage.setItem("authData", JSON.stringify(normalizedAuthData));
-  }, [handleLogout]);
-
-  // Синхронізація authData з токеном
-  useEffect(() => {
-    if (token && !authData) {
-      const payload = decodeToken(token);
-      if (payload) {
-        setAuthData(payload);
-        localStorage.setItem("authData", JSON.stringify(payload));
-      } else {
-        handleLogout("Invalid token detected.");
-      }
-    } else if (!token && authData) {
-      handleLogout("No token found, clearing auth data.");
-    }
-  }, [token, authData, handleLogout]); // Додано всі залежності
-
-  // Завантаження бордів
-  const fetchBoards = useCallback(async () => {
-    if (!token) {
-      setBoards([]);
-      return;
-    }
-    try {
-      const res = await axios.get(`${config.REACT_APP_HUB_API_URL}/boards`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setBoards(res.data.content || []);
-    } catch (err) {
-      console.error("Error fetching boards:", err);
-      if (err.response?.status !== 401) {
-        // 401 обробляється в interceptor
-        console.error("Failed to fetch boards");
-      }
-    }
-  }, [token]);
-
-  useEffect(() => {
-    fetchBoards();
-  }, [fetchBoards]);
-
-  const isAuthenticated = !!token && !!authData;
-
   return (
     <ThemeProvider theme={theme}>
       <Router>
-        <Routes>
-          <Route
-            path="/reset-password"
-            element={<ResetPasswordForm theme={theme} onLogin={handleLogin} />}
-          />
-          <Route
-            path="/login"
-            element={
-              isAuthenticated ? (
-                <Navigate to={`/profile/${authData?.user?.id}`} replace />
-              ) : (
-                <LoginForm theme={theme} onLogin={handleLogin} />
-              )
-            }
-          />
-          <Route
-            path="/profile/:userId"
-            element={
-              <PrivateRoute
-                isAuthenticated={isAuthenticated}
-                element={
-                  <ProfilePage
-                    currentUser={authData}
-                    boards={boards}
-                    onLogout={handleLogout}
-                    token={token}
-                  />
-                }
-              />
-            }
-          />
-          <Route
-            path="/board/:id"
-            element={
-              <PrivateRoute
-                isAuthenticated={isAuthenticated}
-                element={<Board token={token} currentUser={authData} onLogout={handleLogout} />}
-              />
-            }
-          />
-          <Route
-            path="*"
-            element={
-              <Navigate to={isAuthenticated ? `/profile/${authData?.user?.id}` : "/login"} replace />
-            }
-          />
-        </Routes>
+        <NotificationProvider>
+          <AppContent />
+        </NotificationProvider>
       </Router>
     </ThemeProvider>
   );
