@@ -16,7 +16,7 @@ const AppLayout = ({ currentUser, onLogout, token, children, headerTitle }) => {
         overflowX: "hidden",
       }}
     >
-      <LeftDrawer onLogout={onLogout} />
+      <LeftDrawer />
       <Box
         sx={{
           flexGrow: 1,
@@ -28,7 +28,7 @@ const AppLayout = ({ currentUser, onLogout, token, children, headerTitle }) => {
           boxSizing: "border-box",
         }}
       >
-        <Header currentUser={currentUser} token={token} title={headerTitle} />
+        <Header currentUser={currentUser} token={token} title={headerTitle} onLogout={onLogout} />
         <Box
           aria-label="Main content"
           sx={{

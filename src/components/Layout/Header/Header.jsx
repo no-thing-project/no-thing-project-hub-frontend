@@ -11,7 +11,7 @@ import {
   Menu,
   MenuItem,
 } from "@mui/material";
-import { Add, ArrowBack } from "@mui/icons-material";
+import { Add, ArrowBack, PersonRounded, ExitToAppRounded } from "@mui/icons-material"; // Modified: Added PersonRounded and ExitToAppRounded
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "@mui/material/styles";
 import { useNotification } from "../../../context/NotificationContext";
@@ -89,7 +89,7 @@ const Header = ({ currentUser, token, title, onLogout }) => {
       if (action === "profile") {
         navigate(`/profile/${currentUser.anonymous_id}`);
       } else if (action === "logout") {
-        onLogout();
+        onLogout(); // Modified: Directly call onLogout to match LeftDrawer.js
       }
     },
     [currentUser, navigate, onLogout, handleMenuClose]
@@ -387,12 +387,17 @@ const Header = ({ currentUser, token, title, onLogout }) => {
                   "&:hover": {
                     backgroundColor: alpha(theme.palette.grey[200], 0.3),
                   },
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1, // Modified: Space between icon and text
                 }}
               >
+                {/* Modified: Added PersonRounded icon */}
+                <PersonRounded fontSize={isMobile ? "small" : "medium"} />
                 My Profile
               </MenuItem>
               <MenuItem
-                onClick={() => handleMenuAction(onLogout)}
+                onClick={() => handleMenuAction("logout")} // Modified: Direct logout action
                 sx={{
                   ...baseTypographyStyles,
                   fontSize: { xs: "0.9rem", sm: "1rem" },
@@ -400,8 +405,13 @@ const Header = ({ currentUser, token, title, onLogout }) => {
                   "&:hover": {
                     backgroundColor: alpha(theme.palette.grey[200], 0.3),
                   },
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1, // Modified: Space between icon and text
                 }}
               >
+                {/* Modified: Added ExitToAppRounded icon */}
+                <ExitToAppRounded fontSize={isMobile ? "small" : "medium"} />
                 Logout
               </MenuItem>
             </Menu>
