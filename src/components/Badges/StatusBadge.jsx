@@ -44,6 +44,7 @@ const statusStyles = {
   PILLAR: { gradient: "linear-gradient(45deg, #95A5A6, #7F8C8D)" },
   ETHEREAL: { gradient: "linear-gradient(45deg, #7F00FF, #E100FF)" },
   ETERNAL: { gradient: "linear-gradient(45deg, #1D2671, #C33764)" },
+  SOUL: { gradient: "linear-gradient(90deg, #34495E 0%, #7B4397 16%, #38EF7D 33%, #FFD200 50%, #FF512F 67%, #3F5EFB 83%, #F953C6 100%)"},
   CORE: {
     gradient: `linear-gradient(90deg, #34495E 0%, #7B4397 16%, #38EF7D 33%, #FFD200 50%, #FF512F 67%, #3F5EFB 83%, #F953C6 100%)`,
     textShadow: "0 0 6px rgba(255,255,255,0.2), 0 0 12px rgba(255,255,255,0.2)",
