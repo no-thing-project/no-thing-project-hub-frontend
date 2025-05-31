@@ -2,6 +2,9 @@ import React, { useRef, useState, useEffect, useCallback, useMemo, memo } from '
 import PropTypes from 'prop-types';
 import {
   Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   TextField,
   Button,
   Box,
@@ -17,9 +20,6 @@ import {
   Menu,
   MenuItem,
   useMediaQuery,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Link,
 } from '@mui/material';
 import { Mic, Videocam, Stop, Schedule, Pause, Delete, PlayArrow, Close, AttachFile } from '@mui/icons-material';
@@ -49,8 +49,8 @@ const TweetPopup = ({ x, y, onSubmit, onClose, parentTweet, onBoardUpdate }) => 
   const [error, setError] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showSchedule, setShowSchedule] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
   const [menuAnchorEl, setMenuAnchorEl] = useState(null);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
   const [linkModal, setLinkModal] = useState(null);
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -110,7 +110,7 @@ const TweetPopup = ({ x, y, onSubmit, onClose, parentTweet, onBoardUpdate }) => 
 
   const startRecording = useCallback(async (type) => {
     try {
-      const constraints = type === 'voice' ? { audio: true } : { audio: true, video: { width: 1280, height: 720 } };
+      const constraints = type === 'voice' ? { audio: true } : { audio: true, video: { width: 1280, height: 720, facingMode: 'user' } };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: type === 'voice' ? 'audio/webm' : 'video/webm;codecs=vp8,opus',
@@ -367,12 +367,19 @@ const TweetPopup = ({ x, y, onSubmit, onClose, parentTweet, onBoardUpdate }) => 
           aria-label={`Recording ${recordingType} duration`}
         />
         {recordingType === 'video_message' ? (
-          <Box sx={TweetPopupStyles.popupVideoPreviewContainer}>
+          <Box sx={{
+            ...TweetPopupStyles.popupVideoPreviewContainer,
+            overflow: 'hidden'
+          }}>
             <video
               ref={videoPreviewRef}
-              style={TweetPopupStyles.popupLivePreview}
+              style={{
+                ...TweetPopupStyles.popupLivePreview,
+              }}
               muted
               autoPlay
+              playsInline
+              webkitPlaysinline
               aria-label="Live video recording preview"
             />
           </Box>
