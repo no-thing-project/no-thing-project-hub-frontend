@@ -28,7 +28,6 @@ import {
   People,
   Public,
   Lock,
-  Brush,
   Delete,
   Toll,
 } from '@mui/icons-material';
@@ -72,6 +71,42 @@ const BoardPage = memo(() => {
   const [inviteLink, setInviteLink] = useState('');
   const [pointsSpent, setPointsSpent] = useState(0);
   const isMounted = useRef(true);
+
+  // Prevent scrolling and pull-to-refresh
+  useEffect(() => {
+    // Apply styles to html and body
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+    document.body.style.overscrollBehavior = 'none';
+
+    // Prevent scrolling events
+    const preventScroll = (e) => {
+      e.preventDefault();
+    };
+
+    // Add event listeners
+    window.addEventListener('wheel', preventScroll, { passive: false });
+    window.addEventListener('touchmove', preventScroll, { passive: false });
+    window.addEventListener('keydown', (e) => {
+      if (['ArrowUp', 'ArrowDown', 'Space'].includes(e.key)) {
+        e.preventDefault();
+      }
+    });
+
+    return () => {
+      // Cleanup styles
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+      document.body.style.overscrollBehavior = '';
+
+      // Remove event listeners
+      window.removeEventListener('wheel', preventScroll);
+      window.removeEventListener('touchmove', preventScroll);
+      window.removeEventListener('keydown', preventScroll);
+    };
+  }, []);
 
   // Hooks
   const {
@@ -161,7 +196,7 @@ const BoardPage = memo(() => {
     [fetchPointsData, showNotification]
   );
 
-  // Fetch board data only
+  // Fetch board data
   useEffect(() => {
     if (!token || !board_id || !isAuthenticated) return;
 
@@ -270,7 +305,7 @@ const BoardPage = memo(() => {
     } catch (err) {
       showNotification(err.message || 'Failed to update board', 'error');
     }
-  }, [editingBoard, userRole, updateExistingBoard, showNotification, board_id]);
+  }, [editingBoard, userRole, updateExistingBoard, showNotification]);
 
   const handleFavorite = useCallback(async () => {
     if (!boardData) return;
@@ -328,15 +363,14 @@ const BoardPage = memo(() => {
   const handleDelete = useCallback(async () => {
     try {
       await deleteExistingBoard(board_id);
-      showNotification('Board deleted', 'success');
+      showNotification('Board deleted successfully', 'success');
       navigate('/boards');
     } catch (err) {
-      showNotification('Failed to delete board', 'error');
+      showNotification(err.message || 'Failed to delete board', 'error');
     } finally {
       setDeleteDialogOpen(false);
     }
   }, [board_id, deleteExistingBoard, navigate, showNotification]);
-
 
   const handleCopyLink = useCallback(async () => {
     if (!inviteLink) {
@@ -344,10 +378,10 @@ const BoardPage = memo(() => {
       return;
     }
     try {
-      await navigator.clipboard.write(inviteLink);
-      showNotification('Link copied', 'success');
+      await navigator.clipboard.writeText(inviteLink);
+      showNotification('Link copied successfully', 'success');
     } catch (err) {
-      showNotification('Failed to copy link', 'error');
+      showNotification(err.message || 'Failed to copy link', 'error');
     } finally {
       setShareDialogOpen(false);
     }
@@ -359,16 +393,17 @@ const BoardPage = memo(() => {
   const validateBoardData = useCallback(
     (data) => {
       if (!data?.name?.trim()) return 'Board name is required';
-      const s = data.settings || {};
-      if (s.max_tweets < 1 || s.max_tweets > 10000) return 'Max tweets must be 1-10000';
-      if (s.tweet_cost < 0) return 'Tweet cost must be non-negative';
-      if (s.favorite_cost < 0) return 'Favorite cost must be non-negative';
-      if (s.points_to_creator < 0 || s.points_to_creator > 100) return 'Points to creator must be 0-100';
-      if (s.max_members < 1 || s.max_members > 10000) return 'Max members must be 1-10000';
+      const settings = data.settings || {};
+      if (settings.max_tweets < 1 || settings.max_tweets > 10000) return 'Max tweets must be 1-10000';
+      if (settings.tweet_cost < 0) return 'Tweet cost must be non-negative';
+      if (settings.favorite_cost < 0) return 'Favorite cost must be non-negative';
+      if (settings.points_to_creator < 0 || settings.points_to_creator > 100)
+        return 'Points to creator must be 0-100';
+      if (settings.max_members < 1 || settings.max_members > 10000) return 'Max members must be 1-10000';
       if (data.visibility === 'public' && !data.gate_id && !data.class_id && gates?.length > 0) {
         return 'Public boards require a gate or class';
       }
-      return '';
+      return null;
     },
     [gates]
   );
@@ -384,7 +419,7 @@ const BoardPage = memo(() => {
         }}
         aria-label={`Go to child board ${childId.slice(0, 8)}`}
       >
-        Go to Child Board {childId.slice(0, 8)}
+        Child Board {childId.slice(0, 8)}
       </MenuItem>
     ));
   }, [boardData?.child_board_ids, navigate, handleMenuClose]);
@@ -394,7 +429,21 @@ const BoardPage = memo(() => {
   }
 
   return (
-    <Box sx={{ position: 'relative', width: '100%', height: '100vh' }}>
+    <Box
+      sx={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+        touchAction: 'none',
+        overscrollBehavior: 'none',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+      aria-label="Board page"
+    >
       <Box
         sx={{
           position: 'absolute',
@@ -410,9 +459,7 @@ const BoardPage = memo(() => {
       >
         <AnimatePresence>
           {boardLoading ? (
-            <>
-              <Skeleton variant="circular" width={40} height={40} />
-            </>
+            <Skeleton variant="circular" width={40} height={40} />
           ) : (
             <>
               <motion.div variants={buttonVariants} initial="initial" animate="animate" exit="exit">
@@ -518,33 +565,38 @@ const BoardPage = memo(() => {
         }}
       >
         <AnimatePresence>
-            <motion.div
-              key="points"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Tooltip title="Available points">
-                <IconButton size="small" aria-label={`Available points: ${pointsData?.total_points || 0}`}>
-                  <Toll />
-                </IconButton>
-              </Tooltip>
-              <AnimatedPoints points={pointsData?.total_points || 0} />
-              {pointsSpent > 0 && <PointsDeductionAnimation pointsSpent={pointsSpent} />}
-            </motion.div>
+          <motion.div
+            key="points"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Tooltip title="Available points">
+              <IconButton
+                size="small"
+                aria-label={`Available points: ${pointsData?.total_points || 0}`}
+              >
+                <Toll />
+              </IconButton>
+            </Tooltip>
+            <AnimatedPoints points={pointsData?.total_points || 0} />
+            {pointsSpent > 0 && <PointsDeductionAnimation pointsSpent={pointsSpent} />}
+          </motion.div>
         </AnimatePresence>
       </Box>
 
-      <Board
-        boardId={board_id}
-        boardTitle={boardData?.name || ''}
-        token={token}
-        currentUser={authData}
-        userRole={userRole}
-        onLogout={handleLogout}
-        availableBoards={[]}
-      />
+      <Box sx={{ height: '100%', overflow: 'hidden' }}>
+        <Board
+          boardId={board_id}
+          boardTitle={boardData?.name || ''}
+          token={token}
+          currentUser={authData}
+          userRole={userRole}
+          onLogout={handleLogout}
+          availableBoards={[]}
+        />
+      </Box>
 
       {editingBoard && (
         <BoardFormDialog
@@ -586,7 +638,12 @@ const BoardPage = memo(() => {
         onClose={() => setShareDialogOpen(false)}
         maxWidth="sm"
         fullWidth
-        sx={{ '& .MuiDialog-paper': { borderRadius: theme.shape.borderRadiusMedium } }}
+        sx={{
+          '& .MuiDialog-paper': {
+            borderRadius: theme.shape.borderRadiusMedium,
+            overflow: 'auto',
+          },
+        }}
         aria-labelledby="share-dialog-title"
       >
         <DialogTitle id="share-dialog-title">Share Board</DialogTitle>
@@ -631,8 +688,6 @@ const BoardPage = memo(() => {
   );
 });
 
-BoardPage.propTypes = {
-  // No props are expected as this is a top-level page component
-};
+BoardPage.propTypes = {};
 
 export default BoardPage;
