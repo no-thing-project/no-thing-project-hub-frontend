@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Container,
   Typography,
@@ -26,13 +26,13 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const navigate = useNavigate();
   const { showNotification } = useNotification();
 
   useEffect(() => {
     const extractToken = () => {
       try {
-        // Handle hash-based URL (e.g., #/reset-password?token=...)
         const hash = window.location.hash || "";
         const queryString = hash.includes("?") ? hash.split("?")[1] : "";
         const hashParams = new URLSearchParams(queryString);
@@ -63,7 +63,7 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
     extractToken();
   }, [navigate, showNotification]);
 
-  const validateInputs = () => {
+  const validateInputs = useCallback(() => {
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
 
     if (!newPassword) return "New password is required";
@@ -73,46 +73,62 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
     if (newPassword !== confirmPassword) return "Passwords do not match";
     if (!token) return "Reset token is missing";
     return null;
-  };
+  }, [newPassword, confirmPassword, token]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+  const handleSubmit = useCallback(
+    async (e) => {
+      e.preventDefault();
+      setIsSubmitting(true);
+      setIsResettingPassword(true);
 
-    const validationError = validateInputs();
-    if (validationError) {
-      showNotification(validationError, "error");
-      setIsSubmitting(false);
-      return;
-    }
-
-    try {
-      const response = await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/auth/set-password`, {
-        token,
-        newPassword,
-      });
-      const {token: jwtToken, profile } = response.data;
-      if (!jwtToken || !profile) {
-        throw new Error("Invalid response: Missing token or profile");
+      const validationError = validateInputs();
+      if (validationError) {
+        showNotification(validationError, "error");
+        setIsSubmitting(false);
+        setIsResettingPassword(false);
+        return;
       }
-      localStorage.setItem("token", jwtToken);
-      onLogin(jwtToken, profile);
-      showNotification("Password successfully changed! Logging you in...", "success");
-      setTimeout(() => navigate("/home", { replace: true }), 2000);
-    } catch (err) {
-      console.error("Error during reset password:", err.response?.data || err);
-      const errorMessage =
-        err.response?.data?.errors?.[0] ||
-        err.response?.data?.message ||
-        "Network error, please try again";
-      showNotification(errorMessage, "error");
-      setIsSubmitting(false);
-    }
-  };
 
-  const handleBackToLogin = () => navigate("/login", { replace: true });
+      try {
+        const response = await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/auth/set-password`, {
+          token,
+          newPassword,
+        });
+        const { token: jwtToken, profile } = response.data;
+        if (!jwtToken || !profile) {
+          throw new Error("Invalid response: Missing token or profile");
+        }
+        localStorage.setItem("token", jwtToken);
+        onLogin(jwtToken, profile);
+        showNotification("Password successfully changed! Redirecting...", "success");
+        setTimeout(() => navigate("/home", { replace: true }), 2000);
+      } catch (err) {
+        console.error("Error during reset password:", err.response?.data || err);
+        const errorMessage =
+          err.response?.data?.errors?.[0] ||
+          err.response?.data?.message ||
+          "Network error, please try again";
+        showNotification(errorMessage, "error");
+        setIsSubmitting(false);
+        setIsResettingPassword(false);
+      }
+    },
+    [newPassword, confirmPassword, token, navigate, onLogin, showNotification, validateInputs]
+  );
 
-  if (isLoading) {
+  const handleBackToLogin = useCallback(() => navigate("/login", { replace: true }), [navigate]);
+
+  const handleKeyDown = useCallback(
+    (e, callback) => {
+      if (e.key === "Enter" && !isSubmitting) {
+        e.preventDefault();
+        callback();
+      }
+    },
+    [isSubmitting]
+  );
+
+  if (isLoading || isResettingPassword) {
     return (
       <ThemeProvider theme={theme}>
         <Container
@@ -124,7 +140,12 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
             justifyContent: "center",
           }}
         >
-          <CircularProgress aria-label="Loading reset password form" />
+          <Box sx={{ textAlign: "center" }} aria-live="polite" aria-busy="true">
+            <CircularProgress aria-label="Loading" sx={{ mb: 2 }} />
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              {isLoading ? "Loading reset password form…" : "Resetting password…"}
+            </Typography>
+          </Box>
         </Container>
       </ThemeProvider>
     );
@@ -181,11 +202,13 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
               margin="normal"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, () => handleSubmit(e))}
               InputProps={{
                 notched: false,
                 endAdornment: (
                   <InputAdornment position="end">
                     <IconButton
+                      name="password-visibility"
                       onClick={() => setShowNewPassword(!showNewPassword)}
                       edge="end"
                       aria-label={showNewPassword ? "Hide new password" : "Show new password"}
@@ -206,6 +229,7 @@ const ResetPasswordForm = ({ theme, onLogin }) => {
               margin="normal"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, () => handleSubmit(e))}
               InputProps={{
                 notched: false,
                 endAdornment: (

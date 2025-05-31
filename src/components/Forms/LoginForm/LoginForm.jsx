@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Container,
   Typography,
@@ -12,6 +12,7 @@ import {
   Fade,
   InputAdornment,
   IconButton,
+  CircularProgress,
 } from "@mui/material";
 import { Visibility, VisibilityOff } from "@mui/icons-material";
 import axios from "axios";
@@ -26,6 +27,7 @@ const LoginForm = ({ theme, onLogin }) => {
   const [forgotEmail, setForgotEmail] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingCredentials, setIsCheckingCredentials] = useState(false);
   const [openModal, setOpenModal] = useState(false);
   const navigate = useNavigate();
   const { showNotification } = useNotification();
@@ -33,7 +35,7 @@ const LoginForm = ({ theme, onLogin }) => {
 
   const registrationLink = "https://secure.wayforpay.com/donate/NoThingProject";
 
-  const validateInputs = () => {
+  const validateInputs = useCallback(() => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
 
@@ -45,53 +47,60 @@ const LoginForm = ({ theme, onLogin }) => {
       return "Password must be 8+ chars with uppercase, lowercase, and number";
     if (password.length > 128) return "Password cannot exceed 128 characters";
     return null;
-  };
+  }, [email, password]);
 
-  const validateForgotEmail = () => {
+  const validateForgotEmail = useCallback(() => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!forgotEmail) return "Email is required";
     if (!emailRegex.test(forgotEmail)) return "Please enter a valid email address";
     if (forgotEmail.length > 255) return "Email cannot exceed 255 characters";
     return null;
-  };
+  }, [forgotEmail]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+  const handleSubmit = useCallback(
+    async (e) => {
+      e.preventDefault();
+      setIsSubmitting(true);
+      setIsCheckingCredentials(true);
 
-    const validationError = validateInputs();
-    if (validationError) {
-      showNotification(validationError, "error");
-      setIsSubmitting(false);
-      return;
-    }
-
-    try {
-      const res = await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/auth/login`, {
-        email,
-        password,
-      });
-      const { token, profile } = res.data;
-      if (!token || !profile) {
-        throw new Error("Invalid login response: Missing token or profile");
+      const validationError = validateInputs();
+      if (validationError) {
+        showNotification(validationError, "error");
+        setIsSubmitting(false);
+        setIsCheckingCredentials(false);
+        return;
       }
-      localStorage.setItem("token", token);
-      onLogin(token, profile);
-      showNotification("Login successful! Redirecting...", "success");
-    } catch (err) {
-      console.error("Login error:", err.response?.data || err);
-      const errorMessage =
-        err.response?.status === 401
-          ? "Invalid email or password. Please try again."
-          : err.response?.data?.errors?.[0] ||
-            err.response?.data?.message ||
-            "Network error, please try again";
-      showNotification(errorMessage, "error");
-      setIsSubmitting(false);
-    }
-  };
 
-  const handleForgotPassword = async () => {
+      try {
+        const res = await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/auth/login`, {
+          email,
+          password,
+        });
+        const { token, profile } = res.data;
+        if (!token || !profile) {
+          throw new Error("Invalid login response: Missing token or profile");
+        }
+        localStorage.setItem("token", token);
+        onLogin(token, profile);
+        showNotification("Login successful! Redirecting...", "success");
+        setTimeout(() => navigate("/home", { replace: true }), 2000);
+      } catch (err) {
+        console.error("Login error:", err.response?.data || err);
+        const errorMessage =
+          err.response?.status === 401
+            ? "Invalid email or password. Please try again."
+            : err.response?.data?.errors?.[0] ||
+              err.response?.data?.message ||
+              "Network error, please try again";
+        showNotification(errorMessage, "error");
+        setIsSubmitting(false);
+        setIsCheckingCredentials(false);
+      }
+    },
+    [email, password, navigate, onLogin, showNotification, validateInputs]
+  );
+
+  const handleForgotPassword = useCallback(async () => {
     const validationError = validateForgotEmail();
     if (validationError) {
       showNotification(validationError, "error");
@@ -112,19 +121,52 @@ const LoginForm = ({ theme, onLogin }) => {
         "Network error, please try again";
       showNotification(errorMessage, "error");
     }
-  };
+  }, [forgotEmail, showNotification, validateForgotEmail]);
 
-  const handleOpenModal = () => setOpenModal(true);
-  const handleCloseModal = () => {
+  const handleOpenModal = useCallback(() => setOpenModal(true), []);
+  const handleCloseModal = useCallback(() => {
     setOpenModal(false);
     setForgotEmail("");
-  };
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (e, callback) => {
+      if (e.key === "Enter" && !isSubmitting) {
+        e.preventDefault();
+        callback();
+      }
+    },
+    [isSubmitting]
+  );
 
   useEffect(() => {
     if (openModal && modalRef.current) {
       modalRef.current.focus();
     }
   }, [openModal]);
+
+  if (isCheckingCredentials) {
+    return (
+      <ThemeProvider theme={theme}>
+        <Container
+          maxWidth="sm"
+          sx={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Box sx={{ textAlign: "center" }} aria-live="polite" aria-busy="true">
+            <CircularProgress aria-label="Loading" sx={{ mb: 2 }} />
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              Checking credentials…
+            </Typography>
+          </Box>
+        </Container>
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider theme={theme}>
@@ -180,6 +222,7 @@ const LoginForm = ({ theme, onLogin }) => {
                 margin="normal"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, () => handleSubmit(e))}
                 InputProps={{ notched: false }}
                 sx={inputStyles}
                 required
@@ -192,6 +235,7 @@ const LoginForm = ({ theme, onLogin }) => {
                 margin="normal"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, () => handleSubmit(e))}
                 sx={inputStyles}
                 InputProps={{
                   notched: false,
@@ -312,6 +356,7 @@ const LoginForm = ({ theme, onLogin }) => {
                 margin="normal"
                 value={forgotEmail}
                 onChange={(e) => setForgotEmail(e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, handleForgotPassword)}
                 InputProps={{ notched: false }}
                 sx={inputStyles}
                 required

@@ -244,7 +244,7 @@ const TweetContent = ({
   const isRelated = relatedTweetIds.includes(tweet.tweet_id);
   const hasReplies = replyCount > 0 || tweet.child_tweet_ids?.length > 0;
   const replyLabel = hasReplies
-    ? `${replyCount || tweet.child_tweet_ids?.length} ${replyCount === 1 ? 'Reply' : 'Replies'}`
+    ? `${replyCount || tweet.child_tweet_ids?.length}`
     : '';
   const rawStatus = tweet.status || 'approved';
   const chipColor = statusColorMap[rawStatus] || 'default';
