@@ -298,6 +298,7 @@ const TweetPopupStyles = {
     padding: '5px',
     width: { xs: '95vw', sm: '600px' },
     maxWidth: { sm: '90vw' },
+    bottom: '4rem',
     maxHeight: '90vh',
     overflowY: 'auto',
     backgroundColor: (theme) => alpha(theme.palette.background.paper, 0.98),

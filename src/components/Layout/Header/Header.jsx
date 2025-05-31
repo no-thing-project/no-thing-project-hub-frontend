@@ -392,7 +392,7 @@ const Header = ({ currentUser, token, title, onLogout }) => {
                 My Profile
               </MenuItem>
               <MenuItem
-                onClick={() => handleMenuAction("logout")}
+                onClick={() => handleMenuAction(onLogout)}
                 sx={{
                   ...baseTypographyStyles,
                   fontSize: { xs: "0.9rem", sm: "1rem" },

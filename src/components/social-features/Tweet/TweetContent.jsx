@@ -51,15 +51,16 @@ const mediaVariants = {
   exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } },
 };
 
-const ViewAllButton = ({ label, onClick, sx }) => (
-  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+const ViewAllButton = ({ label, onClick, sx, disabled }) => (
+  <motion.div whileHover={{ scale: disabled ? 1 : 1.05 }} whileTap={{ scale: disabled ? 1 : 0.95 }}>
     <Typography
       variant="caption"
-      sx={{ ...sx, cursor: 'pointer' }}
-      onClick={onClick}
+      sx={{ ...sx, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1 }}
+      onClick={disabled ? undefined : onClick}
+      onTouchStart={disabled ? undefined : onClick}
       role="button"
-      tabIndex={0}
-      onKeyPress={(e) => e.key === 'Enter' && onClick(e)}
+      tabIndex={disabled ? -1 : 0}
+      onKeyPress={(e) => !disabled && e.key === 'Enter' && onClick(e)}
       aria-label={label}
     >
       {label}
@@ -71,6 +72,11 @@ ViewAllButton.propTypes = {
   label: PropTypes.string.isRequired,
   onClick: PropTypes.func.isRequired,
   sx: PropTypes.object.isRequired,
+  disabled: PropTypes.bool,
+};
+
+ViewAllButton.defaultProps = {
+  disabled: false,
 };
 
 const CircularVideoPlayer = memo(({ src, duration, ariaLabel }) => (
@@ -80,6 +86,7 @@ const CircularVideoPlayer = memo(({ src, duration, ariaLabel }) => (
         <video
           src={src}
           controls
+          playsInline
           style={TweetContentStyles.circleVideo(duration)}
           preload="metadata"
           aria-label={ariaLabel}
@@ -102,6 +109,7 @@ const StandardVideoPlayer = memo(({ src, duration, ariaLabel }) => (
         <video
           src={src}
           controls
+          playsInline
           style={TweetContentStyles.video(duration)}
           preload="metadata"
           aria-label={ariaLabel}
@@ -119,7 +127,7 @@ StandardVideoPlayer.propTypes = {
 
 const AudioPlayer = memo(({ src }) => (
   <Box sx={{ ...TweetContentStyles.audioPlayer, maxWidth: '100%' }}>
-    <audio src={src} controls sx={{ width: '100%' }} preload="metadata" />
+    <audio src={src} controls playsInline sx={{ width: '100%' }} preload="metadata" />
   </Box>
 ));
 
@@ -190,13 +198,11 @@ const TweetContent = ({
   const [transformedText, setTransformedText] = useState(tweet.content?.value || '');
   const deferredContent = useDeferredValue(tweet.content?.value || '');
 
-  // Notify Board.js of modal state changes
   useEffect(() => {
     onModalStateChange?.(tweet.tweet_id, openOptionsDialog || openMediaDialog || !!openLinkModal);
     return () => onModalStateChange?.(tweet.tweet_id, false);
   }, [openOptionsDialog, openMediaDialog, openLinkModal, tweet.tweet_id, onModalStateChange]);
 
-  // Timestamp update logic
   useEffect(() => {
     if (!tweet.created_at) return;
 
@@ -207,16 +213,15 @@ const TweetContent = ({
       const now = new Date();
       const diffInSeconds = (now - createdAt) / 1000;
 
-      if (diffInSeconds < 7 * 24 * 60 * 60) { // Less than 7 days
+      if (diffInSeconds < 7 * 24 * 60 * 60) {
         setTimestamp(formatDistanceToNow(createdAt, { addSuffix: true }));
       } else {
         setTimestamp(format(createdAt, 'MMM d'));
       }
     };
 
-    updateTimestamp(); // Initial update
+    updateTimestamp();
 
-    // Update every minute for tweets less than 1 hour old
     if ((new Date() - createdAt) / 1000 < 60 * 60) {
       const interval = setInterval(updateTimestamp, 60 * 1000);
       return () => clearInterval(interval);
@@ -225,14 +230,17 @@ const TweetContent = ({
 
   const tweetAuthor = tweet.username || tweet.user?.username || 'Anonymous';
   const isLiked = tweet.liked_by?.some((u) => u.anonymous_id === currentUser?.anonymous_id) ?? false;
-  const canEdit =
-    bypassOwnership ||
-    ['moderator', 'admin'].includes(userRole) ||
-    tweet.anonymous_id === currentUser?.anonymous_id ||
-    tweet.user_id === currentUser?.anonymous_id ||
-    (tweet.username &&
-      currentUser?.username &&
-      tweet.username.toLowerCase() === currentUser.username.toLowerCase());
+  const canEdit = useMemo(
+    () =>
+      bypassOwnership ||
+      ['moderator', 'admin'].includes(userRole) ||
+      tweet.anonymous_id === currentUser?.anonymous_id ||
+      tweet.user_id === currentUser?.anonymous_id ||
+      (tweet.username &&
+        currentUser?.username &&
+        tweet.username.toLowerCase() === currentUser.username.toLowerCase()),
+    [bypassOwnership, userRole, tweet, currentUser]
+  );
   const isRelated = relatedTweetIds.includes(tweet.tweet_id);
   const hasReplies = replyCount > 0 || tweet.child_tweet_ids?.length > 0;
   const replyLabel = hasReplies
@@ -335,6 +343,8 @@ const TweetContent = ({
     return isValid(createdAt) ? format(createdAt, 'PPPPpp') : '';
   }, [tweet.created_at]);
 
+  const isModalOpen = openOptionsDialog || openMediaDialog || openLinkModal;
+
   const renderImages = useMemo(() => {
     const imageFiles = tweet.content?.metadata?.files?.filter((f) => f.contentType?.startsWith('image')) || [];
     if (!imageFiles.length) return null;
@@ -370,11 +380,12 @@ const TweetContent = ({
             label={`View all images (${imageFiles.length})`}
             onClick={handleOpenMediaDialog}
             sx={TweetContentStyles.imageViewAll}
+            disabled={isModalOpen}
           />
         )}
       </Box>
     );
-  }, [tweet.content?.metadata?.files, handleOpenMediaDialog]);
+  }, [tweet.content?.metadata?.files, handleOpenMediaDialog, isModalOpen]);
 
   const renderVideos = useMemo(() => {
     const videoFiles = tweet.content?.metadata?.files?.filter((f) => f.contentType?.startsWith('video')) || [];
@@ -403,11 +414,12 @@ const TweetContent = ({
             label={`View all videos (${videoFiles.length})`}
             onClick={handleOpenMediaDialog}
             sx={TweetContentStyles.videoViewAll}
+            disabled={isModalOpen}
           />
         )}
       </Box>
     );
-  }, [tweet.content?.metadata?.files, handleOpenMediaDialog, renderImages]);
+  }, [tweet.content?.metadata?.files, handleOpenMediaDialog, renderImages, isModalOpen]);
 
   const renderAudio = useMemo(() => {
     const audioFiles = tweet.content?.metadata?.files?.filter((f) => f.contentType?.startsWith('audio')) || [];
@@ -428,11 +440,12 @@ const TweetContent = ({
             label={`View all audio (${audioFiles.length})`}
             onClick={handleOpenMediaDialog}
             sx={TweetContentStyles.audioViewAll}
+            disabled={isModalOpen}
           />
         )}
       </Box>
     );
-  }, [tweet.content?.metadata?.files, handleOpenMediaDialog, renderImages, renderVideos]);
+  }, [tweet.content?.metadata?.files, handleOpenMediaDialog, renderImages, renderVideos, isModalOpen]);
 
   const renderOtherFiles = useMemo(() => {
     const otherFiles = tweet.content?.metadata?.files?.filter(
@@ -452,11 +465,12 @@ const TweetContent = ({
             label={`View all files (${otherFiles.length})`}
             onClick={handleOpenMediaDialog}
             sx={TweetContentStyles.otherFilesViewAll}
+            disabled={isModalOpen}
           />
         )}
       </Box>
     );
-  }, [tweet.content?.metadata?.files, handleOpenMediaDialog]);
+  }, [tweet.content?.metadata?.files, handleOpenMediaDialog, isModalOpen]);
 
   const renderContent = useMemo(() => {
     const hasText = !!transformedText;
@@ -487,6 +501,7 @@ const TweetContent = ({
                 label={isExpanded ? 'Show less' : 'Read more'}
                 onClick={handleToggleExpand}
                 sx={TweetContentStyles.readMoreButton}
+                disabled={isModalOpen}
               />
             )}
           </Box>
@@ -514,6 +529,7 @@ const TweetContent = ({
     handleToggleExpand,
     deferredContent,
     handleOpenLinkModal,
+    isModalOpen,
   ]);
 
   const mediaDialogContent = useMemo(() => {
@@ -521,7 +537,7 @@ const TweetContent = ({
     return (
       <DialogContent sx={ModalStyles.mediaDialogContent}>
         {files.length === 0 && (
-          <Typography variant="body2" sx={{ color: 'primary.main', fontStyle: 'italic',  fontSize: { xs: '0.7rem', sm: '0.8rem' }, m: 0 }}>
+          <Typography variant="body2" sx={{ color: 'primary.main', fontStyle: 'italic', fontSize: { xs: '0.8rem', sm: '0.875rem' }, m: 0 }}>
             No media available
           </Typography>
         )}
@@ -574,6 +590,7 @@ const TweetContent = ({
       <List>
         <ListItemButton
           onClick={handleEdit}
+          onTouchStart={handleEdit}
           sx={ModalStyles.optionsDialogItem}
           aria-label="Edit tweet"
         >
@@ -581,6 +598,7 @@ const TweetContent = ({
         </ListItemButton>
         <ListItemButton
           onClick={handlePin}
+          onTouchStart={handlePin}
           sx={ModalStyles.optionsDialogItem}
           aria-label={tweet.is_pinned ? 'Unpin tweet' : 'Pin tweet'}
         >
@@ -588,6 +606,7 @@ const TweetContent = ({
         </ListItemButton>
         <ListItemButton
           onClick={handleDelete}
+          onTouchStart={handleDelete}
           sx={{ ...ModalStyles.optionsDialogItem, color: 'error.main' }}
           aria-label="Delete tweet"
         >
@@ -603,8 +622,9 @@ const TweetContent = ({
       <Dialog
         open={!!openLinkModal}
         onClose={handleCloseLinkModal}
-        maxWidth="sm"
+        maxWidth="xs"
         fullWidth
+        fullScreen={window.innerWidth < 600}
         TransitionComponent={Fade}
         transitionDuration={500}
         aria-labelledby="link-modal-title"
@@ -612,7 +632,9 @@ const TweetContent = ({
         PaperProps={{
           sx: {
             ...ModalStyles.optionsDialogContainer,
-            zIndex: 110,
+            zIndex: 1101,
+            maxHeight: { xs: '90vh', sm: 'auto' },
+            overflowY: { xs: 'auto', sm: 'visible' },
           },
           onClick: (e) => e.stopPropagation(),
           onMouseDown: (e) => e.stopPropagation(),
@@ -629,8 +651,8 @@ const TweetContent = ({
           <Link
             href={openLinkModal.url}
             target="_blank"
-            rel="noopener"
-            sx={{ wordBreak: 'break-all' }}
+            rel="noopener noreferrer"
+            sx={{ wordBreak: 'break-all', fontSize: { xs: '0.9rem', sm: '1rem' } }}
             aria-label={`Open ${openLinkModal.type} content in a new tab`}
           >
             {openLinkModal.url}
@@ -639,6 +661,7 @@ const TweetContent = ({
         <DialogActions sx={ModalStyles.dialogActions}>
           <IconButton
             onClick={handleCloseLinkModal}
+            onTouchStart={handleCloseLinkModal}
             sx={ModalStyles.dialogCloseButton}
             aria-label="Close link modal"
           >
@@ -654,7 +677,7 @@ const TweetContent = ({
       <Paper sx={TweetContentStyles.tweetCard(false, isListView)} role="article">
         <Typography sx={TweetContentStyles.tweetTitle}>Error</Typography>
         <Box sx={{ p: 2, textAlign: 'center' }}>
-          <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
+          <Typography variant="body2" color="error" sx={{ fontWeight: 500, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
             {error}
           </Typography>
         </Box>
@@ -667,7 +690,7 @@ const TweetContent = ({
       <Paper sx={TweetContentStyles.tweetCard(false, isListView)} role="article">
         <Typography sx={TweetContentStyles.tweetTitle}>Invalid Tweet</Typography>
         <Box sx={{ p: 2, textAlign: 'center' }}>
-          <Typography variant="body2" color="error" sx={{ fontWeight: 500 }}>
+          <Typography variant="body2" color="error" sx={{ fontWeight: 500, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
             This tweet is missing required data.
           </Typography>
         </Box>
@@ -687,10 +710,11 @@ const TweetContent = ({
         elevation={4}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        onTouchStart={handleMouseEnter}
+        onTouchEnd={handleMouseLeave}
         sx={{
           ...TweetContentStyles.tweetCard(tweet.is_pinned, isListView),
           ...TweetContentStyles.tweetHighlight(hovered || isRelated || isParentHighlighted),
-          pointerEvents: openOptionsDialog || openMediaDialog || openLinkModal ? 'none' : 'auto',
         }}
         role="article"
         aria-labelledby={`tweet-title-${tweet.tweet_id}`}
@@ -715,7 +739,7 @@ const TweetContent = ({
               <Typography variant="caption" sx={TweetContentStyles.replyToCaption}>
                 Replying to:
               </Typography>
-              <Typography variant="body2" sx={{ color: 'primary.main', fontStyle: 'italic',  fontSize: { xs: '0.7rem', sm: '0.8rem' }, m: 0 }}>
+              <Typography variant="body2" sx={{ color: 'primary.main', fontStyle: 'italic', fontSize: { xs: '0.8rem', sm: '0.875rem' }, m: 0 }}>
                 {parentExcerpt}
               </Typography>
             </Box>
@@ -731,7 +755,7 @@ const TweetContent = ({
               aria-label={`Tweet status: ${chipLabel}`}
             />
           </motion.div>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             {timestamp && (
               <Typography
                 variant="caption"
@@ -754,9 +778,10 @@ const TweetContent = ({
               <IconButton
                 size="medium"
                 onClick={() => onLike(tweet.tweet_id, isLiked)}
+                onTouchStart={() => onLike(tweet.tweet_id, isLiked)}
                 aria-label={isLiked ? 'Unlike tweet' : 'Like tweet'}
-                sx={TweetContentStyles.likeButton}
-                disabled={openOptionsDialog || openMediaDialog || openLinkModal}
+                sx={{ ...TweetContentStyles.likeButton, minWidth: 36, p: 0.5 }}
+                disabled={isModalOpen}
               >
                 <ThumbUpIcon sx={TweetContentStyles.likeIcon(isLiked)} />
               </IconButton>
@@ -771,9 +796,10 @@ const TweetContent = ({
               <IconButton
                 size="medium"
                 onClick={() => onReply(tweet)}
+                onTouchStart={() => onReply(tweet)}
                 aria-label="Reply to tweet"
-                sx={TweetContentStyles.replyButton}
-                disabled={openOptionsDialog || openMediaDialog || openLinkModal}
+                sx={{ ...TweetContentStyles.replyButton, minWidth: 36, p: 0.5 }}
+                disabled={isModalOpen}
               >
                 <ChatBubbleOutlineIcon sx={TweetContentStyles.replyIcon} />
               </IconButton>
@@ -792,10 +818,11 @@ const TweetContent = ({
               <IconButton
                 size="medium"
                 onClick={handleOpenOptionsDialog}
+                onTouchStart={handleOpenOptionsDialog}
                 className="tweet-menu"
                 aria-label="Tweet options"
-                sx={TweetContentStyles.menuButton}
-                disabled={openOptionsDialog || openMediaDialog || openLinkModal}
+                sx={{ ...TweetContentStyles.menuButton, minWidth: 36, p: 0.5 }}
+                disabled={isModalOpen}
               >
                 <MoreVertIcon sx={TweetContentStyles.menuIcon} />
               </IconButton>
@@ -807,7 +834,7 @@ const TweetContent = ({
       <Dialog
         open={openMediaDialog}
         onClose={handleCloseMediaDialog}
-        maxWidth="md"
+        maxWidth="sm"
         fullWidth
         fullScreen={window.innerWidth < 600}
         TransitionComponent={Fade}
@@ -817,7 +844,9 @@ const TweetContent = ({
         PaperProps={{
           sx: {
             ...ModalStyles.mediaDialogContainer,
-            zIndex: 110,
+            zIndex: 1101,
+            maxHeight: { xs: '90vh', sm: 'auto' },
+            overflowY: { xs: 'auto', sm: 'visible' },
           },
           onClick: (e) => e.stopPropagation(),
           onMouseDown: (e) => e.stopPropagation(),
@@ -836,6 +865,7 @@ const TweetContent = ({
         <DialogActions sx={ModalStyles.dialogActions}>
           <IconButton
             onClick={handleCloseMediaDialog}
+            onTouchStart={handleCloseMediaDialog}
             sx={ModalStyles.dialogCloseButton}
             aria-label="Close media dialog"
           >
@@ -849,6 +879,7 @@ const TweetContent = ({
         onClose={handleCloseOptionsDialog}
         maxWidth="xs"
         fullWidth
+        fullScreen={window.innerWidth < 600}
         TransitionComponent={Fade}
         transitionDuration={500}
         aria-labelledby="options-dialog-title"
@@ -856,7 +887,9 @@ const TweetContent = ({
         PaperProps={{
           sx: {
             ...ModalStyles.optionsDialogContainer,
-            zIndex: 110,
+            zIndex: 1101,
+            maxHeight: { xs: '90vh', sm: 'auto' },
+            overflowY: { xs: 'auto', sm: 'visible' },
           },
           onClick: (e) => e.stopPropagation(),
           onMouseDown: (e) => e.stopPropagation(),
@@ -875,6 +908,7 @@ const TweetContent = ({
         <DialogActions sx={ModalStyles.dialogActions}>
           <IconButton
             onClick={handleCloseOptionsDialog}
+            onTouchStart={handleCloseOptionsDialog}
             sx={ModalStyles.dialogCloseButton}
             aria-label="Close options dialog"
           >

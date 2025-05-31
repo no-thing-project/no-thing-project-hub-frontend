@@ -19,11 +19,9 @@ import { LazyLoadComponent } from 'react-lazy-load-image-component';
 import { motion } from 'framer-motion';
 import { alpha } from '@mui/material';
 
-// Constants from TweetContentStyles
 const BASE_SHADOW = '0 1px 6px rgba(0,0,0,0.06)';
 const HOVER_SHADOW = '0 3px 10px rgba(0,0,0,0.1)';
 
-// Reusable style objects
 const baseTypographyStyles = {
   color: 'text.primary',
   fontFamily: 'Roboto, sans-serif',
@@ -46,7 +44,7 @@ const baseHoverEffect = {
 const LinkPreviewStyles = {
   previewCard: {
     display: 'flex',
-    flexDirection: { xs: 'column', sm: 'row' }, // Stack vertically on mobile
+    flexDirection: { xs: 'column', sm: 'row' },
     maxWidth: '100%',
     mt: 0.75,
     borderRadius: '8px',
@@ -58,16 +56,16 @@ const LinkPreviewStyles = {
     ...baseHoverEffect,
   },
   previewImage: {
-    width: { xs: '100%', sm: '120px' }, // Full-width on mobile
-    height: { xs: '60px', sm: '80px' }, // Smaller for mobile
+    width: { xs: '100%', sm: '120px' },
+    height: { xs: '80px', sm: '80px' },
     objectFit: 'cover',
     flexShrink: 0,
-    borderRadius: { xs: '6px 6px 0 0', sm: '6px 0 0 6px' }, // Adjust for mobile
+    borderRadius: { xs: '8px 8px 0 0', sm: '8px 0 0 8px' },
     border: (theme) => `1px solid ${alpha(theme.palette.grey[200], 0.4)}`,
   },
   previewContent: {
     flex: 1,
-    p: { xs: 0.75, sm: 1 }, // Tighter padding on mobile
+    p: { xs: 1, sm: 1.25 },
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
@@ -75,34 +73,34 @@ const LinkPreviewStyles = {
   },
   previewTitle: {
     ...baseTypographyStyles,
-    fontSize: { xs: '0.875rem', sm: '1rem' }, // Match contentText
+    fontSize: { xs: '0.9rem', sm: '1rem' },
     fontWeight: 500,
     color: 'text.primary',
     textDecoration: 'none',
     '& a': {
       color: 'primary.main',
-      textDecoration: 'underline', // Telegram style
+      textDecoration: 'underline',
       '&:hover': { color: 'primary.dark' },
     },
   },
   previewDescription: {
     ...baseTypographyStyles,
-    fontSize: { xs: '0.75rem', sm: '0.875rem' }, // Match tweetAuthorTypography
+    fontSize: { xs: '0.8rem', sm: '0.875rem' },
     color: 'text.secondary',
     display: '-webkit-box',
     WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',
     overflow: 'hidden',
-    mt: 0.25,
+    mt: 0.5,
   },
   previewPlayButton: {
     position: 'absolute',
-    top: { xs: 4, sm: 8 },
-    right: { xs: 4, sm: 8 },
+    top: { xs: 8, sm: 8 },
+    right: { xs: 8, sm: 8 },
     bgcolor: 'rgba(0,0,0,0.5)',
     color: 'white',
-    minWidth: 36, // Touch-friendly
-    p: 0.25,
+    minWidth: 36,
+    p: 0.5,
     borderRadius: '4px',
     transition: 'all 0.2s ease-out',
     '&:hover': { bgcolor: 'rgba(0,0,0,0.7)', transform: 'scale(1.1)' },
@@ -120,7 +118,7 @@ const LinkPreviewStyles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    p: 0.75,
+    p: 1,
   },
 };
 
@@ -198,8 +196,8 @@ const LinkPreview = ({ content, onTextTransform, onPlayClick }) => {
               description: response.data.author_name,
               thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
               embedUrl: isMusic
-                ? `https://www.youtube.com/embed/${videoId}?autoplay=0`
-                : `https://www.youtube.com/embed/${videoId}`,
+                ? `https://www.youtube.com/embed/${videoId}?autoplay=0&playsinline=1`
+                : `https://www.youtube.com/embed/${videoId}?playsinline=1`,
             };
           } else if (url.includes('spotify.com')) {
             const response = await axios.get(
@@ -231,11 +229,11 @@ const LinkPreview = ({ content, onTextTransform, onPlayClick }) => {
             const twitchInfo = extractTwitchId(url);
             let embedUrl;
             if (twitchInfo.type === 'channel') {
-              embedUrl = `https://player.twitch.tv/?channel=${twitchInfo.id}&parent=${window.location.hostname}`;
+              embedUrl = `https://player.twitch.tv/?channel=${twitchInfo.id}&parent=${window.location.hostname}&playsinline=1`;
             } else if (twitchInfo.type === 'video') {
-              embedUrl = `https://player.twitch.tv/?video=${twitchInfo.id}&parent=${window.location.hostname}`;
+              embedUrl = `https://player.twitch.tv/?video=${twitchInfo.id}&parent=${window.location.hostname}&playsinline=1`;
             } else if (twitchInfo.type === 'clip') {
-              embedUrl = `https://clips.twitch.tv/embed?clip=${twitchInfo.id}&parent=${window.location.hostname}`;
+              embedUrl = `https://clips.twitch.tv/embed?clip=${twitchInfo.id}&parent=${window.location.hostname}&playsinline=1`;
             }
             const response = await axios.get(
               `https://api.microlink.io?url=${encodeURIComponent(url)}`,
@@ -270,7 +268,6 @@ const LinkPreview = ({ content, onTextTransform, onPlayClick }) => {
           }
         } catch (error) {
           console.error(`Failed to fetch preview for ${url}:`, error);
-          // Silently skip failed previews
         }
       }
 
@@ -297,7 +294,7 @@ const LinkPreview = ({ content, onTextTransform, onPlayClick }) => {
     (preview) => {
       const isPlayable = ['youtube', 'youtube_music', 'spotify', 'soundcloud', 'twitch'].includes(preview.type) && preview.embedUrl;
       const isAudio = ['youtube_music', 'spotify', 'soundcloud'].includes(preview.type);
-      const playerHeight = { xs: isAudio ? '80px' : '160px', sm: isAudio ? '100px' : '200px' }; // Smaller for mobile
+      const playerHeight = { xs: isAudio ? '100px' : '150px', sm: isAudio ? '100px' : '200px' };
 
       return (
         <motion.div
@@ -317,7 +314,7 @@ const LinkPreview = ({ content, onTextTransform, onPlayClick }) => {
             )}
             <CardContent sx={LinkPreviewStyles.previewContent}>
               <Typography variant="subtitle2" sx={LinkPreviewStyles.previewTitle}>
-                <Link href={preview.url} target="_blank" rel="noopener">
+                <Link href={preview.url} target="_blank" rel="noopener noreferrer">
                   {preview.title || preview.url}
                 </Link>
               </Typography>
@@ -329,6 +326,7 @@ const LinkPreview = ({ content, onTextTransform, onPlayClick }) => {
               {isPlayable && (
                 <IconButton
                   onClick={() => handleTogglePlay(preview)}
+                  onTouchStart={() => handleTogglePlay(preview)}
                   sx={LinkPreviewStyles.previewPlayButton}
                   aria-label={playingMedia === preview.url ? `Pause ${preview.type} content` : `Play ${preview.type} content`}
                 >
@@ -346,12 +344,13 @@ const LinkPreview = ({ content, onTextTransform, onPlayClick }) => {
                   height={playerHeight}
                   controls
                   playing={playingMedia === preview.url}
+                  playsinline
                   config={{
                     youtube: {
-                      playerVars: { modestbranding: 1, ...(preview.type === 'youtube_music' ? { playsinline: 1 } : {}) },
+                      playerVars: { modestbranding: 1, playsinline: 1 },
                     },
                     soundcloud: { options: { visual: true } },
-                    twitch: { options: { autoplay: preview.twitchType !== 'clip' } },
+                    twitch: { options: { autoplay: preview.twitchType !== 'clip', playsinline: 1 } },
                   }}
                   onError={() => setPlayingMedia(null)}
                 />
