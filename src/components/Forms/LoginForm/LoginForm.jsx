@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Container,
   Typography,
@@ -6,8 +6,6 @@ import {
   Button,
   Paper,
   ThemeProvider,
-  Snackbar,
-  Alert,
   Box,
   Link,
   Modal,
@@ -20,24 +18,24 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import config from "../../../config";
 import { inputStyles, actionButtonStyles } from "../../../styles/BaseStyles";
+import { useNotification } from "../../../context/NotificationContext";
 
 const LoginForm = ({ theme, onLogin }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [forgotEmail, setForgotEmail] = useState("");
-  const [openModal, setOpenModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [openModal, setOpenModal] = useState(false);
   const navigate = useNavigate();
+  const { showNotification } = useNotification();
+  const modalRef = useRef(null);
 
   const registrationLink = "https://secure.wayforpay.com/donate/NoThingProject";
 
   const validateInputs = () => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const passwordRegex =
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
 
     if (!email) return "Email is required";
     if (!emailRegex.test(email)) return "Please enter a valid email address";
@@ -52,40 +50,34 @@ const LoginForm = ({ theme, onLogin }) => {
   const validateForgotEmail = () => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!forgotEmail) return "Email is required";
-    if (!emailRegex.test(forgotEmail))
-      return "Please enter a valid email address";
+    if (!emailRegex.test(forgotEmail)) return "Please enter a valid email address";
     if (forgotEmail.length > 255) return "Email cannot exceed 255 characters";
     return null;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
-    setSuccess("");
     setIsSubmitting(true);
 
     const validationError = validateInputs();
     if (validationError) {
-      setError(validationError);
+      showNotification(validationError, "error");
       setIsSubmitting(false);
       return;
     }
 
     try {
-      const res = await axios.post(
-        `${config.REACT_APP_HUB_API_URL}/api/v1/auth/login`,
-        {
-          email,
-          password,
-        }
-      );
+      const res = await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/auth/login`, {
+        email,
+        password,
+      });
       const { token, profile } = res.data;
       if (!token || !profile) {
         throw new Error("Invalid login response: Missing token or profile");
       }
       localStorage.setItem("token", token);
       onLogin(token, profile);
-      setSuccess("Login successful! Redirecting...");
+      showNotification("Login successful! Redirecting...", "success");
     } catch (err) {
       console.error("Login error:", err.response?.data || err);
       const errorMessage =
@@ -94,27 +86,23 @@ const LoginForm = ({ theme, onLogin }) => {
           : err.response?.data?.errors?.[0] ||
             err.response?.data?.message ||
             "Network error, please try again";
-      setError(errorMessage);
+      showNotification(errorMessage, "error");
       setIsSubmitting(false);
     }
   };
 
   const handleForgotPassword = async () => {
-    setError("");
-    setSuccess("");
-
     const validationError = validateForgotEmail();
     if (validationError) {
-      setError(validationError);
+      showNotification(validationError, "error");
       return;
     }
 
     try {
-      await axios.post(
-        `${config.REACT_APP_HUB_API_URL}/api/v1/auth/forgot-password`,
-        { email: forgotEmail }
-      );
-      setSuccess("An email with a password reset link has been sent!");
+      await axios.post(`${config.REACT_APP_HUB_API_URL}/api/v1/auth/forgot-password`, {
+        email: forgotEmail,
+      });
+      showNotification("An email with a password reset link has been sent!", "success");
       setTimeout(() => handleCloseModal(), 2000);
     } catch (err) {
       console.error("Forgot password error:", err.response?.data || err);
@@ -122,7 +110,7 @@ const LoginForm = ({ theme, onLogin }) => {
         err.response?.data?.errors?.[0] ||
         err.response?.data?.message ||
         "Network error, please try again";
-      setError(errorMessage);
+      showNotification(errorMessage, "error");
     }
   };
 
@@ -130,20 +118,13 @@ const LoginForm = ({ theme, onLogin }) => {
   const handleCloseModal = () => {
     setOpenModal(false);
     setForgotEmail("");
-    setError("");
-    setSuccess("");
-  };
-  const handleCloseSnackbar = () => {
-    setError("");
-    setSuccess("");
   };
 
   useEffect(() => {
-    if (success) {
-      const timer = setTimeout(() => navigate("/home"), 3000);
-      return () => clearTimeout(timer);
+    if (openModal && modalRef.current) {
+      modalRef.current.focus();
     }
-  }, [success, navigate]);
+  }, [openModal]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -202,7 +183,6 @@ const LoginForm = ({ theme, onLogin }) => {
                 InputProps={{ notched: false }}
                 sx={inputStyles}
                 required
-                error={!!error && error.includes("Email")}
               />
               <TextField
                 label="Password"
@@ -220,9 +200,7 @@ const LoginForm = ({ theme, onLogin }) => {
                       <IconButton
                         onClick={() => setShowPassword(!showPassword)}
                         edge="end"
-                        aria-label={
-                          showPassword ? "Hide password" : "Show password"
-                        }
+                        aria-label={showPassword ? "Hide password" : "Show password"}
                         sx={{ color: "text.primary" }}
                       >
                         {showPassword ? <Visibility /> : <VisibilityOff />}
@@ -231,12 +209,6 @@ const LoginForm = ({ theme, onLogin }) => {
                   ),
                 }}
                 required
-                error={!!error && error.includes("Password")}
-                aria-describedby={
-                  error && error.includes("Password")
-                    ? "password-error"
-                    : undefined
-                }
               />
 
               <Box
@@ -321,6 +293,8 @@ const LoginForm = ({ theme, onLogin }) => {
                 width: "100%",
                 maxWidth: theme.custom.loginPaperMaxWidth,
               }}
+              ref={modalRef}
+              tabIndex={-1}
               role="dialog"
               aria-labelledby="password-recovery-title"
             >
@@ -341,7 +315,6 @@ const LoginForm = ({ theme, onLogin }) => {
                 InputProps={{ notched: false }}
                 sx={inputStyles}
                 required
-                error={!!error && error.includes("Email")}
               />
               <Button
                 variant="contained"
@@ -355,37 +328,6 @@ const LoginForm = ({ theme, onLogin }) => {
             </Box>
           </Fade>
         </Modal>
-
-        <Snackbar
-          open={Boolean(error)}
-          autoHideDuration={3000}
-          onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        >
-          <Alert
-            onClose={handleCloseSnackbar}
-            severity="error"
-            sx={{ width: "100%" }}
-            role="alert"
-          >
-            {error}
-          </Alert>
-        </Snackbar>
-        <Snackbar
-          open={Boolean(success)}
-          autoHideDuration={3000}
-          onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        >
-          <Alert
-            onClose={handleCloseSnackbar}
-            severity="success"
-            sx={{ width: "100%" }}
-            role="alert"
-          >
-            {success}
-          </Alert>
-        </Snackbar>
       </Container>
     </ThemeProvider>
   );

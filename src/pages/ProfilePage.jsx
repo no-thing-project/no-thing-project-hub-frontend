@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Button } from '@mui/material';
-import { Edit, Refresh } from '@mui/icons-material';
+import { Edit } from '@mui/icons-material';
 import _ from 'lodash';
 import AppLayout from '../components/Layout/AppLayout';
 import LoadingSpinner from '../components/Layout/LoadingSpinner';
@@ -12,7 +12,6 @@ import useProfile from '../hooks/useProfile';
 import { actionButtonStyles, cancelButtonStyle, headerStyles, containerStyles } from '../styles/BaseStyles';
 import { normalizeUserData } from '../utils/profileUtils';
 import { useNotification } from '../context/NotificationContext';
-import { useUserExtras } from '../hooks/useUserExtras';
 
 const getChangedFields = (original, updated) => {
   const changes = {};
@@ -41,7 +40,6 @@ const ProfilePage = () => {
     clearProfileState,
   } = useProfile(token, currentUser, handleLogout, navigate, updateAuthData);
   const { showNotification } = useNotification();
-  const { refreshPrediction } = useUserExtras(token);
 
   const [isEditing, setIsEditing] = useState(false);
   const [userData, setUserData] = useState(() => normalizeUserData(currentUser || fetchedProfileData, currentUser));
@@ -149,11 +147,6 @@ const ProfilePage = () => {
     setIsEditing(false);
   };
 
-  const handleUpdatePrediction = () => {
-    refreshPrediction();
-    showNotification('Prediction updated!', 'success');
-  };
-
   const isLoading = authLoading || (!isOwnProfile && profileLoading);
 
   if (isLoading) return <LoadingSpinner />;
@@ -167,26 +160,15 @@ const ProfilePage = () => {
           {isOwnProfile && (
             <Box sx={{ ...headerStyles.buttonGroup }}>
               {!isEditing ? (
-                <>
-                  <Button
-                    variant="contained"
-                    onClick={handleEditProfile}
-                    startIcon={<Edit />}
-                    sx={{ ...actionButtonStyles }}
-                    aria-label="Edit profile"
-                  >
-                    Edit Profile
-                  </Button>
-                  <Button
-                    variant="contained"
-                    onClick={handleUpdatePrediction}
-                    startIcon={<Refresh />}
-                    sx={{ ...actionButtonStyles }}
-                    aria-label="Update prediction"
-                  >
-                    Update Prediction
-                  </Button>
-                </>
+                <Button
+                  variant="contained"
+                  onClick={handleEditProfile}
+                  startIcon={<Edit />}
+                  sx={{ ...actionButtonStyles }}
+                  aria-label="Edit profile"
+                >
+                  Edit Profile
+                </Button>
               ) : (
                 <>
                   <Button

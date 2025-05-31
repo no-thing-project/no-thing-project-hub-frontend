@@ -6,7 +6,6 @@ import {
   List,
   ListItem,
   ListItemIcon,
-  IconButton,
   Box,
   Tooltip,
   BottomNavigation,
@@ -19,7 +18,6 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import StyleRoundedIcon from "@mui/icons-material/StyleRounded";
 import ClassRoundedIcon from "@mui/icons-material/ClassRounded";
 import PeopleRoundedIcon from "@mui/icons-material/PeopleRounded";
-import ExitToAppRoundedIcon from "@mui/icons-material/ExitToAppRounded";
 
 const isActiveRoute = (route, subroute, currentPath) => {
   if (currentPath === route) return true;
@@ -51,13 +49,6 @@ const LeftDrawer = ({ onLogout }) => {
       subroute: "/class/:class_id",
     },
     { to: "/friends", label: "Friends", icon: <PeopleRoundedIcon sx={{ fontSize: 30 }} /> },
-    // { to: "/messages", label: "Messages", icon: <MessageRoundedIcon sx={{ fontSize: 30 }} /> },
-    {
-      to: "#logout",
-      label: "Logout",
-      icon: <ExitToAppRoundedIcon sx={{ fontSize: 30 }} />,
-      onClick: onLogout,
-    },
   ];
 
   if (isMobile) {
@@ -91,18 +82,14 @@ const LeftDrawer = ({ onLogout }) => {
         {navItems.map((item) => (
           <Tooltip key={item.to} title={item.label} placement="top">
             <BottomNavigationAction
-              component={item.to === "#logout" ? "button" : Link}
-              to={item.to !== "#logout" ? item.to : undefined}
-              onClick={item.onClick}
+              component={Link}
+              to={item.to}
               value={item.to}
               icon={item.icon}
               sx={{
-                color:
-                  item.to === "#logout"
-                    ? "var(--color-icon-default)"
-                    : isActiveRoute(item.to, item.subroute, currentPath)
-                    ? "var(--color-icon-hover)"
-                    : "var(--color-icon-default)",
+                color: isActiveRoute(item.to, item.subroute, currentPath)
+                  ? "var(--color-icon-hover)"
+                  : "var(--color-icon-default)",
               }}
               aria-label={item.label}
             />
@@ -117,17 +104,17 @@ const LeftDrawer = ({ onLogout }) => {
       variant="permanent"
       sx={{
         flexShrink: 0,
-        '& .MuiDrawer-paper': {
-          boxSizing: 'border-box',
+        "& .MuiDrawer-paper": {
+          boxSizing: "border-box",
           borderRight: "none",
-          position: 'fixed',
+          position: "fixed",
           top: 0,
           left: 0,
-          height: '100vh',
+          height: "100vh",
           backgroundColor: "rgba(255, 255, 255, 0)",
           backdropFilter: "blur(10px)",
           borderBottom: "1px solid rgba(255, 255, 255, 0.2)",
-          zIndex: theme.zIndex.drawer
+          zIndex: theme.zIndex.drawer,
         },
       }}
       role="navigation"
@@ -143,7 +130,7 @@ const LeftDrawer = ({ onLogout }) => {
         }}
       >
         <List sx={{ p: 0, m: 0 }}>
-          {navItems.slice(0, -1).map((item) => (
+          {navItems.map((item) => (
             <ListItem
               key={item.to}
               button
@@ -173,21 +160,6 @@ const LeftDrawer = ({ onLogout }) => {
           ))}
         </List>
       </Box>
-      <Tooltip title="Logout" placement="right">
-        <IconButton
-          onClick={onLogout}
-          sx={{
-            alignSelf: "flex-start",
-            ml: 1,
-            mb: 2,
-            color: "var(--color-icon-default)",
-            "&:hover": { color: "var(--color-icon-hover)" },
-          }}
-          aria-label="Logout"
-        >
-          <ExitToAppRoundedIcon sx={{ fontSize: 30 }} />
-        </IconButton>
-      </Tooltip>
     </Drawer>
   );
 };

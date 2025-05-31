@@ -16,7 +16,6 @@ const ClassesPage = lazy(() => import("./pages/ClassesPage"));
 const ClassPage = lazy(() => import("./pages/ClassPage"));
 const BoardPage = lazy(() => import("./pages/BoardPage"));
 const FriendsPage = lazy(() => import("./pages/FriendsPage"));
-// const MessagesPage = lazy(() => import("./pages/MessagesPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 const LoginForm = lazy(() => import("./components/Forms/LoginForm/LoginForm"));
 const ResetPasswordForm = lazy(() => import("./components/Forms/ResetPasswordForm/ResetPasswordForm"));
@@ -31,10 +30,20 @@ const AppContent = () => {
   const { showNotification } = useNotification();
 
   useEffect(() => {
-    if (!isAuthenticated && !["/reset-password"].includes(window.location.pathname) && !loading) {
+    // Parse hash route for HashRouter
+    const getCurrentPath = () => {
+      const hash = window.location.hash || "";
+      const path = hash.startsWith("#/") ? hash.slice(1) : hash;
+      return path.split("?")[0] || "/";
+    };
+
+    const allowedPaths = ["/login", "/reset-password"];
+    const currentPath = getCurrentPath();
+
+    if (!isAuthenticated && !allowedPaths.includes(currentPath) && !loading) {
       navigate("/login", { replace: true });
     }
-  }, [isAuthenticated, loading, navigate, showNotification]);
+  }, [isAuthenticated, loading, navigate]);
 
   useEffect(() => {
     if (error) {
@@ -46,18 +55,18 @@ const AppContent = () => {
   }, [error, showNotification, handleLogout]);
 
   if (loading) return <LoadingSpinner />;
-  if (error) return null; 
+  if (error) return null;
 
   return (
     <Suspense fallback={<LoadingSpinner />}>
       <Routes>
         <Route
           path="/reset-password"
-          element={isAuthenticated ? <Navigate to="/home" replace /> : <ResetPasswordForm theme={theme}  onLogin={handleLogin}/>}
+          element={isAuthenticated ? <Navigate to="/home" replace /> : <ResetPasswordForm theme={theme} onLogin={handleLogin} />}
         />
         <Route
           path="/login"
-          element={isAuthenticated ? <Navigate to="/home" replace /> : <LoginForm theme={theme}  onLogin={handleLogin}/>}
+          element={isAuthenticated ? <Navigate to="/home" replace /> : <LoginForm theme={theme} onLogin={handleLogin} />}
         />
         <Route
           path="/home"
@@ -100,7 +109,7 @@ const AppContent = () => {
           element={<PrivateRoute isAuthenticated={isAuthenticated} element={<MessagesPage />} />}
         /> */}
         <Route path="/not-found" element={<NotFoundPage />} />
-        {/* <Route path="*" element={<Navigate to="/not-found" replace />} /> */}
+        <Route path="*" element={<Navigate to="/not-found" replace />} />
       </Routes>
     </Suspense>
   );
